@@ -1,0 +1,417 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-08-20T00:00:00Z",
+  "source": {
+    "type": "github-static",
+    "repo": "odi0011/Plugin",
+    "commit": "47092a2ccef91e2c5a237a4b42e8e1ca4768b7e5"
+  },
+  "core_api": {
+    "min": 1,
+    "max": 1
+  },
+  "plugins": [
+    {
+      "slug": "agent-content-integrity",
+      "namespace": "",
+      "name": "Agent 内容完整性审计",
+      "version": "1.0.0",
+      "description": "委派角色与资源类型示例插件：注册一个只读的「内容清单」资源类型和「完整性审计」委派角色，演示插件如何扩展 Agent 的资源目录与子智能体角色。",
+      "category": "developer",
+      "tags": [
+        "agent",
+        "示例",
+        "资源类型",
+        "委派角色"
+      ],
+      "icon": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@47092a2ccef91e2c5a237a4b42e8e1ca4768b7e5/plugins/agent-content-integrity/icon.svg",
+      "author": {
+        "name": "odi0011"
+      },
+      "homepage": "",
+      "requires_core": "7i",
+      "requires_php": "8.0",
+      "api_version": 1,
+      "dependencies": {},
+      "conflicts": {},
+      "permissions": [
+        {
+          "key": "agent_integrity.view",
+          "label": "查看内容完整性清单",
+          "group": "plugin",
+          "sort_order": 1220
+        }
+      ],
+      "agent": {
+        "actions": [
+          {
+            "id": "summary",
+            "label": "内容清单摘要",
+            "description": "只读统计当前账号可读的内容资源数量，用于完整性核对。",
+            "module": "integrity",
+            "operation": "read",
+            "risk": "low",
+            "mutates": false,
+            "params": [],
+            "required_permissions": [
+              "agent_integrity.view"
+            ]
+          }
+        ]
+      },
+      "published_at": "2026-08-20T00:00:00Z",
+      "changelog": "",
+      "download": {
+        "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@47092a2ccef91e2c5a237a4b42e8e1ca4768b7e5/dist/agent-content-integrity-1.0.0.zip",
+        "sha256": "301acffd82e6b858fea2e67b704e316f607238c8062a2407bc876b7ee9106441",
+        "size_bytes": 2928
+      },
+      "license": {
+        "type": "free"
+      }
+    },
+    {
+      "slug": "agent-hello",
+      "namespace": "",
+      "name": "Agent 扩展示例",
+      "version": "1.0.0",
+      "description": "演示插件如何向 AI Agent 注册动作、资源类型、委派角色与生命周期事件监听。",
+      "category": "other",
+      "tags": [],
+      "icon": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@47092a2ccef91e2c5a237a4b42e8e1ca4768b7e5/plugins/agent-hello/icon.svg",
+      "author": {
+        "name": "Project"
+      },
+      "homepage": "",
+      "requires_core": "7e",
+      "requires_php": "7.4",
+      "api_version": 1,
+      "dependencies": {},
+      "conflicts": {},
+      "permissions": [
+        {
+          "key": "agent_hello.view",
+          "label": "查看示例统计",
+          "group": "plugin",
+          "sort_order": 1100
+        }
+      ],
+      "agent": {
+        "actions": [
+          {
+            "id": "stats",
+            "label": "查看示例统计",
+            "description": "读取 agent-hello 插件维护的简单统计(只读示例动作)。",
+            "module": "hello",
+            "operation": "read",
+            "risk": "low",
+            "mutates": false,
+            "params": [
+              "period"
+            ],
+            "required_permissions": [
+              "agent_hello.view"
+            ]
+          }
+        ]
+      },
+      "published_at": "2026-08-20T00:00:00Z",
+      "changelog": "",
+      "download": {
+        "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@47092a2ccef91e2c5a237a4b42e8e1ca4768b7e5/dist/agent-hello-1.0.0.zip",
+        "sha256": "21b174ecf43448d3eceda4c6ff96ed9088427b9808ce589f531fec44c8d4c3a4",
+        "size_bytes": 4066
+      },
+      "license": {
+        "type": "free"
+      }
+    },
+    {
+      "slug": "agent-run-notifier",
+      "namespace": "",
+      "name": "Agent 运行通知",
+      "version": "1.0.0",
+      "description": "生命周期事件示例插件：监听 agent.events 的 run.completed 事件写插件日志，并可在后台设置 agent_notifier_webhook_url 后通过安全外发客户端向该地址投递运行完成通知（SSRF 防护由核心 OutboundHttpClient 保证）。",
+      "category": "developer",
+      "tags": [
+        "agent",
+        "示例",
+        "生命周期",
+        "webhook"
+      ],
+      "icon": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@47092a2ccef91e2c5a237a4b42e8e1ca4768b7e5/plugins/agent-run-notifier/icon.svg",
+      "author": {
+        "name": "odi0011"
+      },
+      "homepage": "",
+      "requires_core": "7i",
+      "requires_php": "8.0",
+      "api_version": 1,
+      "dependencies": {},
+      "conflicts": {},
+      "permissions": [
+        {
+          "key": "agent_notifier.view",
+          "label": "查看运行通知状态",
+          "group": "plugin",
+          "sort_order": 1230
+        }
+      ],
+      "agent": {
+        "actions": [
+          {
+            "id": "status",
+            "label": "通知状态",
+            "description": "只读查看运行完成通知的配置状态（不暴露 webhook 地址本身）。",
+            "module": "notifier",
+            "operation": "read",
+            "risk": "low",
+            "mutates": false,
+            "params": [],
+            "required_permissions": [
+              "agent_notifier.view"
+            ]
+          }
+        ]
+      },
+      "published_at": "2026-08-20T00:00:00Z",
+      "changelog": "",
+      "download": {
+        "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@47092a2ccef91e2c5a237a4b42e8e1ca4768b7e5/dist/agent-run-notifier-1.0.0.zip",
+        "sha256": "10c05d5ca4fd2924238e6e96bf9b81f7acf3ec60ca743999b62cac045fbfbf81",
+        "size_bytes": 3109
+      },
+      "license": {
+        "type": "free"
+      }
+    },
+    {
+      "slug": "agent-task-ledger",
+      "namespace": "",
+      "name": "Agent 任务台账",
+      "version": "1.0.0",
+      "description": "写动作示例插件：Agent 可把本轮结论记入插件自建的台账表（写动作走审批），也可只读查询历史条目。演示插件级数据库迁移与 Agent 写动作契约。",
+      "category": "developer",
+      "tags": [
+        "agent",
+        "示例",
+        "写动作",
+        "migration"
+      ],
+      "icon": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@47092a2ccef91e2c5a237a4b42e8e1ca4768b7e5/plugins/agent-task-ledger/icon.svg",
+      "author": {
+        "name": "odi0011"
+      },
+      "homepage": "",
+      "requires_core": "7i",
+      "requires_php": "8.0",
+      "api_version": 1,
+      "dependencies": {},
+      "conflicts": {},
+      "permissions": [
+        {
+          "key": "agent_ledger.view",
+          "label": "查看任务台账",
+          "group": "plugin",
+          "sort_order": 1200
+        },
+        {
+          "key": "agent_ledger.write",
+          "label": "写入任务台账",
+          "group": "plugin",
+          "sort_order": 1210
+        }
+      ],
+      "agent": {
+        "actions": [
+          {
+            "id": "record",
+            "label": "记录台账条目",
+            "description": "把一条任务结论写入插件自建台账（真实写动作，需审批）。",
+            "module": "ledger",
+            "operation": "create",
+            "risk": "medium",
+            "mutates": true,
+            "params": [
+              "note",
+              "tag"
+            ],
+            "required_permissions": [
+              "agent_ledger.write"
+            ]
+          },
+          {
+            "id": "list",
+            "label": "查看台账条目",
+            "description": "只读列出当前会话写入的台账条目（按时间倒序，最多 20 条）。",
+            "module": "ledger",
+            "operation": "read",
+            "risk": "low",
+            "mutates": false,
+            "params": [
+              "limit"
+            ],
+            "required_permissions": [
+              "agent_ledger.view"
+            ]
+          }
+        ]
+      },
+      "published_at": "2026-08-20T00:00:00Z",
+      "changelog": "",
+      "download": {
+        "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@47092a2ccef91e2c5a237a4b42e8e1ca4768b7e5/dist/agent-task-ledger-1.0.0.zip",
+        "sha256": "16dc19bbf154842cf4fc1a8240d53e938d60a58781765ac1cbbe6c33bb001847",
+        "size_bytes": 3895
+      },
+      "license": {
+        "type": "free"
+      }
+    },
+    {
+      "slug": "analytics-snippet",
+      "namespace": "",
+      "name": "Analytics Snippet",
+      "version": "1.0.0",
+      "description": "在所有前台页面 <head> 注入 Google Analytics 跟踪代码。后台「站点统计」可配置 Tracking ID。",
+      "category": "other",
+      "tags": [],
+      "icon": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@47092a2ccef91e2c5a237a4b42e8e1ca4768b7e5/plugins/analytics-snippet/icon.svg",
+      "author": {
+        "name": "Project"
+      },
+      "homepage": "",
+      "requires_core": "5a",
+      "requires_php": "7.4",
+      "api_version": 1,
+      "dependencies": {},
+      "conflicts": {},
+      "permissions": [
+        {
+          "key": "analytics.config",
+          "label": "配置站点统计",
+          "group": "plugin",
+          "sort_order": 1001
+        }
+      ],
+      "agent": {},
+      "published_at": "2026-08-20T00:00:00Z",
+      "changelog": "",
+      "download": {
+        "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@47092a2ccef91e2c5a237a4b42e8e1ca4768b7e5/dist/analytics-snippet-1.0.0.zip",
+        "sha256": "b830eaf25e9e9817b9f77bc82b41961ed93476b0634d7b2c7ec5c00b46b7bb27",
+        "size_bytes": 3830
+      },
+      "license": {
+        "type": "free"
+      }
+    },
+    {
+      "slug": "hello-world",
+      "namespace": "",
+      "name": "Hello World",
+      "version": "1.0.0",
+      "description": "最简插件示例：在文章详情页底部加一行 Hello 横幅。代码仅一行，演示钩子注册。",
+      "category": "other",
+      "tags": [],
+      "icon": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@47092a2ccef91e2c5a237a4b42e8e1ca4768b7e5/plugins/hello-world/icon.svg",
+      "author": {
+        "name": "Project"
+      },
+      "homepage": "",
+      "requires_core": "5a",
+      "requires_php": "7.4",
+      "api_version": 1,
+      "dependencies": {},
+      "conflicts": {},
+      "permissions": [],
+      "agent": {},
+      "published_at": "2026-08-20T00:00:00Z",
+      "changelog": "",
+      "download": {
+        "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@47092a2ccef91e2c5a237a4b42e8e1ca4768b7e5/dist/hello-world-1.0.0.zip",
+        "sha256": "10998ad31f590ace50710a944113c7a0019b349d3d146489bb77113761a79902",
+        "size_bytes": 1619
+      },
+      "license": {
+        "type": "free"
+      }
+    },
+    {
+      "slug": "preset-components",
+      "namespace": "",
+      "name": "预设组件",
+      "version": "1.0.0",
+      "description": "内置常用前台组件库，可一键启用为系统组件，并应用到页面、文章、产品或系统模板。",
+      "category": "other",
+      "tags": [],
+      "icon": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@47092a2ccef91e2c5a237a4b42e8e1ca4768b7e5/plugins/preset-components/icon.svg",
+      "author": {
+        "name": "Project"
+      },
+      "homepage": "",
+      "requires_core": "5j",
+      "requires_php": "7.4",
+      "api_version": 1,
+      "dependencies": {},
+      "conflicts": {},
+      "permissions": [
+        {
+          "key": "preset_components.manage",
+          "label": "管理预设组件",
+          "group": "plugin",
+          "sort_order": 1020
+        }
+      ],
+      "agent": {},
+      "published_at": "2026-08-20T00:00:00Z",
+      "changelog": "",
+      "download": {
+        "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@47092a2ccef91e2c5a237a4b42e8e1ca4768b7e5/dist/preset-components-1.0.0.zip",
+        "sha256": "243bbd5c3fc2af2c7bfb841472d6f27e219688c6fdcb50cedec138f784787089",
+        "size_bytes": 26935
+      },
+      "license": {
+        "type": "free"
+      }
+    },
+    {
+      "slug": "redirect-rules",
+      "namespace": "",
+      "name": "Redirect Rules",
+      "version": "1.0.0",
+      "description": "管理 301/302 重定向规则。在请求分发前拦截匹配的 URL 并跳转。演示完整 CRUD 插件能力：自带表、菜单、路由、视图、权限点、卸载清理。",
+      "category": "other",
+      "tags": [],
+      "icon": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@47092a2ccef91e2c5a237a4b42e8e1ca4768b7e5/plugins/redirect-rules/icon.svg",
+      "author": {
+        "name": "Project"
+      },
+      "homepage": "",
+      "requires_core": "5a",
+      "requires_php": "7.4",
+      "api_version": 1,
+      "dependencies": {},
+      "conflicts": {},
+      "permissions": [
+        {
+          "key": "redirect.manage",
+          "label": "管理重定向规则",
+          "group": "plugin",
+          "sort_order": 1010
+        }
+      ],
+      "agent": {},
+      "published_at": "2026-08-20T00:00:00Z",
+      "changelog": "",
+      "download": {
+        "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@47092a2ccef91e2c5a237a4b42e8e1ca4768b7e5/dist/redirect-rules-1.0.0.zip",
+        "sha256": "cb83d8bf18793a07030e32d660b76305049bd99b1177cf418dbce014def3ea64",
+        "size_bytes": 5867
+      },
+      "license": {
+        "type": "free"
+      }
+    }
+  ]
+}
