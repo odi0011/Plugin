@@ -1,0 +1,14 @@
+{
+    "slug": "hello-world",
+    "name": "Hello World",
+    "version": "1.0.0",
+    "author": "Project",
+    "author_url": "",
+    "homepage": "",
+    "description": "最简插件示例：在文章详情页底部加一行 Hello 横幅。代码仅一行，演示钩子注册。",
+    "icon": "icon.svg",
+    "screenshots": [],
+    "requires": "5a",
+    "requires_php": "7.4",
+    "license": "MIT"
+}

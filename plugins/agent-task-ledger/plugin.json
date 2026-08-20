@@ -1,0 +1,53 @@
+{
+  "slug": "agent-task-ledger",
+  "name": "Agent 任务台账",
+  "version": "1.0.0",
+  "author": "odi0011",
+  "description": "写动作示例插件：Agent 可把本轮结论记入插件自建的台账表（写动作走审批），也可只读查询历史条目。演示插件级数据库迁移与 Agent 写动作契约。",
+  "icon": "icon.svg",
+  "requires": "7i",
+  "requires_php": "8.0",
+  "license": "MIT",
+  "category": "developer",
+  "tags": ["agent", "示例", "写动作", "migration"],
+  "permissions": [
+    {
+      "key": "agent_ledger.view",
+      "label": "查看任务台账",
+      "group": "plugin",
+      "sort_order": 1200
+    },
+    {
+      "key": "agent_ledger.write",
+      "label": "写入任务台账",
+      "group": "plugin",
+      "sort_order": 1210
+    }
+  ],
+  "agent": {
+    "actions": [
+      {
+        "id": "record",
+        "label": "记录台账条目",
+        "description": "把一条任务结论写入插件自建台账（真实写动作，需审批）。",
+        "module": "ledger",
+        "operation": "create",
+        "risk": "medium",
+        "mutates": true,
+        "params": ["note", "tag"],
+        "required_permissions": ["agent_ledger.write"]
+      },
+      {
+        "id": "list",
+        "label": "查看台账条目",
+        "description": "只读列出当前会话写入的台账条目（按时间倒序，最多 20 条）。",
+        "module": "ledger",
+        "operation": "read",
+        "risk": "low",
+        "mutates": false,
+        "params": ["limit"],
+        "required_permissions": ["agent_ledger.view"]
+      }
+    ]
+  }
+}

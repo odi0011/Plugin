@@ -1,0 +1,36 @@
+{
+  "slug": "agent-run-notifier",
+  "name": "Agent 运行通知",
+  "version": "1.0.0",
+  "author": "odi0011",
+  "description": "生命周期事件示例插件：监听 agent.events 的 run.completed 事件写插件日志，并可在后台设置 agent_notifier_webhook_url 后通过安全外发客户端向该地址投递运行完成通知（SSRF 防护由核心 OutboundHttpClient 保证）。",
+  "icon": "icon.svg",
+  "requires": "7i",
+  "requires_php": "8.0",
+  "license": "MIT",
+  "category": "developer",
+  "tags": ["agent", "示例", "生命周期", "webhook"],
+  "permissions": [
+    {
+      "key": "agent_notifier.view",
+      "label": "查看运行通知状态",
+      "group": "plugin",
+      "sort_order": 1230
+    }
+  ],
+  "agent": {
+    "actions": [
+      {
+        "id": "status",
+        "label": "通知状态",
+        "description": "只读查看运行完成通知的配置状态（不暴露 webhook 地址本身）。",
+        "module": "notifier",
+        "operation": "read",
+        "risk": "low",
+        "mutates": false,
+        "params": [],
+        "required_permissions": ["agent_notifier.view"]
+      }
+    ]
+  }
+}

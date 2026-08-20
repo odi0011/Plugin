@@ -1,0 +1,17 @@
+{
+    "slug": "redirect-rules",
+    "name": "Redirect Rules",
+    "version": "1.0.0",
+    "author": "Project",
+    "author_url": "",
+    "homepage": "",
+    "description": "管理 301/302 重定向规则。在请求分发前拦截匹配的 URL 并跳转。演示完整 CRUD 插件能力：自带表、菜单、路由、视图、权限点、卸载清理。",
+    "icon": "icon.svg",
+    "screenshots": [],
+    "requires": "5a",
+    "requires_php": "7.4",
+    "license": "MIT",
+    "permissions": [
+        {"key": "redirect.manage", "label": "管理重定向规则", "group": "plugin", "sort_order": 1010}
+    ]
+}

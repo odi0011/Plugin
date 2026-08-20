@@ -1,0 +1,17 @@
+{
+    "slug": "preset-components",
+    "name": "预设组件",
+    "version": "1.0.0",
+    "author": "Project",
+    "author_url": "",
+    "homepage": "",
+    "description": "内置常用前台组件库，可一键启用为系统组件，并应用到页面、文章、产品或系统模板。",
+    "icon": "icon.svg",
+    "screenshots": [],
+    "requires": "5j",
+    "requires_php": "7.4",
+    "license": "MIT",
+    "permissions": [
+        {"key": "preset_components.manage", "label": "管理预设组件", "group": "plugin", "sort_order": 1020}
+    ]
+}

@@ -1,0 +1,38 @@
+{
+  "slug": "agent-hello",
+  "name": "Agent 扩展示例",
+  "version": "1.0.0",
+  "author": "Project",
+  "description": "演示插件如何向 AI Agent 注册动作、资源类型、委派角色与生命周期事件监听。",
+  "icon": "icon.svg",
+  "requires": "7e",
+  "requires_php": "7.4",
+  "license": "MIT",
+  "permissions": [
+    {
+      "key": "agent_hello.view",
+      "label": "查看示例统计",
+      "group": "plugin",
+      "sort_order": 1100
+    }
+  ],
+  "agent": {
+    "actions": [
+      {
+        "id": "stats",
+        "label": "查看示例统计",
+        "description": "读取 agent-hello 插件维护的简单统计(只读示例动作)。",
+        "module": "hello",
+        "operation": "read",
+        "risk": "low",
+        "mutates": false,
+        "params": [
+          "period"
+        ],
+        "required_permissions": [
+          "agent_hello.view"
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,17 @@
+{
+    "slug": "analytics-snippet",
+    "name": "Analytics Snippet",
+    "version": "1.0.0",
+    "author": "Project",
+    "author_url": "",
+    "homepage": "",
+    "description": "在所有前台页面 <head> 注入 Google Analytics 跟踪代码。后台「站点统计」可配置 Tracking ID。",
+    "icon": "icon.svg",
+    "screenshots": [],
+    "requires": "5a",
+    "requires_php": "7.4",
+    "license": "MIT",
+    "permissions": [
+        {"key": "analytics.config", "label": "配置站点统计", "group": "plugin", "sort_order": 1001}
+    ]
+}
