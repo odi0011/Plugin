@@ -1,5 +1,6 @@
 -- agent-task-ledger 插件数据库迁移（激活时执行，幂等）
-SET NAMES utf8mb4;
+-- 注意：插件迁移只接受 CREATE TABLE / CREATE INDEX / ALTER TABLE ADD 与 DML。
+-- SET NAMES 这类语句会被 PluginManager::pluginMigrationDdl() 拒绝，导致插件无法激活。
 
 CREATE TABLE IF NOT EXISTS `plugin_task_ledger` (
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,

@@ -1,0 +1,19 @@
+{
+    "slug": "reading-time",
+    "name": "阅读时长与字数",
+    "version": "1.0.0",
+    "author": "odi0011",
+    "author_url": "",
+    "homepage": "",
+    "description": "在前台文章/页面正文末尾附上「约 N 字，预计阅读 M 分钟」，中英文分别计数（中日韩按字、西文按词）。后台提供每分钟字数配置、按类型开关，以及一份按字数排序的内容报表，便于找出过短或过长的内容。",
+    "icon": "icon.svg",
+    "screenshots": [],
+    "requires_core": "7i",
+    "requires_php": "8.0",
+    "license": "MIT",
+    "category": "content",
+    "tags": ["内容增强", "阅读时长", "字数统计"],
+    "permissions": [
+        {"key": "reading_time.config", "label": "配置阅读时长", "group": "plugin", "sort_order": 1280}
+    ]
+}

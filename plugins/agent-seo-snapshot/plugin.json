@@ -1,0 +1,34 @@
+{
+    "slug": "agent-seo-snapshot",
+    "name": "Agent SEO 体检快照",
+    "version": "1.0.0",
+    "author": "odi0011",
+    "author_url": "",
+    "homepage": "",
+    "description": "只读 Agent 动作 + 委派角色示例：统计页面/文章/产品的 SEO 字段完整度（标题、描述、关键词、OG、canonical），按内容类型给出缺失清单与得分，并注册一个「SEO 体检」委派角色供子智能体使用。",
+    "icon": "icon.svg",
+    "screenshots": [],
+    "requires_core": "7i",
+    "requires_php": "8.0",
+    "license": "MIT",
+    "category": "seo",
+    "tags": ["agent", "seo", "委派角色", "只读"],
+    "permissions": [
+        {"key": "agent_seo_snapshot.view", "label": "查看 SEO 体检快照", "group": "plugin", "sort_order": 1250}
+    ],
+    "agent": {
+        "actions": [
+            {
+                "id": "snapshot",
+                "label": "SEO 字段完整度快照",
+                "description": "只读统计各内容类型的 SEO 字段完整度，返回缺失计数、完整度百分比与缺失最严重的条目清单。",
+                "module": "seo_snapshot",
+                "operation": "read",
+                "risk": "low",
+                "mutates": false,
+                "params": ["type", "limit"],
+                "required_permissions": ["agent_seo_snapshot.view"]
+            }
+        ]
+    }
+}

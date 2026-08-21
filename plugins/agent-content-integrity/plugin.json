@@ -1,7 +1,7 @@
 {
   "slug": "agent-content-integrity",
   "name": "Agent 内容完整性审计",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": "odi0011",
   "description": "委派角色与资源类型示例插件：注册一个只读的「内容清单」资源类型和「完整性审计」委派角色，演示插件如何扩展 Agent 的资源目录与子智能体角色。",
   "icon": "icon.svg",

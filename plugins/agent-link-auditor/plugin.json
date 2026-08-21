@@ -1,0 +1,34 @@
+{
+    "slug": "agent-link-auditor",
+    "name": "Agent 内链体检",
+    "version": "1.0.0",
+    "author": "odi0011",
+    "author_url": "",
+    "homepage": "",
+    "description": "只读 Agent 动作示例：扫描已发布页面与文章正文里的站内链接，找出指向不存在 slug 的死链，并把结果作为可搜索资源类型暴露给 Agent。演示只读动作 + 资源类型 loader 的完整写法。",
+    "icon": "icon.svg",
+    "screenshots": [],
+    "requires_core": "7i",
+    "requires_php": "8.0",
+    "license": "MIT",
+    "category": "seo",
+    "tags": ["agent", "seo", "死链", "只读"],
+    "permissions": [
+        {"key": "agent_link_audit.view", "label": "查看内链体检结果", "group": "plugin", "sort_order": 1240}
+    ],
+    "agent": {
+        "actions": [
+            {
+                "id": "scan",
+                "label": "扫描站内死链",
+                "description": "只读扫描已发布页面与文章正文中的站内链接，返回指向不存在 slug 的死链清单。",
+                "module": "link_audit",
+                "operation": "read",
+                "risk": "low",
+                "mutates": false,
+                "params": ["limit", "types"],
+                "required_permissions": ["agent_link_audit.view"]
+            }
+        ]
+    }
+}

@@ -1,0 +1,19 @@
+{
+    "slug": "sitemap-ping",
+    "name": "站点地图推送",
+    "version": "1.0.0",
+    "author": "odi0011",
+    "author_url": "",
+    "homepage": "",
+    "description": "内容发布后自动把 sitemap 地址推送给搜索引擎，并把每次推送的状态记入日志。内置节流（默认 30 分钟内只推一次）、仅 HTTPS 且经过公网 IP 校验的外发请求、后台可查最近推送记录。",
+    "icon": "icon.svg",
+    "screenshots": [],
+    "requires_core": "7i",
+    "requires_php": "8.0",
+    "license": "MIT",
+    "category": "seo",
+    "tags": ["SEO", "站点地图", "搜索引擎", "外发请求"],
+    "permissions": [
+        {"key": "sitemap_ping.manage", "label": "配置站点地图推送", "group": "plugin", "sort_order": 1290}
+    ]
+}

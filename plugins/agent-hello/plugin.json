@@ -1,7 +1,7 @@
 {
   "slug": "agent-hello",
   "name": "Agent 扩展示例",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": "Project",
   "description": "演示插件如何向 AI Agent 注册动作、资源类型、委派角色与生命周期事件监听。",
   "icon": "icon.svg",

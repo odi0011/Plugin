@@ -1,7 +1,7 @@
 {
   "slug": "agent-run-notifier",
   "name": "Agent 运行通知",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": "odi0011",
   "description": "生命周期事件示例插件：监听 agent.events 的 run.completed 事件写插件日志，并可在后台设置 agent_notifier_webhook_url 后通过安全外发客户端向该地址投递运行完成通知（SSRF 防护由核心 OutboundHttpClient 保证）。",
   "icon": "icon.svg",

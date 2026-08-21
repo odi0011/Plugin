@@ -1,0 +1,34 @@
+{
+    "slug": "agent-run-digest",
+    "name": "Agent 运行摘要",
+    "version": "1.0.0",
+    "author": "odi0011",
+    "author_url": "",
+    "homepage": "",
+    "description": "Agent 生命周期事件落库 + 只读摘要示例：监听 agent.run.completed / agent.run.failed，把每次运行落进插件自建表，提供按天聚合的成功率摘要（Agent 只读动作 + 后台页面），并自动清理超期记录。",
+    "icon": "icon.svg",
+    "screenshots": [],
+    "requires_core": "7i",
+    "requires_php": "8.0",
+    "license": "MIT",
+    "category": "developer",
+    "tags": ["agent", "事件", "统计", "后台页面"],
+    "permissions": [
+        {"key": "agent_run_digest.view", "label": "查看 Agent 运行摘要", "group": "plugin", "sort_order": 1260}
+    ],
+    "agent": {
+        "actions": [
+            {
+                "id": "digest",
+                "label": "Agent 运行摘要",
+                "description": "只读返回最近若干天的 Agent 运行次数、成功/失败分布与按天趋势。",
+                "module": "run_digest",
+                "operation": "read",
+                "risk": "low",
+                "mutates": false,
+                "params": ["days"],
+                "required_permissions": ["agent_run_digest.view"]
+            }
+        ]
+    }
+}

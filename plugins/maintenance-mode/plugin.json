@@ -1,0 +1,19 @@
+{
+    "slug": "maintenance-mode",
+    "name": "维护模式",
+    "version": "1.0.0",
+    "author": "odi0011",
+    "author_url": "",
+    "homepage": "",
+    "description": "一键把前台切到维护页并返回 503，后台、API 与白名单 IP 不受影响。可自定义标题、说明、预计恢复时间与放行 IP 列表；支持 Retry-After 提示搜索引擎稍后重试。",
+    "icon": "icon.svg",
+    "screenshots": [],
+    "requires_core": "7i",
+    "requires_php": "8.0",
+    "license": "MIT",
+    "category": "other",
+    "tags": ["运维", "维护模式", "503"],
+    "permissions": [
+        {"key": "maintenance.config", "label": "配置维护模式", "group": "plugin", "sort_order": 1270}
+    ]
+}
