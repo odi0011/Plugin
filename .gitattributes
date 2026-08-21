@@ -1,0 +1,5 @@
+* text=auto eol=lf
+*.json text eol=lf
+*.sig -text
+*.pub -text
+*.zip binary
