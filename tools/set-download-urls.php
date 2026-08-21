@@ -88,6 +88,10 @@ if ($failures !== []) {
     exit(1);
 }
 
+// source.commit 记的是「索引对应的源 commit」。build 时只能拿到提交前的 HEAD，
+// 这里顺手更正为真正包含这批源码与 dist 的 commit，省掉一处长期的困惑点。
+$index['source']['commit'] = $commit;
+
 $json = json_encode($index, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
 if (!is_string($json)) {
     fwrite(STDERR, "索引序列化失败\n");
