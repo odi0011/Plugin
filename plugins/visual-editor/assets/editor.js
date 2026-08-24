@@ -1,981 +1,799 @@
 /*
- * 可视化编辑器：后台前端逻辑。
+ * 可视化编辑器：内容表单内的编辑面板逻辑（1.1.0）。
  *
- * 一条贯穿全文件的取向：**客户端不渲染页面**。
- * 每次改动都把内存里的文档树 POST 给服务端的 render 端点，换回 HTML 与作用域 CSS
- * 再换进画布。因此画布里看到的与前台输出的由同一段 PHP 生成，不存在两套渲染器
- * 慢慢走形的问题；代价是每个动作一次往返，换来的是所见即所得真的成立。
- *
- * 客户端只负责三件事：维护树、生成表单、管理撤销栈。
+ * 职责边界：
+ *   - 树的**持有者**是这里：所有结构修改先改树，再整体重渲染画布；
+ *   - 画布结构与 CSS 的生成规则镜像 src/Renderer.php 与 src/StyleCompiler.php，
+ *     基础样式（config.baseCss）由服务端原样下发，两端产物同源；
+ *   - 提交时把「渲染 HTML + 编译 CSS + 树 JSON」包成自包含块写进核心字段，
+ *     之后的一切（校验、修订、审计）都是核心表单自己的事。
  */
 (function () {
     'use strict';
 
-    var configNode = document.querySelector('[data-ve-config]');
-    if (!configNode) return;
+    function boot() {
+        var panel = document.getElementById('ve-panel');
+        var configEl = document.getElementById('ve-panel-config');
+        if (!panel || !configEl) return;
+        var config;
+        try { config = JSON.parse(configEl.textContent); } catch (e) { return; }
+        if (!window.ContentEditorModes || !config.canUse) return;
 
-    var CONFIG;
-    try {
-        CONFIG = JSON.parse(configNode.textContent || '{}');
-    } catch (error) {
-        return;
-    }
+        var canvas = panel.querySelector('[data-ve-canvas]');
+        var canvasStyle = document.querySelector('[data-ve-canvas-style]');
+        var statusEl = panel.querySelector('[data-ve-status]');
+        var importLabel = panel.querySelector('[data-ve-import-label]');
+        var inspector = panel.querySelector('[data-ve-inspector]');
+        var inspectorBody = panel.querySelector('[data-ve-inspector-body]');
+        var inspectorTarget = panel.querySelector('[data-ve-inspection-target]');
+        if (!canvas || !statusEl || !inspector || !inspectorBody) return;
 
-    var root = document.querySelector('[data-ve-editor]');
-    if (!root) return;
+        var tree = null;
+        try {
+            var initial = document.getElementById('ve-initial-tree');
+            tree = initial ? JSON.parse(initial.textContent) : null;
+        } catch (e) { tree = null; }
+        var selection = null;           // {kind:'section'|'column'|'widget', si, ci, wi}
+        var breakpoint = 'desktop';
+        var dirty = false;
 
-    var dom = {
-        canvas: root.querySelector('[data-ve-canvas]'),
-        frame: root.querySelector('[data-ve-frame]'),
-        style: root.querySelector('[data-ve-style]'),
-        message: root.querySelector('[data-ve-message]'),
-        lock: root.querySelector('[data-ve-lock]'),
-        statusBadge: root.querySelector('[data-ve-status-badge]'),
-        selectionLabel: root.querySelector('[data-ve-selection-label]'),
-        contentForm: root.querySelector('[data-ve-content-form]'),
-        styleForm: root.querySelector('[data-ve-style-form]'),
-        styleBreakpoint: root.querySelector('[data-ve-style-breakpoint]'),
-        outline: root.querySelector('[data-ve-outline]'),
-        undo: root.querySelector('[data-ve-undo]'),
-        redo: root.querySelector('[data-ve-redo]')
-    };
+        // ================= 基础工具 =================
 
-    var BREAKPOINT_LABELS = { desktop: '桌面', tablet: '平板', mobile: '手机' };
-
-    var state = {
-        tree: CONFIG.tree,
-        lockVersion: CONFIG.lockVersion,
-        breakpoint: 'desktop',
-        selection: '',
-        dirty: false,
-        pending: false,
-        undo: [],
-        redo: []
-    };
-
-    // ============================================================
-    // 工具
-    // ============================================================
-
-    function clone(value) {
-        return JSON.parse(JSON.stringify(value));
-    }
-
-    function say(text, kind) {
-        if (!dom.message) return;
-        dom.message.textContent = text;
-        dom.message.className = 'small ' + (kind === 'error' ? 'text-danger' : (kind === 'ok' ? 'text-success' : 'text-muted'));
-    }
-
-    /** 定位一个元素，返回 { kind, section, column, widget, node, siblings }。 */
-    function locate(elementId) {
-        var sections = state.tree.sections || [];
-        for (var s = 0; s < sections.length; s++) {
-            if (sections[s].id === elementId) {
-                return { kind: 'section', section: s, node: sections[s], siblings: sections };
-            }
-            var columns = sections[s].columns || [];
-            for (var c = 0; c < columns.length; c++) {
-                if (columns[c].id === elementId) {
-                    return { kind: 'column', section: s, column: c, node: columns[c], siblings: columns };
-                }
-                var widgets = columns[c].widgets || [];
-                for (var w = 0; w < widgets.length; w++) {
-                    if (widgets[w].id === elementId) {
-                        return {
-                            kind: 'widget', section: s, column: c, widget: w,
-                            node: widgets[w], siblings: widgets
-                        };
-                    }
-                }
-            }
-        }
-        return null;
-    }
-
-    function selectedNode() {
-        return state.selection ? locate(state.selection) : null;
-    }
-
-    // ============================================================
-    // 历史
-    // ============================================================
-
-    function pushHistory() {
-        state.undo.push(clone(state.tree));
-        // 上限是刻意的：撤销栈存的是整棵树的快照，无界会把内存吃光。
-        if (state.undo.length > 40) state.undo.shift();
-        state.redo.length = 0;
-        refreshHistoryButtons();
-    }
-
-    function refreshHistoryButtons() {
-        if (dom.undo) dom.undo.disabled = state.undo.length === 0;
-        if (dom.redo) dom.redo.disabled = state.redo.length === 0;
-    }
-
-    function undo() {
-        if (!state.undo.length) return;
-        state.redo.push(clone(state.tree));
-        state.tree = state.undo.pop();
-        state.dirty = true;
-        refreshHistoryButtons();
-        repaint('已撤销');
-    }
-
-    function redo() {
-        if (!state.redo.length) return;
-        state.undo.push(clone(state.tree));
-        state.tree = state.redo.pop();
-        state.dirty = true;
-        refreshHistoryButtons();
-        repaint('已重做');
-    }
-
-    // ============================================================
-    // 与服务端通信
-    // ============================================================
-
-    function post(url, fields) {
-        var body = new FormData();
-        body.append('_csrf', CONFIG.csrf);
-        Object.keys(fields).forEach(function (key) {
-            body.append(key, fields[key]);
-        });
-        return fetch(url, {
-            method: 'POST',
-            body: body,
-            credentials: 'same-origin',
-            headers: { 'X-Requested-With': 'XMLHttpRequest' }
-        }).then(function (response) {
-            return response.json().catch(function () {
-                // 会话过期时服务端会重定向到登录页，返回的是 HTML 而不是 JSON。
-                return { ok: false, message: '服务端返回了非 JSON 响应（登录可能已过期，请刷新页面）' };
-            }).then(function (payload) {
-                payload.httpStatus = response.status;
-                return payload;
-            });
-        });
-    }
-
-    /** 把当前树交给服务端渲染，换回画布 HTML 与 CSS。 */
-    function repaint(okMessage) {
-        if (state.pending) return Promise.resolve(false);
-        state.pending = true;
-        say('渲染中…');
-        return post(CONFIG.urls.render, { tree: JSON.stringify(state.tree) })
-            .then(function (payload) {
-                state.pending = false;
-                if (!payload.ok) {
-                    say(payload.message || '渲染失败', 'error');
-                    return false;
-                }
-                // 用服务端归一化后的树覆盖本地：被丢掉的非法值不会留在界面上，
-                // 避免「我明明设了但保存后没了」。
-                state.tree = payload.tree;
-                if (dom.canvas) dom.canvas.innerHTML = payload.html;
-                if (dom.style) dom.style.textContent = payload.css;
-                paintSelection();
-                buildOutline();
-                buildInspector();
-                var warnings = (payload.warnings || []).join('；');
-                say(warnings !== '' ? warnings : (okMessage || (state.dirty ? '有未保存的改动' : '就绪')),
-                    warnings !== '' ? 'error' : undefined);
-                return true;
-            })
-            .catch(function (error) {
-                state.pending = false;
-                say('渲染请求失败：' + error.message, 'error');
-                return false;
-            });
-    }
-
-    function commit(okMessage) {
-        state.dirty = true;
-        return repaint(okMessage);
-    }
-
-    // ============================================================
-    // 选中与画布交互
-    // ============================================================
-
-    function paintSelection() {
-        if (!dom.canvas) return;
-        Array.prototype.forEach.call(dom.canvas.querySelectorAll('.ve-selected'), function (node) {
-            node.classList.remove('ve-selected');
-        });
-        if (!state.selection) return;
-        var node = dom.canvas.querySelector('[data-ve="' + cssEscape(state.selection) + '"]');
-        if (node) node.classList.add('ve-selected');
-    }
-
-    /** 元素 id 形如 ve + 10 位小写十六进制，本来就不需要转义；仍然过一遍以防将来放宽格式。 */
-    function cssEscape(value) {
-        return String(value).replace(/[^a-zA-Z0-9_-]/g, '');
-    }
-
-    function select(elementId) {
-        state.selection = elementId || '';
-        paintSelection();
-        buildOutline();
-        buildInspector();
-    }
-
-    if (dom.canvas) {
-        dom.canvas.addEventListener('click', function (event) {
-            var target = event.target.closest('[data-ve-kind]');
-            if (!target || !dom.canvas.contains(target)) return;
-            // 画布里的链接在编辑态不该真的跳走。
-            event.preventDefault();
-            var id = target.getAttribute('data-ve');
-            if (id) select(id);
-        });
-    }
-
-    // ============================================================
-    // 结构树
-    // ============================================================
-
-    function buildOutline() {
-        if (!dom.outline) return;
-        var html = '';
-        (state.tree.sections || []).forEach(function (section, sectionIndex) {
-            html += outlineRow(section.id, 've-outline-section',
-                '区块 ' + (sectionIndex + 1) + (section.layout === 'full' ? '（通栏）' : ''));
-            (section.columns || []).forEach(function (column, columnIndex) {
-                html += outlineRow(column.id, 've-outline-column',
-                    '栏 ' + (columnIndex + 1) + ' · ' + (column.width && column.width.desktop ? column.width.desktop : 100) + '%');
-                (column.widgets || []).forEach(function (widget) {
-                    var definition = CONFIG.widgets[widget.type];
-                    html += outlineRow(widget.id, 've-outline-widget',
-                        (definition ? definition.label : widget.type) + summaryOf(widget));
-                });
-            });
-        });
-        dom.outline.innerHTML = html;
-    }
-
-    function outlineRow(id, className, label) {
-        return '<button type="button" class="' + className + (state.selection === id ? ' active' : '')
-            + '" data-ve-outline-select="' + escapeAttribute(id) + '">' + escapeHtml(label) + '</button>';
-    }
-
-    function summaryOf(widget) {
-        var content = widget.content || {};
-        var raw = content.text || content.html || content.items || content.alt || '';
-        var plain = String(raw).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
-        return plain === '' ? '' : '：' + (plain.length > 18 ? plain.slice(0, 18) + '…' : plain);
-    }
-
-    if (dom.outline) {
-        dom.outline.addEventListener('click', function (event) {
-            var button = event.target.closest('[data-ve-outline-select]');
-            if (button) select(button.getAttribute('data-ve-outline-select'));
-        });
-    }
-
-    function escapeHtml(value) {
-        return String(value).replace(/[&<>"']/g, function (character) {
-            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character];
-        });
-    }
-
-    function escapeAttribute(value) {
-        return escapeHtml(value);
-    }
-
-    // ============================================================
-    // 检查器：内容表单
-    // ============================================================
-
-    function buildInspector() {
-        var located = selectedNode();
-        updateSelectionBar(located);
-        buildContentForm(located);
-        buildStyleForm(located);
-    }
-
-    function updateSelectionBar(located) {
-        var label = '未选中元素';
-        if (located) {
-            if (located.kind === 'widget') {
-                var definition = CONFIG.widgets[located.node.type];
-                label = (definition ? definition.label : located.node.type) + ' 控件';
-            } else {
-                label = located.kind === 'section' ? '区块' : '栏';
-            }
-        }
-        if (dom.selectionLabel) dom.selectionLabel.textContent = label;
-        ['[data-ve-move="up"]', '[data-ve-move="down"]', '[data-ve-duplicate]', '[data-ve-remove]'].forEach(function (selector) {
-            var button = root.querySelector(selector);
-            if (!button) return;
-            // 栏不支持复制：复制一栏会打乱同区块内的宽度分配，不如让用户改栏数。
-            var disabled = !located || (selector === '[data-ve-duplicate]' && located.kind === 'column');
-            button.disabled = disabled;
-        });
-    }
-
-    function buildContentForm(located) {
-        if (!dom.contentForm) return;
-        if (!located) {
-            dom.contentForm.innerHTML = '<p class="ve-hint">在画布上点一个控件、栏或区块开始编辑。</p>';
-            return;
-        }
-        if (located.kind === 'section') {
-            dom.contentForm.innerHTML = field('区块布局',
-                select_('data-ve-section-layout', located.node.layout,
-                    [['boxed', '定宽（居中，受内容区宽度约束）'], ['full', '通栏（撑满视口宽度）']]));
-            return;
-        }
-        if (located.kind === 'column') {
-            var width = (located.node.width || {})[state.breakpoint];
-            dom.contentForm.innerHTML = field('本栏宽度（%）· ' + BREAKPOINT_LABELS[state.breakpoint],
-                '<input class="form-control form-control-sm" type="number" min="5" max="100" step="1"'
-                + ' data-ve-column-width value="' + escapeAttribute(width === undefined ? 100 : width) + '">')
-                + '<p class="ve-hint">同一区块内各栏宽度之和建议不超过 100%，否则会自动换行。</p>';
-            return;
+        function esc(value) {
+            return String(value == null ? '' : value)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
 
-        var definition = CONFIG.widgets[located.node.type];
-        if (!definition) {
-            dom.contentForm.innerHTML = '<p class="ve-hint">该控件类型已不受支持。</p>';
-            return;
-        }
-        var html = '';
-        Object.keys(definition.fields).forEach(function (name) {
-            html += contentField(name, definition.fields[name], (located.node.content || {})[name]);
-        });
-        dom.contentForm.innerHTML = html;
-    }
-
-    /**
-     * 一个内容字段的输入控件。
-     * spec 就是服务端 schema 里的「类型:约束」字符串，因此界面能出现的输入形态
-     * 和后端能接受的值域是同一份定义推出来的。
-     */
-    function contentField(name, spec, value) {
-        var parts = String(spec).split(':');
-        var type = parts[0];
-        var constraint = parts[1] || '';
-        var label = CONFIG.fieldLabels[name] || name;
-        var attribute = ' data-ve-content="' + escapeAttribute(name) + '"';
-        var current = value === undefined || value === null ? '' : value;
-
-        if (type === 'enum') {
-            var options = constraint.split(',').map(function (option) {
-                return [option, enumLabel(name, option)];
-            });
-            return field(label, select_(attribute, current, options));
-        }
-        if (type === 'rich' || type === 'html_block') {
-            return field(label, '<textarea class="form-control form-control-sm" rows="6"' + attribute + '>'
-                + escapeHtml(current) + '</textarea>')
-                + (type === 'html_block'
-                    ? '<p class="ve-hint">保存时会按白名单消毒：script / style / iframe / 事件属性一律移除。</p>'
-                    : '<p class="ve-hint">支持 p、strong、em、a、ul/ol、code 等行内标签，其余会被解开。</p>');
-        }
-        if (type === 'lines') {
-            return field(label, '<textarea class="form-control form-control-sm" rows="5"' + attribute + '>'
-                + escapeHtml(current) + '</textarea>');
-        }
-        if (type === 'number') {
-            var bounds = constraint.split(',');
-            return field(label, '<input class="form-control form-control-sm" type="number"'
-                + (bounds[0] ? ' min="' + escapeAttribute(bounds[0]) + '"' : '')
-                + (bounds[1] ? ' max="' + escapeAttribute(bounds[1]) + '"' : '')
-                + attribute + ' value="' + escapeAttribute(current) + '">');
-        }
-        if (type === 'color') {
-            return field(label, '<div class="ve-field-row">'
-                + '<input type="color" class="form-control form-control-sm" data-ve-color-proxy value="'
-                + escapeAttribute(/^#[0-9a-fA-F]{6}$/.test(current) ? current : '#000000') + '">'
-                + '<input class="form-control form-control-sm" placeholder="#112233 或 var(--ui-primary)"'
-                + attribute + ' value="' + escapeAttribute(current) + '"></div>');
-        }
-        if (type === 'media') {
-            return field(label, '<div class="ve-field-row">'
-                + '<input class="form-control form-control-sm" placeholder="/uploads/…"' + attribute
-                + ' value="' + escapeAttribute(current) + '">'
-                + '<button type="button" class="btn btn-sm btn-outline-secondary" data-ve-pick-media>选图</button>'
-                + '</div>');
-        }
-        var maxLength = type === 'text' && constraint ? ' maxlength="' + escapeAttribute(constraint) + '"' : '';
-        return field(label, '<input class="form-control form-control-sm"' + attribute + maxLength
-            + ' value="' + escapeAttribute(current) + '">');
-    }
-
-    function enumLabel(name, option) {
-        var dictionary = {
-            left: '左对齐', center: '居中', right: '右对齐', justify: '两端对齐',
-            _self: '当前窗口', _blank: '新窗口',
-            primary: '主色实心', outline: '描边', ghost: '文字按钮',
-            sm: '小', md: '中', lg: '大',
-            disc: '圆点', decimal: '数字', check: '勾选', none: '无',
-            solid: '实线', dashed: '虚线', dotted: '点线',
-            youtube: 'YouTube', vimeo: 'Vimeo', bilibili: '哔哩哔哩',
-            '16-9': '16:9', '4-3': '4:3', '1-1': '1:1',
-            cover: '覆盖', contain: '包含', auto: '原始尺寸',
-            'no-repeat': '不平铺', repeat: '平铺', 'repeat-x': '横向平铺', 'repeat-y': '纵向平铺',
-            top: '顶部', bottom: '底部', block: '块级', flex: '弹性盒', 'inline-block': '行内块',
-            'flex-start': '起始', 'flex-end': '末尾', 'space-between': '两端分散',
-            'space-around': '环绕分散', stretch: '拉伸'
-        };
-        if (name === 'level') return option.toUpperCase();
-        return dictionary[option] || option;
-    }
-
-    function field(label, control) {
-        return '<div class="ve-field"><label>' + escapeHtml(label) + '</label>' + control + '</div>';
-    }
-
-    function select_(attribute, current, options) {
-        var html = '<select class="form-select form-select-sm"' + attribute + '>';
-        options.forEach(function (option) {
-            html += '<option value="' + escapeAttribute(option[0]) + '"'
-                + (String(current) === String(option[0]) ? ' selected' : '') + '>'
-                + escapeHtml(option[1]) + '</option>';
-        });
-        return html + '</select>';
-    }
-
-    // ============================================================
-    // 检查器：样式表单
-    // ============================================================
-
-    function buildStyleForm(located) {
-        if (!dom.styleForm) return;
-        if (dom.styleBreakpoint) dom.styleBreakpoint.textContent = BREAKPOINT_LABELS[state.breakpoint];
-        if (!located) {
-            dom.styleForm.innerHTML = '<p class="ve-hint">在画布上点一个元素开始设置样式。</p>';
-            return;
+        function el(tag, className, text) {
+            var node = document.createElement(tag);
+            if (className) node.className = className;
+            if (text != null) node.textContent = text;
+            return node;
         }
 
-        var current = (located.node.style || {})[state.breakpoint] || {};
-        var groups = {};
-        Object.keys(CONFIG.styleProperties).forEach(function (property) {
-            var meta = CONFIG.styleLabels[property] || { group: '其他', label: property };
-            if (!groups[meta.group]) groups[meta.group] = '';
-            groups[meta.group] += styleField(property, meta.label, current[property]);
-        });
-
-        var html = '';
-        Object.keys(groups).forEach(function (group) {
-            html += '<div class="ve-style-group"><h6>' + escapeHtml(group) + '</h6>' + groups[group] + '</div>';
-        });
-        html += '<button type="button" class="btn btn-sm btn-outline-secondary mt-2" data-ve-clear-style>'
-            + '清空本断点样式</button>';
-        dom.styleForm.innerHTML = html;
-    }
-
-    function styleField(property, label, value) {
-        var valueType = CONFIG.styleProperties[property][1];
-        var attribute = ' data-ve-style="' + escapeAttribute(property) + '"';
-        var current = value === undefined || value === null ? '' : value;
-
-        if (valueType === 'color') {
-            return field(label, '<div class="ve-field-row">'
-                + '<input type="color" class="form-control form-control-sm" data-ve-color-proxy value="'
-                + escapeAttribute(/^#[0-9a-fA-F]{6}$/.test(current) ? current : '#000000') + '">'
-                + '<input class="form-control form-control-sm" placeholder="留空 = 不设置"' + attribute
-                + ' value="' + escapeAttribute(current) + '"></div>');
+        function emptyStyle() {
+            return { desktop: {}, tablet: {}, mobile: {} };
         }
-        if (valueType === 'image') {
-            return field(label, '<div class="ve-field-row">'
-                + '<input class="form-control form-control-sm" placeholder="/uploads/…"' + attribute
-                + ' value="' + escapeAttribute(current) + '">'
-                + '<button type="button" class="btn btn-sm btn-outline-secondary" data-ve-pick-media>选图</button>'
-                + '</div>');
+
+        function newId() {
+            var bytes = new Uint8Array(5);
+            (window.crypto || {}).getRandomValues
+                ? crypto.getRandomValues(bytes)
+                : bytes.forEach(function (_, i) { bytes[i] = Math.floor(Math.random() * 256); });
+            return 've' + Array.prototype.map.call(bytes, function (b) {
+                return (b < 16 ? '0' : '') + b.toString(16);
+            }).join('');
         }
-        if (valueType === 'shadow') {
-            return field(label, select_(attribute, current,
-                [['', '不设置'], ['none', '无'], ['sm', '轻'], ['md', '中'], ['lg', '重']]));
-        }
-        if (valueType === 'ratio') {
-            return field(label, '<input class="form-control form-control-sm" type="number" min="0" max="9" step="0.05"'
-                + attribute + ' value="' + escapeAttribute(current) + '" placeholder="留空 = 不设置">');
-        }
-        if (valueType.indexOf('enum:') === 0) {
-            var options = [['', '不设置']].concat(valueType.slice(5).split(',').map(function (option) {
-                return [option, enumLabel(property, option)];
-            }));
-            return field(label, select_(attribute, current, options));
-        }
-        return field(label, '<input class="form-control form-control-sm" placeholder="如 24px / 1.5rem / 50%"'
-            + attribute + ' value="' + escapeAttribute(current) + '">');
-    }
 
-    // ============================================================
-    // 检查器：输入绑定
-    // ============================================================
-
-    var debounceTimer = null;
-    function debounced(fn) {
-        window.clearTimeout(debounceTimer);
-        debounceTimer = window.setTimeout(fn, 500);
-    }
-
-    /** 内容与样式输入：改动先落到内存树，再防抖重绘。历史快照在**改动前**推入。 */
-    function bindInspector(container) {
-        if (!container) return;
-
-        container.addEventListener('input', function (event) {
-            var target = event.target;
-            if (target.hasAttribute('data-ve-color-proxy')) {
-                var paired = target.parentElement.querySelector('[data-ve-style],[data-ve-content]');
-                if (paired) {
-                    paired.value = target.value;
-                    paired.dispatchEvent(new Event('input', { bubbles: true }));
-                }
-                return;
-            }
-            var located = selectedNode();
-            if (!located) return;
-
-            if (target.hasAttribute('data-ve-content')) {
-                applyOnce(function () {
-                    located.node.content = located.node.content || {};
-                    located.node.content[target.getAttribute('data-ve-content')] = target.value;
-                });
-            } else if (target.hasAttribute('data-ve-style')) {
-                applyOnce(function () {
-                    located.node.style = located.node.style || {};
-                    located.node.style[state.breakpoint] = located.node.style[state.breakpoint] || {};
-                    var bucket = located.node.style[state.breakpoint];
-                    if (String(target.value).trim() === '') {
-                        delete bucket[target.getAttribute('data-ve-style')];
-                    } else {
-                        bucket[target.getAttribute('data-ve-style')] = target.value;
-                    }
-                });
-            } else if (target.hasAttribute('data-ve-column-width')) {
-                applyOnce(function () {
-                    located.node.width = located.node.width || {};
-                    located.node.width[state.breakpoint] = parseInt(target.value, 10) || 100;
-                });
-            } else if (target.hasAttribute('data-ve-section-layout')) {
-                applyOnce(function () { located.node.layout = target.value; });
-            }
-        });
-
-        container.addEventListener('change', function (event) {
-            if (event.target.tagName === 'SELECT') {
-                event.target.dispatchEvent(new Event('input', { bubbles: true }));
-            }
-        });
-    }
-
-    /**
-     * 连续输入只推一次历史快照：不然打一行字就塞进去十几个快照，
-     * 撤销一次只退一个字符，等于没有撤销。
-     */
-    var editingBatch = false;
-    function applyOnce(mutate) {
-        if (!editingBatch) {
-            pushHistory();
-            editingBatch = true;
-        }
-        mutate();
-        state.dirty = true;
-        say('有未保存的改动');
-        debounced(function () {
-            editingBatch = false;
-            repaint();
-        });
-    }
-
-    bindInspector(dom.contentForm);
-    bindInspector(dom.styleForm);
-
-    // ============================================================
-    // 结构操作
-    // ============================================================
-
-    /** 目标栏：选中的是栏就用它，选中控件就用它所在的栏，否则用第一栏。 */
-    function targetColumn() {
-        var located = selectedNode();
-        if (located) {
-            if (located.kind === 'column') return located.node;
-            if (located.kind === 'widget') {
-                return state.tree.sections[located.section].columns[located.column];
-            }
-            if (located.kind === 'section' && (located.node.columns || []).length) {
-                return located.node.columns[0];
-            }
-        }
-        var sections = state.tree.sections || [];
-        return sections.length && (sections[0].columns || []).length ? sections[0].columns[0] : null;
-    }
-
-    function newId() {
-        // 服务端会重新校验并按需换掉，因此这里只要保证本地唯一即可。
-        var hex = '';
-        for (var i = 0; i < 10; i++) hex += '0123456789abcdef'[Math.floor(Math.random() * 16)];
-        return 've' + hex;
-    }
-
-    function emptyStyle() {
-        return { desktop: {}, tablet: {}, mobile: {} };
-    }
-
-    function addWidget(type, column, index) {
-        var definition = CONFIG.widgets[type];
-        if (!definition) return;
-        var target = column || targetColumn();
-        if (!target) {
-            say('没有可放控件的栏，请先加一个区块', 'error');
-            return;
-        }
-        pushHistory();
-        var widget = { id: newId(), type: type, content: clone(definition.defaults || {}), style: emptyStyle() };
-        target.widgets = target.widgets || [];
-        if (typeof index === 'number' && index >= 0 && index <= target.widgets.length) {
-            target.widgets.splice(index, 0, widget);
-        } else {
-            target.widgets.push(widget);
-        }
-        state.selection = widget.id;
-        commit('已加入' + definition.label);
-    }
-
-    function addSection(columns) {
-        pushHistory();
-        var count = Math.max(1, Math.min(6, columns || 1));
-        var base = Math.floor(100 / count);
-        var section = { id: newId(), layout: 'boxed', style: emptyStyle(), columns: [] };
-        for (var i = 0; i < count; i++) {
-            var percent = i === count - 1 ? 100 - base * (count - 1) : base;
-            section.columns.push({
-                id: newId(),
-                width: { desktop: percent, tablet: count > 2 ? 50 : percent, mobile: 100 },
+        function blankTree() {
+            return {
+                version: 1,
                 style: emptyStyle(),
-                widgets: []
+                sections: [{
+                    id: newId(), layout: 'boxed', style: emptyStyle(),
+                    columns: [{ id: newId(), width: { desktop: 100, tablet: 100, mobile: 100 }, style: emptyStyle(), widgets: [] }],
+                }],
+            };
+        }
+
+        function normalizeWidget(type, content) {
+            var definition = config.widgets[type] || config.widgets.html;
+            type = config.widgets[type] ? type : 'html';
+            var merged = {};
+            Object.keys(definition.defaults).forEach(function (field) {
+                merged[field] = (content && content[field] != null && content[field] !== '')
+                    ? content[field] : definition.defaults[field];
+            });
+            return { id: newId(), type: type, content: merged, style: emptyStyle() };
+        }
+
+        function findNode(sel) {
+            if (!tree || !sel) return null;
+            var section = tree.sections[sel.si];
+            if (!section) return null;
+            if (sel.kind === 'section') return section;
+            var column = (section.columns || [])[sel.ci];
+            if (!column) return null;
+            if (sel.kind === 'column') return column;
+            return (column.widgets || [])[sel.wi] || null;
+        }
+
+        // ================= 渲染（镜像 Renderer.php）=================
+
+        function alignOf(content) {
+            return ['left', 'center', 'right', 'justify'].indexOf(content.align) >= 0 ? content.align : 'left';
+        }
+
+        function isMediaUrl(url) {
+            return /^(https?:\/\/|\/)[^\s"'<>]+\.(?:png|jpe?g|gif|webp|avif|svg)(\?[^\s"'<>]*)?$/i.test(String(url || ''));
+        }
+
+        function isSafeUrl(url) {
+            url = String(url || '');
+            if (!url || /[\s<>"']/.test(url)) return false;
+            if (/^#[A-Za-z0-9_-]{1,80}$/.test(url)) return true;
+            if (url.indexOf('/') === 0 && url.indexOf('//') !== 0) return url.indexOf('..') < 0;
+            if (/^mailto:[^@\s]+@[^@\s]+$/i.test(url)) return true;
+            if (/^tel:\+?[0-9 ()-]{3,32}$/i.test(url)) return true;
+            return /^https?:\/\/[^/]/i.test(url);
+        }
+
+        function widgetBodyHtml(widget) {
+            var c = widget.content || {};
+            switch (widget.type) {
+                case 'heading':
+                    var level = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'].indexOf(c.level) >= 0 ? c.level : 'h2';
+                    return '<' + level + ' class="ve-heading ve-align-' + alignOf(c) + '">' + esc(c.text) + '</' + level + '>';
+                case 'text':
+                    return '<div class="ve-text ve-align-' + alignOf(c) + '">' + String(c.html || '') + '</div>';
+                case 'html':
+                    return '<div class="ve-html">' + String(c.html || '') + '</div>';
+                case 'image': {
+                    if (!c.src || !isMediaUrl(c.src)) return '<div class="ve-image-placeholder">未选择图片</div>';
+                    var width = Math.max(5, Math.min(100, parseInt(c.width, 10) || 100));
+                    var img = '<img src="' + esc(c.src) + '" alt="' + esc(c.alt) + '" loading="lazy" style="width:' + width + '%">';
+                    if (c.url && isSafeUrl(c.url)) img = '<a href="' + esc(c.url) + '">' + img + '</a>';
+                    return '<figure class="ve-image ve-align-' + alignOf(c) + '">' + img + '</figure>';
+                }
+                case 'button': {
+                    if (!c.text) return '';
+                    var variant = ['primary', 'outline', 'ghost'].indexOf(c.variant) >= 0 ? c.variant : 'primary';
+                    var size = ['sm', 'md', 'lg'].indexOf(c.size) >= 0 ? c.size : 'md';
+                    var classes = 've-button ve-button-' + variant + ' ve-button-' + size;
+                    var inner = '<span class="' + classes + '">' + esc(c.text) + '</span>';
+                    if (c.url && isSafeUrl(c.url)) {
+                        var target = c.target === '_blank' ? '_blank' : '_self';
+                        inner = '<a class="' + classes + '" href="' + esc(c.url) + '" target="' + target + '"'
+                            + (target === '_blank' ? ' rel="noopener noreferrer"' : '') + '>' + esc(c.text) + '</a>';
+                    }
+                    return '<div class="ve-button-wrap ve-align-' + alignOf(c) + '">' + inner + '</div>';
+                }
+                case 'list': {
+                    var marker = ['disc', 'decimal', 'check', 'none'].indexOf(c.marker) >= 0 ? c.marker : 'disc';
+                    var tag = marker === 'decimal' ? 'ol' : 'ul';
+                    var items = String(c.items || '').split('\n').map(function (line) { return line.trim(); })
+                        .filter(Boolean).map(function (line) { return '<li>' + esc(line) + '</li>'; }).join('');
+                    if (!items) return '';
+                    return '<' + tag + ' class="ve-list ve-list-' + marker + ' ve-align-' + alignOf(c) + '">' + items + '</' + tag + '>';
+                }
+                case 'quote': {
+                    var cite = String(c.cite || '');
+                    return '<blockquote class="ve-quote ve-align-' + alignOf(c) + '"><p>' + esc(c.text) + '</p>'
+                        + (cite ? '<cite>' + esc(cite) + '</cite>' : '') + '</blockquote>';
+                }
+                case 'divider': {
+                    var style = ['solid', 'dashed', 'dotted'].indexOf(c.style) >= 0 ? c.style : 'solid';
+                    var thickness = Math.max(1, Math.min(12, parseInt(c.thickness, 10) || 1));
+                    return '<hr class="ve-divider" style="border-top-style:' + style + ';border-top-width:' + thickness + 'px">';
+                }
+                case 'spacer': {
+                    var height = Math.max(4, Math.min(400, parseInt(c.height, 10) || 40));
+                    return '<div class="ve-spacer" style="height:' + height + 'px"></div>';
+                }
+                case 'embed': {
+                    if (!/^[A-Za-z0-9_-]{1,64}$/.test(String(c.video_id || ''))) {
+                        return '<div class="ve-image-placeholder">未填写视频 ID</div>';
+                    }
+                    var providers = {
+                        vimeo: 'https://player.vimeo.com/video/',
+                        bilibili: 'https://player.bilibili.com/player.html?bvid=',
+                        youtube: 'https://www.youtube-nocookie.com/embed/',
+                    };
+                    var src = (providers[c.provider] || providers.youtube) + c.video_id;
+                    var ratio = ['16-9', '4-3', '1-1'].indexOf(c.ratio) >= 0 ? c.ratio : '16-9';
+                    return '<div class="ve-embed ve-embed-' + ratio + '"><iframe src="' + esc(src) + '"'
+                        + ' title="' + esc(c.title || '嵌入视频') + '" loading="lazy" allowfullscreen'
+                        + ' referrerpolicy="strict-origin-when-cross-origin" frameborder="0"></iframe></div>';
+                }
+            }
+            return '';
+        }
+
+        var WIDGET_LABELS = {};
+        Object.keys(config.widgets).forEach(function (key) { WIDGET_LABELS[key] = config.widgets[key].label; });
+
+        function renderTree(editing) {
+            if (!tree) return '';
+            var html = '<div class="ve-doc ve-doc-' + esc(config.sourceKey) + '"' + (editing ? ' data-ve-kind="document"' : '') + '>';
+            tree.sections.forEach(function (section, si) {
+                html += '<section data-ve="' + esc(section.id) + '" class="ve-section ve-section-' + (section.layout === 'full' ? 'full' : 'boxed') + '"'
+                    + (editing ? ' data-ve-kind="section" data-ve-path="' + si + '"' : '') + '>'
+                    + '<div class="ve-section-inner">';
+                (section.columns || []).forEach(function (column, ci) {
+                    html += '<div data-ve="' + esc(column.id) + '" class="ve-column"'
+                        + (editing ? ' data-ve-kind="column" data-ve-path="' + si + '.' + ci + '"' : '') + '>';
+                    (column.widgets || []).forEach(function (widget, wi) {
+                        var definition = config.widgets[widget.type];
+                        if (!definition) return;
+                        html += '<div data-ve="' + esc(widget.id) + '" class="ve-widget ve-widget-' + esc(widget.type) + '"'
+                            + (editing ? ' data-ve-kind="widget" data-ve-type="' + esc(widget.type) + '" data-ve-path="' + si + '.' + ci + '.' + wi + '"' : '')
+                            + '>' + widgetBodyHtml(widget)
+                            + (editing ? '<span class="ve-handle" data-ve-handle aria-hidden="true">' + esc(definition.label) + '</span>' : '')
+                            + '</div>';
+                    });
+                    if (editing && !(column.widgets || []).length) {
+                        html += '<div class="ve-column-empty">从左侧添加控件，或点选后用检查器编辑</div>';
+                    }
+                    html += '</div>';
+                });
+                html += '</div></section>';
+            });
+            return html + '</div>';
+        }
+
+        // ================= 样式编译（镜像 StyleCompiler.php）=================
+
+        var STYLE_PROPERTIES = config.styleProperties;
+
+        function validateStyleValue(property, raw) {
+            raw = String(raw == null ? '' : raw).trim();
+            if (!raw || /[<>{};@\\]/.test(raw) || raw.indexOf('/*') >= 0) return null;
+            var definition = STYLE_PROPERTIES[property];
+            if (!definition) return null;
+            var valueType = definition[1];
+            if (valueType === 'length') return /^-?(?:\d{1,4})(?:\.\d{1,2})?(?:px|rem|em|%|vh|vw)?$/.test(raw) ? raw : null;
+            if (valueType === 'ratio') return /^\d(?:\.\d{1,2})?$/.test(raw) ? raw : null;
+            if (valueType === 'color') return /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(raw)
+                || /^rgba?\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*(?:,\s*(?:0|1|0?\.\d{1,3})\s*)?\)$/.test(raw)
+                || /^var\(--[a-z0-9-]{1,60}\)$/i.test(raw) ? raw : null;
+            if (valueType === 'image') return isMediaUrl(raw) ? raw : null;
+            if (valueType === 'shadow') return ['none', 'sm', 'md', 'lg'].indexOf(String(raw).toLowerCase()) >= 0 ? String(raw).toLowerCase() : null;
+            if (valueType.indexOf('enum:') === 0) {
+                return valueType.slice(5).split(',').indexOf(raw) >= 0 ? raw : null;
+            }
+            return null;
+        }
+
+        function declarationLines(styleMap, bp) {
+            var out = [];
+            Object.keys(STYLE_PROPERTIES).forEach(function (property) {
+                var value = validateStyleValue(property, (styleMap || {})[property]);
+                if (value === null) return;
+                var cssProp = STYLE_PROPERTIES[property][0];
+                if (STYLE_PROPERTIES[property][1] === 'image') value = 'url("' + value.replace(/"/g, '%22').replace(/\\/g, '%5C') + '")';
+                if (STYLE_PROPERTIES[property][1] === 'shadow') {
+                    value = { none: 'none', sm: '0 1px 2px rgba(0,0,0,.08)', md: '0 4px 16px rgba(0,0,0,.10)', lg: '0 12px 40px rgba(0,0,0,.16)' }[value];
+                }
+                out.push(cssProp + ': ' + value + ';');
+            });
+            return out;
+        }
+
+        // 三个断点各自收集声明，顺序与 StyleCompiler::compile 一致：
+        // 文档 → 区块 → 栏（含栏宽）→ 控件。提交必须用全量产物，
+        // 只编译当前标签会让另外两个断点的设置在保存时静默丢失。
+        function collectBuckets() {
+            var buckets = { desktop: [], tablet: [], mobile: [] };
+            var root = '.ve-doc-' + config.sourceKey;
+            function push(map, selector) {
+                ['desktop', 'tablet', 'mobile'].forEach(function (bp) {
+                    var decls = declarationLines((map || {})[bp], bp);
+                    if (decls.length) buckets[bp].push(selector + ' { ' + decls.join(' ') + ' }');
+                });
+            }
+            push(tree.style, root);
+            buckets.desktop.push(root + ' { --ve-container: ' + config.containerMax + 'px; }');
+            tree.sections.forEach(function (section) {
+                push(section.style, root + ' [data-ve="' + section.id + '"]');
+                (section.columns || []).forEach(function (column) {
+                    var columnSelector = root + ' [data-ve="' + column.id + '"]';
+                    push(column.style, columnSelector);
+                    ['desktop', 'tablet', 'mobile'].forEach(function (bp) {
+                        var widthValue = parseFloat((column.width || {})[bp]);
+                        if (!isNaN(widthValue)) {
+                            var percent = Math.max(5, Math.min(100, Math.round(widthValue)));
+                            buckets[bp].push(columnSelector + ' { flex: 0 0 ' + percent + '%; max-width: ' + percent + '%; }');
+                        }
+                    });
+                    (column.widgets || []).forEach(function (widget) {
+                        push(widget.style, root + ' [data-ve="' + widget.id + '"]');
+                    });
+                });
+            });
+            return buckets;
+        }
+
+        /** 提交用：镜像 StyleCompiler::compile 的完整三断点产物。 */
+        function compileAllCss() {
+            var buckets = collectBuckets();
+            var breakpoints = config.breakpoints || { tablet: 1024, mobile: 767 };
+            var css = config.baseCss + '\n' + buckets.desktop.join('\n');
+            if (buckets.tablet.length) {
+                css += '\n@media (max-width: ' + breakpoints.tablet + 'px) {\n' + buckets.tablet.join('\n') + '\n}';
+            }
+            if (buckets.mobile.length) {
+                css += '\n@media (max-width: ' + breakpoints.mobile + 'px) {\n' + buckets.mobile.join('\n') + '\n}';
+            }
+            return css.trim();
+        }
+
+        /** 画布预览用：真实层叠是小屏继承大屏，预览按「大屏在前、当前断点覆盖」套用。 */
+        function buildCss() {
+            if (!tree) return '';
+            var buckets = collectBuckets();
+            var lines = breakpoint === 'desktop'
+                ? buckets.desktop
+                : buckets.desktop.concat(buckets[breakpoint]);
+            return config.baseCss + '\n' + lines.join('\n');
+        }
+
+        // ================= 画布刷新与选中 =================
+
+        function refreshCanvas() {
+            canvas.innerHTML = renderTree(true);
+            if (canvasStyle) canvasStyle.textContent = buildCss();
+            updateStatus();
+        }
+
+        function updateStatus() {
+            if (!tree) {
+                statusEl.textContent = '';
+                return;
+            }
+            var widgets = 0;
+            tree.sections.forEach(function (section) {
+                (section.columns || []).forEach(function (column) { widgets += (column.widgets || []).length; });
+            });
+            statusEl.textContent = tree.sections.length + ' 个区块 · ' + widgets + ' 个控件' + (dirty ? ' · 未保存' : '');
+        }
+
+        function select(pathString) {
+            selection = null;
+            canvas.querySelectorAll('[data-ve-selected]').forEach(function (node) {
+                node.removeAttribute('data-ve-selected');
+            });
+            if (!pathString) {
+                renderInspector();
+                return;
+            }
+            var parts = pathString.split('.').map(Number);
+            var kind = parts.length === 1 ? 'section' : parts.length === 2 ? 'column' : 'widget';
+            selection = { kind: kind, si: parts[0], ci: parts[1], wi: parts[2] };
+            var selector = '[data-ve-path="' + pathString + '"]';
+            var target = canvas.querySelector(selector);
+            if (target) target.setAttribute('data-ve-selected', '1');
+            renderInspector();
+        }
+
+        canvas.addEventListener('click', function (event) {
+            var handle = event.target.closest('[data-ve]');
+            if (!handle) return;
+            var path = handle.getAttribute('data-ve-path');
+            if (!path) return;
+            event.preventDefault();
+            select(path === (selection && pathOf(selection)) ? '' : path);
+        });
+
+        function pathOf(sel) {
+            if (sel.kind === 'section') return String(sel.si);
+            if (sel.kind === 'column') return sel.si + '.' + sel.ci;
+            return sel.si + '.' + sel.ci + '.' + sel.wi;
+        }
+
+        // ================= 检查器 =================
+
+        function fieldSpec(specString) {
+            var parts = String(specString).split(':');
+            var constraints = (parts[1] || '').split(',');
+            return { type: parts[0], a: constraints[0] || '', b: constraints[1] || '' };
+        }
+
+        var currentBreakpointTabs = null;
+
+        function renderInspector() {
+            inspectorBody.innerHTML = '';
+            currentBreakpointTabs = null;
+            var node = findNode(selection);
+            if (!node) {
+                inspector.hidden = true;
+                return;
+            }
+            inspector.hidden = false;
+            inspectorTarget.textContent = ({
+                section: '区块 #' + (selection.si + 1),
+                column: '区块 #' + (selection.si + 1) + ' · 栏 #' + (selection.ci + 1),
+                widget: '区块 #' + (selection.si + 1) + ' · 控件：' + (WIDGET_LABELS[node.type] || node.type),
+            })[selection.kind];
+
+            if (selection.kind === 'section') {
+                addGroup('区块布局');
+                addSelectField('layout', '版式', [{ v: 'boxed', t: '定宽（受内容区宽度约束）' }, { v: 'full', t: '通栏' }], node.layout === 'full' ? 'full' : 'boxed', function (value) {
+                    node.layout = value; markDirty();
+                });
+            }
+            if (selection.kind === 'column') {
+                addGroup('栏宽（%）');
+                ['desktop', 'tablet', 'mobile'].forEach(function (bp) {
+                    addNumberField('width.' + bp, ({ desktop: '桌面', tablet: '平板', mobile: '手机' })[bp], (node.width || {})[bp], 5, 100, function (value) {
+                        node.width = node.width || {}; node.width[bp] = Math.max(5, Math.min(100, value)); markDirty();
+                    });
+                });
+            }
+            if (selection.kind === 'widget') {
+                renderContentFields(node);
+            }
+            renderStyleEditor(node);
+        }
+
+        function renderContentFields(node) {
+            var definition = config.widgets[node.type];
+            if (!definition) return;
+            addGroup('内容 — ' + definition.label);
+            var grid = el('div', 've-field-grid');
+            Object.keys(definition.fields).forEach(function (fieldName) {
+                var spec = fieldSpec(definition.fields[fieldName]);
+                if (spec.type === 'html_block' && !config.canUseCodeWidget) return;
+                grid.appendChild(buildContentField(node, fieldName, spec));
+            });
+            inspectorBody.appendChild(grid);
+        }
+
+        function buildContentField(node, fieldName, spec) {
+            var wrapEl = el('div', 've-field' + (spec.type === 'lines' || spec.type === 'rich' || spec.type === 'html_block' ? ' ve-field-wide' : ''));
+            var label = el('label', null, config.fieldLabels[fieldName] || fieldName);
+            wrapEl.appendChild(label);
+            var value = (node.content || {})[fieldName];
+
+            var commit = function () {};
+
+            if (spec.type === 'enum') {
+                var options = spec.a.split(',').filter(Boolean);
+                var select = el('select');
+                options.forEach(function (option) {
+                    var opt = el('option', null, option); opt.value = option;
+                    if (option === value) opt.selected = true;
+                    select.appendChild(opt);
+                });
+                commit = function () { node.content[fieldName] = select.value; };
+                wrapEl.appendChild(select);
+            } else if (spec.type === 'number') {
+                var input = el('input');
+                input.type = 'number';
+                if (spec.a) input.min = spec.a;
+                if (spec.b) input.max = spec.b;
+                input.value = value == null ? '' : value;
+                commit = function () { var n = parseInt(input.value, 10); if (!isNaN(n)) node.content[fieldName] = n; };
+                wrapEl.appendChild(input);
+            } else if (spec.type === 'color') {
+                var colorInput = el('input');
+                colorInput.type = 'text';
+                colorInput.placeholder = '#2563eb 或留空';
+                colorInput.value = value == null ? '' : value;
+                commit = function () { node.content[fieldName] = colorInput.value.trim(); };
+                wrapEl.appendChild(colorInput);
+            } else if (spec.type === 'lines') {
+                var area = el('textarea');
+                area.rows = 5;
+                area.value = value == null ? '' : value;
+                commit = function () { node.content[fieldName] = area.value.split('\n').map(function (l) { return l.trim(); }).filter(Boolean).join('\n'); };
+                wrapEl.appendChild(area);
+            } else if (spec.type === 'rich' || spec.type === 'html_block') {
+                var source = el('textarea');
+                source.rows = spec.type === 'rich' ? 5 : 8;
+                source.className = 'font-monospace';
+                source.value = value == null ? '' : value;
+                commit = function () { node.content[fieldName] = source.value; };
+                wrapEl.appendChild(source);
+            } else {
+                var textInput = el('input');
+                textInput.type = 'text';
+                if (spec.a && /^\d+$/.test(spec.a)) textInput.maxLength = parseInt(spec.a, 10);
+                textInput.value = value == null ? '' : value;
+                commit = function () { node.content[fieldName] = textInput.value.trim(); };
+                wrapEl.appendChild(textInput);
+
+                if ((fieldName === 'src' || fieldName === 'background_image')) {
+                    var pick = el('button', 'btn btn-sm btn-outline-secondary mt-1', '选择媒体');
+                    pick.type = 'button';
+                    pick.addEventListener('click', function () {
+                        if (window.MediaPicker) {
+                            MediaPicker.open({ type: 'image', onSelect: function (file) { textInput.value = file.url; commit(); markDirty(); } });
+                        } else {
+                            window.alert('MediaPicker 未加载');
+                        }
+                    });
+                    wrapEl.appendChild(pick);
+                }
+            }
+
+            wrapEl.addEventListener('change', function () { commit(); markDirty(); });
+            return wrapEl;
+        }
+
+        function renderStyleEditor(node) {
+            var groups = {};
+            Object.keys(config.styleLabels).forEach(function (property) {
+                var group = config.styleLabels[property].group;
+                (groups[group] = groups[group] || []).push(property);
+            });
+
+            addGroup('样式');
+            var tabsRow = el('div', 'd-flex align-items-center gap-2 mb-2');
+            var tabs = el('div', 've-breakpoint-tabs');
+            [['desktop', '桌面'], ['tablet', '平板'], ['mobile', '手机']].forEach(function (pair) {
+                var tabButton = el('button', null, pair[1]);
+                tabButton.type = 'button';
+                tabButton.setAttribute('data-bp', pair[0]);
+                if (pair[0] === breakpoint) tabButton.setAttribute('data-ve-active', '1');
+                tabButton.addEventListener('click', function () {
+                    breakpoint = pair[0];
+                    tabs.querySelectorAll('button').forEach(function (b) {
+                        b.getAttribute('data-bp') === breakpoint ? b.setAttribute('data-ve-active', '1') : b.removeAttribute('data-ve-active');
+                    });
+                    renderInspector();
+                });
+                tabs.appendChild(tabButton);
+            });
+            tabsRow.appendChild(tabs);
+            inspectorBody.appendChild(tabsRow);
+            currentBreakpointTabs = tabs;
+
+            Object.keys(groups).forEach(function (group) {
+                addGroup(group);
+                var grid = el('div', 've-field-grid');
+                groups[group].forEach(function (property) {
+                    grid.appendChild(buildStyleField(node, property));
+                });
+                inspectorBody.appendChild(grid);
             });
         }
-        state.tree.sections = state.tree.sections || [];
-        state.tree.sections.push(section);
-        state.selection = section.columns[0].id;
-        commit('已加入 ' + count + ' 栏区块');
-    }
 
-    function moveSelection(direction) {
-        var located = selectedNode();
-        if (!located) return;
-        var index = located.kind === 'section' ? located.section
-            : (located.kind === 'column' ? located.column : located.widget);
-        var target = index + (direction === 'up' ? -1 : 1);
-        if (target < 0 || target >= located.siblings.length) {
-            say('已经在边界，无法再移动');
-            return;
+        function buildStyleField(node, property) {
+            var meta = config.styleLabels[property];
+            var wrapEl = el('div', 've-field');
+            wrapEl.appendChild(el('label', null, meta.label));
+            var input = el('input');
+            input.type = 'text';
+            var values = (node.style || {})[breakpoint] || {};
+            input.value = values[property] == null ? '' : values[property];
+            input.placeholder = property === 'shadow' ? 'none/sm/md/lg' : '';
+            input.addEventListener('change', function () {
+                node.style = node.style || emptyStyle();
+                node.style[breakpoint] = node.style[breakpoint] || {};
+                var validated = validateStyleValue(property, input.value);
+                if (validated === null) {
+                    delete node.style[breakpoint][property];
+                    if (input.value.trim() !== '') setStatusText('已忽略不合法的值：' + meta.label);
+                } else {
+                    node.style[breakpoint][property] = validated;
+                }
+                markDirty();
+            });
+            wrapEl.appendChild(input);
+            return wrapEl;
         }
-        pushHistory();
-        var moved = located.siblings.splice(index, 1)[0];
-        located.siblings.splice(target, 0, moved);
-        commit('已移动');
-    }
 
-    function duplicateSelection() {
-        var located = selectedNode();
-        if (!located || located.kind === 'column') return;
-        pushHistory();
-        var copy = clone(located.node);
-        reassignIds(copy);
-        if (located.kind === 'section') {
-            state.tree.sections.splice(located.section + 1, 0, copy);
-        } else {
-            located.siblings.splice(located.widget + 1, 0, copy);
+        function addGroup(title) {
+            inspectorBody.appendChild(el('div', 've-group-title', title));
         }
-        state.selection = copy.id;
-        commit('已复制');
-    }
 
-    /** 复制出来的子树必须换一套 id：id 是样式落点，重复 id 会让两份共享同一条 CSS。 */
-    function reassignIds(node) {
-        node.id = newId();
-        (node.columns || []).forEach(reassignIds);
-        (node.widgets || []).forEach(reassignIds);
-    }
-
-    function removeSelection() {
-        var located = selectedNode();
-        if (!located) return;
-        if (located.kind === 'section' && (state.tree.sections || []).length <= 1) {
-            say('文档至少要保留一个区块', 'error');
-            return;
+        function addSelectField(key, label, options, value, onChange) {
+            var wrapEl = el('div', 've-field');
+            wrapEl.appendChild(el('label', null, label));
+            var select = el('select');
+            options.forEach(function (option) {
+                var opt = el('option', null, option.t);
+                opt.value = option.v;
+                if (option.v === value) opt.selected = true;
+                select.appendChild(opt);
+            });
+            select.addEventListener('change', function () { onChange(select.value); });
+            wrapEl.appendChild(select);
+            inspectorBody.appendChild(wrapEl);
         }
-        if (located.kind === 'column' && (state.tree.sections[located.section].columns || []).length <= 1) {
-            say('区块至少要保留一栏（要整块删请选中区块）', 'error');
-            return;
+
+        function addNumberField(key, label, value, min, max, onChange) {
+            var wrapEl = el('div', 've-field');
+            wrapEl.appendChild(el('label', null, label));
+            var input = el('input');
+            input.type = 'number'; input.min = min; input.max = max;
+            input.value = value == null ? max : value;
+            input.addEventListener('change', function () {
+                var n = parseInt(input.value, 10);
+                if (!isNaN(n)) onChange(n);
+            });
+            wrapEl.appendChild(input);
+            inspectorBody.appendChild(wrapEl);
         }
-        if (!window.confirm('删除后可以用撤销恢复，确定删除？')) return;
-        pushHistory();
-        var index = located.kind === 'section' ? located.section
-            : (located.kind === 'column' ? located.column : located.widget);
-        located.siblings.splice(index, 1);
-        state.selection = '';
-        commit('已删除');
-    }
 
-    // ============================================================
-    // 保存 / 发布 / 回滚
-    // ============================================================
+        function setStatusText(text) {
+            statusEl.textContent = text;
+            window.clearTimeout(setStatusText._t);
+            setStatusText._t = window.setTimeout(updateStatus, 2500);
+        }
 
-    function save() {
-        if (state.pending) return;
-        state.pending = true;
-        say('保存中…');
-        post(CONFIG.urls.save, {
-            tree: JSON.stringify(state.tree),
-            lock_version: state.lockVersion,
-            note: '编辑器保存'
-        }).then(function (payload) {
-            state.pending = false;
-            if (!payload.ok) {
-                say(payload.message || '保存失败', 'error');
-                return;
+        function markDirty() {
+            dirty = true;
+            refreshCanvas();
+            renderInspectorKeepScroll();
+        }
+
+        function renderInspectorKeepScroll() {
+            var scrollTop = inspectorBody.scrollTop;
+            renderInspector();
+            inspectorBody.scrollTop = scrollTop;
+        }
+
+        // ================= 结构操作 =================
+
+        panel.querySelector('[data-ve-palette]').addEventListener('click', function (event) {
+            var addButton = event.target.closest('[data-ve-add]');
+            var sectionButton = event.target.closest('[data-ve-add-section]');
+            if (addButton) {
+                ensureTree();
+                var targetColumn = selectedOrFirstColumn();
+                targetColumn.widgets.push(normalizeWidget(addButton.getAttribute('data-ve-add'), {}));
+                markDirty();
+            } else if (sectionButton) {
+                ensureTree();
+                tree.sections.push({
+                    id: newId(), layout: 'boxed', style: emptyStyle(),
+                    columns: [{ id: newId(), width: { desktop: 100, tablet: 100, mobile: 100 }, style: emptyStyle(), widgets: [] }],
+                });
+                markDirty();
             }
-            state.lockVersion = payload.lock_version;
-            state.tree = payload.tree;
-            state.dirty = false;
-            if (dom.lock) dom.lock.textContent = String(payload.lock_version);
-            if (dom.canvas) dom.canvas.innerHTML = payload.html;
-            if (dom.style) dom.style.textContent = payload.css;
-            paintSelection();
-            buildOutline();
-            buildInspector();
-            var warnings = (payload.warnings || []).join('；');
-            say(warnings !== '' ? '已保存，但有调整：' + warnings : '已保存', warnings !== '' ? 'error' : 'ok');
-        }).catch(function (error) {
-            state.pending = false;
-            say('保存请求失败：' + error.message, 'error');
         });
-    }
 
-    function saveMeta() {
-        var fields = { lock_version: state.lockVersion };
-        Array.prototype.forEach.call(root.querySelectorAll('[data-ve-meta]'), function (input) {
-            fields[input.getAttribute('data-ve-meta')] = input.value;
-        });
-        post(CONFIG.urls.meta, fields).then(function (payload) {
-            if (!payload.ok) {
-                say(payload.message || '保存页面设置失败', 'error');
-                return;
-            }
-            state.lockVersion = payload.lock_version;
-            if (dom.lock) dom.lock.textContent = String(payload.lock_version);
-            var link = root.querySelector('[data-ve-public-url]');
-            if (link) {
-                link.textContent = payload.public_url;
-                link.setAttribute('href', payload.public_url);
-            }
-            var slugInput = root.querySelector('[data-ve-meta="slug"]');
-            if (slugInput) slugInput.value = payload.slug;
-            say('已保存页面设置', 'ok');
-        });
-    }
+        function ensureTree() {
+            if (!tree) tree = blankTree();
+        }
 
-    function toggleStatus(button) {
-        var next = button.getAttribute('data-ve-current') === 'published' ? 'draft' : 'published';
-        if (state.dirty && !window.confirm('还有未保存的改动，发布/撤回只改状态，不会保存内容。继续？')) return;
-        post(CONFIG.urls.status, { status: next, lock_version: state.lockVersion }).then(function (payload) {
-            if (!payload.ok) {
-                say(payload.message || '操作失败', 'error');
-                return;
+        function selectedOrFirstColumn() {
+            if (selection) {
+                if (selection.kind === 'column') return tree.sections[selection.si].columns[selection.ci];
+                if (selection.kind === 'widget') return tree.sections[selection.si].columns[selection.ci];
+                if (selection.kind === 'section' && (tree.sections[selection.si].columns || []).length) {
+                    return tree.sections[selection.si].columns[0];
+                }
             }
-            state.lockVersion = payload.lock_version;
-            if (dom.lock) dom.lock.textContent = String(payload.lock_version);
-            button.setAttribute('data-ve-current', payload.status);
-            button.textContent = payload.status === 'published' ? '撤回' : '发布';
-            if (dom.statusBadge) {
-                dom.statusBadge.textContent = payload.status === 'published' ? '已发布' : '草稿';
-                dom.statusBadge.className = 'badge ' + (payload.status === 'published'
-                    ? 'bg-success-subtle text-success-emphasis'
-                    : 'bg-secondary-subtle text-secondary-emphasis');
-            }
-            say(payload.message, 'ok');
-        });
-    }
+            return tree.sections[0].columns[0];
+        }
 
-    function rollback(revisionId) {
-        if (!window.confirm('回滚会把内容换成该修订的版本（当前内容会先存成一条新修订）。继续？')) return;
-        post(CONFIG.urls.rollback, { revision: revisionId, lock_version: state.lockVersion })
-            .then(function (payload) {
-                if (!payload.ok) {
-                    say(payload.message || '回滚失败', 'error');
+        panel.querySelectorAll('[data-ve-action]').forEach(function (button) {
+            button.addEventListener('click', function () {
+                var action = button.getAttribute('data-ve-action');
+                if (action === 'import') return importCurrent();
+                if (action === 'new-doc') {
+                    if (tree && dirty && !window.confirm('当前可视化内容尚未保存，确定丢弃？')) return;
+                    tree = blankTree();
+                    dirty = true;
+                    selection = null;
+                    refreshCanvas();
+                    renderInspector();
                     return;
                 }
-                state.lockVersion = payload.lock_version;
-                state.tree = payload.tree;
-                state.dirty = false;
-                state.selection = '';
-                if (dom.lock) dom.lock.textContent = String(payload.lock_version);
-                if (dom.canvas) dom.canvas.innerHTML = payload.html;
-                if (dom.style) dom.style.textContent = payload.css;
-                buildOutline();
-                buildInspector();
-                say('已回滚', 'ok');
+                applyStructureAction(action);
             });
-    }
-
-    // ============================================================
-    // 拖拽：从控件库拖到栏里
-    // ============================================================
-
-    root.addEventListener('dragstart', function (event) {
-        var card = event.target.closest('[data-ve-add-widget]');
-        if (!card) return;
-        event.dataTransfer.setData('text/plain', card.getAttribute('data-ve-add-widget'));
-        event.dataTransfer.effectAllowed = 'copy';
-    });
-
-    if (dom.canvas) {
-        dom.canvas.addEventListener('dragover', function (event) {
-            var column = event.target.closest('[data-ve-kind="column"]');
-            if (!column) return;
-            event.preventDefault();
-            event.dataTransfer.dropEffect = 'copy';
-            highlightDropTarget(column);
         });
 
-        dom.canvas.addEventListener('dragleave', function (event) {
-            if (event.target.closest('[data-ve-kind="column"]')) highlightDropTarget(null);
-        });
+        function applyStructureAction(action) {
+            if (!tree || !selection) return;
+            var section = tree.sections[selection.si];
+            if (!section) return;
 
-        dom.canvas.addEventListener('drop', function (event) {
-            var column = event.target.closest('[data-ve-kind="column"]');
-            if (!column) return;
-            event.preventDefault();
-            highlightDropTarget(null);
-            var type = event.dataTransfer.getData('text/plain');
-            if (!type || !CONFIG.widgets[type]) return;
-            var located = locate(column.getAttribute('data-ve'));
-            addWidget(type, located ? located.node : null, -1);
-        });
-    }
-
-    function highlightDropTarget(node) {
-        Array.prototype.forEach.call(root.querySelectorAll('.ve-drop-target'), function (previous) {
-            previous.classList.remove('ve-drop-target');
-        });
-        if (node) node.classList.add('ve-drop-target');
-    }
-
-    // ============================================================
-    // 工具栏与快捷键
-    // ============================================================
-
-    root.addEventListener('click', function (event) {
-        var target = event.target;
-
-        var widgetButton = target.closest('[data-ve-add-widget]');
-        if (widgetButton) { addWidget(widgetButton.getAttribute('data-ve-add-widget')); return; }
-
-        var sectionButton = target.closest('[data-ve-add-section]');
-        if (sectionButton) { addSection(parseInt(sectionButton.getAttribute('data-ve-add-section'), 10)); return; }
-
-        var moveButton = target.closest('[data-ve-move]');
-        if (moveButton) { moveSelection(moveButton.getAttribute('data-ve-move')); return; }
-
-        if (target.closest('[data-ve-duplicate]')) { duplicateSelection(); return; }
-        if (target.closest('[data-ve-remove]')) { removeSelection(); return; }
-        if (target.closest('[data-ve-undo]')) { undo(); return; }
-        if (target.closest('[data-ve-redo]')) { redo(); return; }
-        if (target.closest('[data-ve-save]')) { save(); return; }
-        if (target.closest('[data-ve-save-meta]')) { saveMeta(); return; }
-
-        var statusButton = target.closest('[data-ve-toggle-status]');
-        if (statusButton) { toggleStatus(statusButton); return; }
-
-        var rollbackButton = target.closest('[data-ve-rollback]');
-        if (rollbackButton) { rollback(parseInt(rollbackButton.getAttribute('data-ve-rollback'), 10)); return; }
-
-        var clearStyle = target.closest('[data-ve-clear-style]');
-        if (clearStyle) {
-            var located = selectedNode();
-            if (!located) return;
-            pushHistory();
-            located.node.style = located.node.style || emptyStyle();
-            located.node.style[state.breakpoint] = {};
-            commit('已清空 ' + BREAKPOINT_LABELS[state.breakpoint] + ' 断点样式');
-            return;
-        }
-
-        var mediaButton = target.closest('[data-ve-pick-media]');
-        if (mediaButton) { pickMedia(mediaButton); return; }
-
-        var breakpointButton = target.closest('[data-ve-breakpoint]');
-        if (breakpointButton) { switchBreakpoint(breakpointButton); return; }
-
-        var leftTab = target.closest('[data-ve-left-tab]');
-        if (leftTab) { switchTab(leftTab, 'data-ve-left-tab', 'data-ve-left-panel'); return; }
-
-        var rightTab = target.closest('[data-ve-right-tab]');
-        if (rightTab) { switchTab(rightTab, 'data-ve-right-tab', 'data-ve-right-panel'); }
-    });
-
-    function switchBreakpoint(button) {
-        state.breakpoint = button.getAttribute('data-ve-breakpoint');
-        Array.prototype.forEach.call(root.querySelectorAll('[data-ve-breakpoint]'), function (other) {
-            other.classList.toggle('active', other === button);
-        });
-        if (dom.frame) dom.frame.setAttribute('data-ve-width', state.breakpoint);
-        // 换断点等于换一套值，内容面板里的「本栏宽度」也是按断点存的，两边都要重建。
-        buildInspector();
-    }
-
-    function switchTab(button, tabAttribute, panelAttribute) {
-        var key = button.getAttribute(tabAttribute);
-        Array.prototype.forEach.call(root.querySelectorAll('[' + tabAttribute + ']'), function (other) {
-            other.classList.toggle('active', other === button);
-        });
-        Array.prototype.forEach.call(root.querySelectorAll('[' + panelAttribute + ']'), function (panel) {
-            panel.classList.toggle('d-none', panel.getAttribute(panelAttribute) !== key);
-        });
-    }
-
-    /** 复用后台媒体选择器；它没加载时退回手填路径，不把功能堵死。 */
-    function pickMedia(button) {
-        var input = button.parentElement.querySelector('[data-ve-style],[data-ve-content]');
-        if (!input) return;
-        if (window.MediaPicker && typeof window.MediaPicker.open === 'function') {
-            window.MediaPicker.open({
-                type: 'image',
-                onSelect: function (file) {
-                    input.value = (file && (file.url || file.path)) || '';
-                    input.dispatchEvent(new Event('input', { bubbles: true }));
+            if (selection.kind === 'section') {
+                if (action === 'move-up' && selection.si > 0) {
+                    tree.sections.splice(selection.si - 1, 0, tree.sections.splice(selection.si, 1)[0]);
+                    selection.si -= 1;
+                } else if (action === 'move-down' && selection.si < tree.sections.length - 1) {
+                    tree.sections.splice(selection.si + 1, 0, tree.sections.splice(selection.si, 1)[0]);
+                    selection.si += 1;
+                } else if (action === 'duplicate') {
+                    var clone = JSON.parse(JSON.stringify(section));
+                    reidentify(clone);
+                    tree.sections.splice(selection.si + 1, 0, clone);
+                } else if (action === 'remove') {
+                    tree.sections.splice(selection.si, 1);
+                    selection = null;
                 }
-            });
-            return;
+            } else {
+                var column = (section.columns || [])[selection.ci];
+                if (!column) return;
+                if (selection.kind === 'column') {
+                    if (action === 'move-up' && selection.ci > 0) {
+                        section.columns.splice(selection.ci - 1, 0, section.columns.splice(selection.ci, 1)[0]);
+                        selection.ci -= 1;
+                    } else if (action === 'move-down' && selection.ci < section.columns.length - 1) {
+                        section.columns.splice(selection.ci + 1, 0, section.columns.splice(selection.ci, 1)[0]);
+                        selection.ci += 1;
+                    } else if (action === 'remove' && section.columns.length > 1) {
+                        section.columns.splice(selection.ci, 1);
+                        selection = null;
+                    }
+                } else {
+                    var widget = (column.widgets || [])[selection.wi];
+                    if (!widget) return;
+                    if (action === 'move-up' && selection.wi > 0) {
+                        column.widgets.splice(selection.wi - 1, 0, column.widgets.splice(selection.wi, 1)[0]);
+                        selection.wi -= 1;
+                    } else if (action === 'move-down' && selection.wi < column.widgets.length - 1) {
+                        column.widgets.splice(selection.wi + 1, 0, column.widgets.splice(selection.wi, 1)[0]);
+                        selection.wi += 1;
+                    } else if (action === 'duplicate') {
+                        var widgetClone = JSON.parse(JSON.stringify(widget));
+                        widgetClone.id = newId();
+                        column.widgets.splice(selection.wi + 1, 0, widgetClone);
+                    } else if (action === 'remove') {
+                        column.widgets.splice(selection.wi, 1);
+                        selection = null;
+                    }
+                }
+            }
+            dirty = true;
+            refreshCanvas();
+            renderInspector();
         }
-        say('媒体选择器未加载，请直接填写图片路径');
-        input.focus();
+
+        function reidentify(node) {
+            node.id = newId();
+            (node.columns || []).forEach(function (column) {
+                column.id = newId();
+                (column.widgets || []).forEach(function (widget) { widget.id = newId(); });
+            });
+        }
+
+        // ================= 导入 =================
+
+        function importCurrent() {
+            if (tree && dirty && !window.confirm('重新导入会以当前保存的内容替换正在编辑的可视化文档，继续？')) return;
+            var body = new FormData();
+            body.append('csrf_token', config.csrfToken);
+            body.append('source_type', config.sourceType);
+            body.append('source_id', String(config.sourceId));
+            setStatusText('正在导入…');
+            window.fetch(config.convertUrl, { method: 'POST', credentials: 'same-origin', body: body })
+                .then(function (response) { return response.json(); })
+                .then(function (payload) {
+                    if (!payload.ok) throw new Error(payload.message || '导入失败');
+                    tree = payload.data.tree;
+                    dirty = false;
+                    selection = null;
+                    refreshCanvas();
+                    renderInspector();
+                    setStatusText(payload.message);
+                    if (importLabel) importLabel.textContent = '重新导入';
+                })
+                .catch(function (error) { setStatusText(error.message || '导入失败'); });
+        }
+
+        if (tree) {
+            refreshCanvas();
+            if (importLabel) importLabel.textContent = '重新导入';
+        } else {
+            canvas.innerHTML = '<div class="ve-empty-hint">点「导入当前内容」把它变成可视化文档，或新建空白文档。</div>';
+        }
+        updateStatus();
+
+        // ================= 提交：写回核心字段 =================
+
+        function compileBlock() {
+            var rendered = renderTree(false);
+            var css = compileAllCss();
+            // JSON 只需防 </script> 提前闭合：<\/ 是合法 JSON 转义，解析结果不变。
+            var json = JSON.stringify(tree).replace(/<\//g, '<\\/');
+            return '<!-- ve:managed -->\n'
+                + rendered.replace(/\s+$/, '') + '\n'
+                + (css ? '<style data-ve-css>' + css + '</style>\n' : '')
+                + '<script type="application/json" data-ve-tree="' + esc(config.sourceKey) + '">' + json + '</scr' + 'ipt>\n'
+                + '<!-- /ve:managed -->';
+        }
+
+        var form = panel.closest('form');
+        if (form) {
+            form.addEventListener('submit', function () {
+                if (window.ContentEditorModes.current() !== config.modeKey) return;
+                if (!tree) return;
+                var targets = form.querySelectorAll('[name="' + config.fieldName.replace(/"/g, '\\"') + '"]');
+                if (!targets.length) return;
+                targets[targets.length - 1].value = compileBlock();
+            });
+        }
     }
 
-    document.addEventListener('keydown', function (event) {
-        var meta = event.ctrlKey || event.metaKey;
-        if (meta && event.key.toLowerCase() === 's') {
-            event.preventDefault();
-            save();
-            return;
-        }
-        if (meta && event.key.toLowerCase() === 'z') {
-            event.preventDefault();
-            if (event.shiftKey) redo(); else undo();
-        }
-    });
-
-    window.addEventListener('beforeunload', function (event) {
-        if (!state.dirty) return undefined;
-        event.preventDefault();
-        event.returnValue = '';
-        return '';
-    });
-
-    // ============================================================
-    // 启动
-    // ============================================================
-
-    buildOutline();
-    buildInspector();
-    refreshHistoryButtons();
-    say('就绪');
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', boot);
+    } else {
+        boot();
+    }
 })();

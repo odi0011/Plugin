@@ -13,9 +13,9 @@ if (!defined('CODE_SCHEMA_VERSION')) exit;
 
 final class VisualEditorRenderer
 {
-    public static function render(int $documentId, array $tree, bool $editing = false): string
+    public static function render(string $sourceKey, array $tree, bool $editing = false): string
     {
-        $out = '<div class="ve-doc ' . e(VisualEditorStyleCompiler::rootClass($documentId)) . '"'
+        $out = '<div class="ve-doc ' . e(VisualEditorStyleCompiler::rootClass($sourceKey)) . '"'
             . ($editing ? ' data-ve-kind="document"' : '') . '>';
         foreach (($tree['sections'] ?? []) as $section) {
             $out .= self::section($section, $editing);

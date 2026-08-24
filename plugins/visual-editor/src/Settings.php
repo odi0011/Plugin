@@ -12,19 +12,6 @@ final class VisualEditorSettings
 {
     public const SLUG = 'visual-editor';
 
-    /** 前台路径前缀，已去掉首尾斜杠。空串表示挂在站点根下。 */
-    public static function urlPrefix(): string
-    {
-        $prefix = strtolower(trim((string)\get_plugin_setting(self::SLUG, 'url_prefix', '')));
-        $prefix = trim($prefix, '/');
-        return preg_match('/^[a-z0-9][a-z0-9-]{0,38}[a-z0-9]?$/', $prefix) === 1 ? $prefix : '';
-    }
-
-    public static function revisionLimit(): int
-    {
-        return self::intSetting('revision_limit', 20, 3, 100);
-    }
-
     public static function containerMax(): int
     {
         return self::intSetting('container_max', 1200, 600, 2400);
