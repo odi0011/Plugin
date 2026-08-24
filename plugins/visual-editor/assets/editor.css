@@ -1,0 +1,275 @@
+/*
+ * 可视化编辑器：后台界面样式。
+ *
+ * 颜色全部走后台主题变量（--ui-*），因此浅色/深色主题都成立；
+ * 画布内部的样式由 frontend.css 与服务端编译的作用域 CSS 负责，
+ * 这里只加编辑态的辅助装饰（悬停轮廓、选中高亮、元素标签）。
+ */
+
+.ve-editor {
+    display: flex;
+    flex-direction: column;
+    background: var(--ui-surface-subtle, #f4f4f5);
+    border: 1px solid var(--ui-border, #e4e4e7);
+    border-radius: 8px;
+    overflow: hidden;
+    /* 后台内容区已有内外边距，这里按视口高度撑开，避免出现双层滚动条 */
+    height: calc(100vh - 190px);
+    min-height: 520px;
+}
+
+.ve-toolbar,
+.ve-statusbar {
+    align-items: center;
+    background: var(--ui-surface, #fff);
+    border-bottom: 1px solid var(--ui-border, #e4e4e7);
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+    padding: .5rem .75rem;
+}
+
+.ve-statusbar {
+    border-bottom: 0;
+    border-top: 1px solid var(--ui-border, #e4e4e7);
+    padding: .35rem .75rem;
+}
+
+.ve-toolbar-title {
+    font-weight: 600;
+    max-width: 22ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ve-toolbar-spacer { flex: 1 1 auto; }
+
+.ve-editor-body {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.ve-side-pane {
+    background: var(--ui-surface, #fff);
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 280px;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.ve-side-left { border-right: 1px solid var(--ui-border, #e4e4e7); }
+.ve-side-right { border-left: 1px solid var(--ui-border, #e4e4e7); flex-basis: 320px; }
+
+.ve-pane-tabs {
+    border-bottom: 1px solid var(--ui-border, #e4e4e7);
+    display: flex;
+    flex: 0 0 auto;
+}
+
+.ve-pane-tab {
+    background: transparent;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    color: var(--ui-text-muted, #71717a);
+    cursor: pointer;
+    flex: 1 1 auto;
+    font-size: .875rem;
+    padding: .5rem .25rem;
+}
+
+.ve-pane-tab.active {
+    border-bottom-color: var(--ui-primary, #2563eb);
+    color: var(--ui-primary-text, #2563eb);
+    font-weight: 600;
+}
+
+.ve-pane-body {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    padding: .75rem;
+}
+
+.ve-hint {
+    color: var(--ui-text-muted, #71717a);
+    font-size: .8125rem;
+    line-height: 1.5;
+}
+
+.ve-stack { display: flex; flex-direction: column; gap: .375rem; }
+
+.ve-widget-grid {
+    display: grid;
+    gap: .5rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ve-widget-card {
+    align-items: center;
+    background: var(--ui-surface-raised, #fff);
+    border: 1px solid var(--ui-border, #e4e4e7);
+    border-radius: 6px;
+    color: inherit;
+    cursor: grab;
+    display: flex;
+    flex-direction: column;
+    font-size: .75rem;
+    gap: .25rem;
+    padding: .625rem .25rem;
+    text-align: center;
+}
+
+.ve-widget-card:hover {
+    border-color: var(--ui-primary, #2563eb);
+    color: var(--ui-primary-text, #2563eb);
+}
+
+.ve-widget-card i { font-size: 1.125rem; }
+
+.ve-canvas-pane {
+    background: var(--ui-surface-subtle, #f4f4f5);
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: auto;
+    padding: 1rem;
+}
+
+.ve-canvas-frame {
+    background: #fff;
+    border-radius: 6px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, .08);
+    margin: 0 auto;
+    max-width: 100%;
+    min-height: 100%;
+    transition: max-width .2s ease;
+}
+
+.ve-canvas-frame[data-ve-width="tablet"] { max-width: 820px; }
+.ve-canvas-frame[data-ve-width="mobile"] { max-width: 420px; }
+
+/* ---- 编辑态装饰 ---- */
+
+.ve-editor [data-ve-kind] {
+    outline: 1px dashed transparent;
+    outline-offset: -1px;
+}
+
+.ve-editor [data-ve-kind="section"] { min-height: 48px; }
+.ve-editor [data-ve-kind="column"] { min-height: 40px; }
+
+.ve-editor [data-ve-kind]:hover {
+    outline-color: rgba(37, 99, 235, .35);
+}
+
+.ve-editor [data-ve-kind].ve-selected {
+    outline: 2px solid var(--ui-primary, #2563eb);
+    outline-offset: -2px;
+}
+
+.ve-editor [data-ve-kind].ve-drop-target {
+    background-image: linear-gradient(rgba(37, 99, 235, .08), rgba(37, 99, 235, .08));
+    outline: 2px dashed var(--ui-primary, #2563eb);
+    outline-offset: -2px;
+}
+
+.ve-handle {
+    background: var(--ui-primary, #2563eb);
+    border-radius: 3px;
+    color: #fff;
+    display: none;
+    font-size: 10px;
+    left: 0;
+    line-height: 1.4;
+    padding: 1px 5px;
+    position: absolute;
+    top: 0;
+    white-space: nowrap;
+    z-index: 3;
+}
+
+.ve-editor [data-ve-kind]:hover > .ve-handle,
+.ve-editor [data-ve-kind].ve-selected > .ve-handle { display: block; }
+
+.ve-column-empty {
+    border: 1px dashed var(--ui-border, #d4d4d8);
+    border-radius: 4px;
+    color: var(--ui-text-muted, #a1a1aa);
+    font-size: .75rem;
+    padding: 1.25rem .5rem;
+    text-align: center;
+}
+
+/* ---- 检查器 ---- */
+
+.ve-selection-bar {
+    align-items: center;
+    border-bottom: 1px solid var(--ui-border, #e4e4e7);
+    display: flex;
+    gap: .5rem;
+    padding: .5rem .75rem;
+}
+
+.ve-breakpoint-note {
+    background: var(--ui-surface-subtle, #f4f4f5);
+    border-radius: 4px;
+    color: var(--ui-text-muted, #71717a);
+    font-size: .75rem;
+    margin-bottom: .75rem;
+    padding: .375rem .5rem;
+}
+
+.ve-field { margin-bottom: .75rem; }
+.ve-field > label {
+    display: block;
+    font-size: .75rem;
+    font-weight: 500;
+    margin-bottom: .25rem;
+}
+
+.ve-field-row { align-items: center; display: flex; gap: .375rem; }
+.ve-field-row input[type="color"] { flex: 0 0 34px; height: 31px; padding: 2px; }
+
+.ve-style-group {
+    border-top: 1px solid var(--ui-border, #e4e4e7);
+    margin-top: .75rem;
+    padding-top: .75rem;
+}
+
+.ve-style-group > h6 { font-size: .75rem; letter-spacing: .02em; text-transform: uppercase; }
+
+.ve-outline { font-size: .8125rem; }
+.ve-outline button {
+    background: transparent;
+    border: 0;
+    border-radius: 4px;
+    color: inherit;
+    cursor: pointer;
+    display: block;
+    padding: .25rem .5rem;
+    text-align: left;
+    width: 100%;
+}
+.ve-outline button:hover { background: var(--ui-surface-subtle, #f4f4f5); }
+.ve-outline button.active { background: var(--ui-primary-soft, #dbeafe); color: var(--ui-primary-text, #2563eb); }
+.ve-outline .ve-outline-column { padding-left: 1rem; }
+.ve-outline .ve-outline-widget { padding-left: 2rem; }
+
+.ve-revision-list { list-style: none; margin: 0; padding: 0; }
+.ve-revision-list li {
+    align-items: center;
+    border-bottom: 1px solid var(--ui-border, #e4e4e7);
+    display: flex;
+    gap: .5rem;
+    justify-content: space-between;
+    padding: .5rem 0;
+}
+
+@media (max-width: 1200px) {
+    .ve-editor { height: auto; }
+    .ve-editor-body { flex-direction: column; }
+    .ve-side-pane { flex: 1 1 auto; max-height: 320px; }
+    .ve-side-left { border-right: 0; border-bottom: 1px solid var(--ui-border, #e4e4e7); }
+    .ve-side-right { border-left: 0; border-top: 1px solid var(--ui-border, #e4e4e7); }
+}

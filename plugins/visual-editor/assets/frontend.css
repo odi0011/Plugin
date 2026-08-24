@@ -1,0 +1,187 @@
+/*
+ * 可视化编辑器：前台基础样式。
+ *
+ * 这里只放**结构**（区块/栏/控件的排布）与控件的默认外观，
+ * 不放任何具体的颜色、字号硬编码——那些走站点 CSS 变量，
+ * 因此可视化页面会跟着站点主题变，而不是自成一套配色。
+ *
+ * 每个元素的个性化样式由服务端编译成 [data-ve="..."] 选择器注入，
+ * 优先级天然高于这里的类选择器，不需要 !important。
+ */
+
+.ve-doc {
+    --ve-container: 1200px;
+    width: 100%;
+}
+
+.ve-section {
+    display: flow-root;
+    position: relative;
+    box-sizing: border-box;
+    width: 100%;
+}
+
+.ve-section-inner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 1.5rem;
+    box-sizing: border-box;
+    width: 100%;
+}
+
+.ve-section-boxed > .ve-section-inner {
+    margin-inline: auto;
+    max-width: var(--ve-container, 1200px);
+    padding-inline: 1rem;
+}
+
+.ve-section-full > .ve-section-inner {
+    max-width: none;
+    padding-inline: 0;
+}
+
+.ve-column {
+    display: flow-root;
+    position: relative;
+    box-sizing: border-box;
+    flex: 0 0 100%;
+    max-width: 100%;
+    min-width: 0;
+}
+
+.ve-widget {
+    position: relative;
+    box-sizing: border-box;
+}
+
+.ve-widget + .ve-widget {
+    margin-top: 1rem;
+}
+
+/* ---- 对齐 ---- */
+
+.ve-align-left { text-align: left; }
+.ve-align-center { text-align: center; }
+.ve-align-right { text-align: right; }
+.ve-align-justify { text-align: justify; }
+
+/* ---- 控件 ---- */
+
+.ve-heading {
+    margin: 0;
+    line-height: 1.25;
+    overflow-wrap: break-word;
+}
+
+.ve-text {
+    overflow-wrap: break-word;
+}
+
+.ve-text > :first-child { margin-top: 0; }
+.ve-text > :last-child { margin-bottom: 0; }
+
+.ve-image {
+    margin: 0;
+}
+
+.ve-image img {
+    display: inline-block;
+    height: auto;
+    max-width: 100%;
+    vertical-align: middle;
+}
+
+.ve-image-placeholder {
+    border: 1px dashed var(--ui-border, #d4d4d8);
+    border-radius: 6px;
+    color: var(--ui-text-muted, #71717a);
+    font-size: .875rem;
+    padding: 2rem 1rem;
+    text-align: center;
+}
+
+.ve-button-wrap { line-height: 1; }
+
+.ve-button {
+    border: 1px solid transparent;
+    border-radius: 6px;
+    cursor: pointer;
+    display: inline-block;
+    font-weight: 500;
+    line-height: 1.4;
+    text-decoration: none;
+    transition: filter .15s ease, background-color .15s ease;
+}
+
+.ve-button-sm { font-size: .875rem; padding: .375rem .875rem; }
+.ve-button-md { font-size: 1rem; padding: .5rem 1.25rem; }
+.ve-button-lg { font-size: 1.125rem; padding: .75rem 1.75rem; }
+
+.ve-button-primary {
+    background: var(--ui-primary, #2563eb);
+    color: var(--ui-primary-contrast, #fff);
+}
+
+.ve-button-outline {
+    background: transparent;
+    border-color: var(--ui-primary, #2563eb);
+    color: var(--ui-primary-text, #2563eb);
+}
+
+.ve-button-ghost {
+    background: transparent;
+    color: var(--ui-primary-text, #2563eb);
+}
+
+.ve-button:hover { filter: brightness(.94); }
+
+.ve-list { margin: 0; padding-left: 1.5rem; }
+.ve-list-none { list-style: none; padding-left: 0; }
+.ve-list-check { list-style: none; padding-left: 0; }
+.ve-list-check > li::before { content: "\2713"; margin-right: .5rem; }
+.ve-list > li + li { margin-top: .25rem; }
+
+.ve-quote {
+    border-left: 3px solid var(--ui-border, #d4d4d8);
+    margin: 0;
+    padding-left: 1rem;
+}
+
+.ve-quote p { margin: 0; }
+.ve-quote cite { color: var(--ui-text-muted, #71717a); display: block; font-size: .875rem; margin-top: .5rem; }
+
+.ve-divider {
+    border: 0;
+    border-top: 1px solid var(--ui-border, #d4d4d8);
+    margin: 0;
+    opacity: 1;
+    width: 100%;
+}
+
+.ve-spacer { width: 100%; }
+
+.ve-embed {
+    position: relative;
+    width: 100%;
+}
+
+.ve-embed::before { content: ""; display: block; }
+.ve-embed-16-9::before { padding-top: 56.25%; }
+.ve-embed-4-3::before { padding-top: 75%; }
+.ve-embed-1-1::before { padding-top: 100%; }
+
+.ve-embed iframe {
+    border: 0;
+    height: 100%;
+    left: 0;
+    position: absolute;
+    top: 0;
+    width: 100%;
+}
+
+.ve-html > :first-child { margin-top: 0; }
+.ve-html > :last-child { margin-bottom: 0; }
+.ve-html img { height: auto; max-width: 100%; }
+
+.ve-preview-notice { margin: 1rem auto; max-width: var(--ve-container, 1200px); }
