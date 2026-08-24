@@ -4,7 +4,7 @@
     "source": {
         "type": "github-static",
         "repo": "odi0011/Plugin",
-        "commit": "3f301ffe6bf68db502f2b514aaf8f9c92b4563c8"
+        "commit": "d56ec079c94662bc87d9d1df42e127bde66923ca"
     },
     "core_api": {
         "min": 1,
@@ -62,7 +62,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@3f301ffe6bf68db502f2b514aaf8f9c92b4563c8/dist/agent-content-integrity-1.0.1.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@d56ec079c94662bc87d9d1df42e127bde66923ca/dist/agent-content-integrity-1.0.1.zip",
                 "sha256": "4c8c8bd9b3bcc391aeca1e8381d2545ba6edeff3f88bfdbdeedebe1b84746497",
                 "size_bytes": 3120
             },
@@ -118,7 +118,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@3f301ffe6bf68db502f2b514aaf8f9c92b4563c8/dist/agent-hello-1.0.1.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@d56ec079c94662bc87d9d1df42e127bde66923ca/dist/agent-hello-1.0.1.zip",
                 "sha256": "cdc1e40772105092b5f3fcdf0ef3247ed6f6c93d301b22758c3d26f4cd6dbfc4",
                 "size_bytes": 4184
             },
@@ -180,7 +180,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@3f301ffe6bf68db502f2b514aaf8f9c92b4563c8/dist/agent-link-auditor-1.0.0.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@d56ec079c94662bc87d9d1df42e127bde66923ca/dist/agent-link-auditor-1.0.0.zip",
                 "sha256": "85602c1b62ef50d91b68854cc387de419b37741c922da050e2032eb6802e3650",
                 "size_bytes": 6225
             },
@@ -241,7 +241,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@3f301ffe6bf68db502f2b514aaf8f9c92b4563c8/dist/agent-run-digest-1.0.0.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@d56ec079c94662bc87d9d1df42e127bde66923ca/dist/agent-run-digest-1.0.0.zip",
                 "sha256": "a913c200cd4ab6005a9b4b3d41f8629c89f807a0db8267d15e7c86c10a2d372c",
                 "size_bytes": 8151
             },
@@ -300,7 +300,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@3f301ffe6bf68db502f2b514aaf8f9c92b4563c8/dist/agent-run-notifier-1.0.1.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@d56ec079c94662bc87d9d1df42e127bde66923ca/dist/agent-run-notifier-1.0.1.zip",
                 "sha256": "8238ee5f1b59a4a1cac145dd37046febef39a3248a3e62937eac5a11e04a4d7c",
                 "size_bytes": 3261
             },
@@ -362,7 +362,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@3f301ffe6bf68db502f2b514aaf8f9c92b4563c8/dist/agent-seo-snapshot-1.0.0.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@d56ec079c94662bc87d9d1df42e127bde66923ca/dist/agent-seo-snapshot-1.0.0.zip",
                 "sha256": "e9cffe081eb75124aa80ec9c1bcba974a5304dd5036f3f6426b6f480b8915005",
                 "size_bytes": 4882
             },
@@ -445,7 +445,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@3f301ffe6bf68db502f2b514aaf8f9c92b4563c8/dist/agent-task-ledger-1.0.1.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@d56ec079c94662bc87d9d1df42e127bde66923ca/dist/agent-task-ledger-1.0.1.zip",
                 "sha256": "1759dca20b5305022a746604d7b4c0db1f3f63d7fa89032a92fa7bdf7007f98e",
                 "size_bytes": 4196
             },
@@ -483,7 +483,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@3f301ffe6bf68db502f2b514aaf8f9c92b4563c8/dist/analytics-snippet-1.0.1.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@d56ec079c94662bc87d9d1df42e127bde66923ca/dist/analytics-snippet-1.0.1.zip",
                 "sha256": "b17e82e7b65935377af11cac8b15e72c85f75da459ab880de2a5cd1aa64495b4",
                 "size_bytes": 4046
             },
@@ -514,7 +514,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@3f301ffe6bf68db502f2b514aaf8f9c92b4563c8/dist/hello-world-1.0.1.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@d56ec079c94662bc87d9d1df42e127bde66923ca/dist/hello-world-1.0.1.zip",
                 "sha256": "09d3956e65867a7c0a812d5b3fcfba112c090ac0c4f335e12e84a41c78265f82",
                 "size_bytes": 1715
             },
@@ -556,7 +556,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@3f301ffe6bf68db502f2b514aaf8f9c92b4563c8/dist/maintenance-mode-1.0.0.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@d56ec079c94662bc87d9d1df42e127bde66923ca/dist/maintenance-mode-1.0.0.zip",
                 "sha256": "0253238ee090f1e91318b36ee8c87b326d158315c18bd8cc2d5badd84ea55d85",
                 "size_bytes": 7991
             },
@@ -594,7 +594,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@3f301ffe6bf68db502f2b514aaf8f9c92b4563c8/dist/preset-components-1.0.1.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@d56ec079c94662bc87d9d1df42e127bde66923ca/dist/preset-components-1.0.1.zip",
                 "sha256": "bbd5f0dd481ab5c06852c66058ec39f08bc4106e1b9667f5e68f6244a591ec36",
                 "size_bytes": 27033
             },
@@ -636,7 +636,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@3f301ffe6bf68db502f2b514aaf8f9c92b4563c8/dist/reading-time-1.0.0.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@d56ec079c94662bc87d9d1df42e127bde66923ca/dist/reading-time-1.0.0.zip",
                 "sha256": "2913a76bb3c0744b6721a4e0f88eaf3983bf145efea9b629b0a497775a25a78b",
                 "size_bytes": 6575
             },
@@ -674,7 +674,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@3f301ffe6bf68db502f2b514aaf8f9c92b4563c8/dist/redirect-rules-1.0.1.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@d56ec079c94662bc87d9d1df42e127bde66923ca/dist/redirect-rules-1.0.1.zip",
                 "sha256": "2735420998164a146febf64f93cbbd1051bc8bffec902150c694aeaa68ead114",
                 "size_bytes": 6064
             },
@@ -717,7 +717,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@3f301ffe6bf68db502f2b514aaf8f9c92b4563c8/dist/sitemap-ping-1.0.0.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@d56ec079c94662bc87d9d1df42e127bde66923ca/dist/sitemap-ping-1.0.0.zip",
                 "sha256": "9a2bf3e56a8ed22cc1caf113a9a59f56678facb8ff901f07565b3be7ef2e916a",
                 "size_bytes": 8383
             },
@@ -772,7 +772,7 @@
             "published_at": "2026-08-24T12:16:52Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@3f301ffe6bf68db502f2b514aaf8f9c92b4563c8/dist/visual-editor-1.1.0.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@d56ec079c94662bc87d9d1df42e127bde66923ca/dist/visual-editor-1.1.0.zip",
                 "sha256": "4df5f0411868b74cc93bd11e2de81383d6d053b6082bdda8b874940ce4775f95",
                 "size_bytes": 54035
             },
