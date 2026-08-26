@@ -1,6 +1,6 @@
 <?php
 /**
- * 可视化编辑器：内容表单接入层（1.1.0）。
+ * 可视化编辑器：内容表单接入层（1.2.0）。
  *
  * 插件不再有自己的菜单、列表页与独立编辑器。它只做一件事：给核心的
  * 内容编辑器（文章 / 产品 / 页面 / 自定义内容）**追加第三种模式**——
@@ -19,6 +19,9 @@ if (!defined('CODE_SCHEMA_VERSION')) exit;
 final class VisualEditorPanel
 {
     public const MODE_KEY = 'visual-editor';
+
+    /** 资源 URL 的缓存指纹：随插件版本走，升级后浏览器一定重新取 CSS/JS。 */
+    public const VERSION = '1.2.1';
 
     /**
      * admin.content_editor.modes 过滤器入口。
@@ -134,13 +137,14 @@ final class VisualEditorPanel
     public static function headAssets(): void
     {
         if (!self::shouldEnqueueAssets()) return;
-        echo '<link rel="stylesheet" href="' . e(\plugin_url('visual-editor', 'editor.css')) . '">';
+        // /plugin-asset/{slug}/{path} 里的 path 是相对插件根目录的，必须带 assets/ 段。
+        echo '<link rel="stylesheet" href="' . e(\plugin_url('visual-editor', 'assets/editor.css')) . '?v=' . self::VERSION . '">';
     }
 
     public static function footerAssets(): void
     {
         if (!self::shouldEnqueueAssets()) return;
-        echo '<script src="' . e(\plugin_url('visual-editor', 'editor.js')) . '" defer></script>';
+        echo '<script src="' . e(\plugin_url('visual-editor', 'assets/editor.js')) . '?v=' . self::VERSION . '" defer></script>';
     }
 
     /** @param array<string,mixed> $context */
