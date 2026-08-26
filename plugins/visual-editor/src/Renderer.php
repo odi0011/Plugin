@@ -122,8 +122,116 @@ final class VisualEditorRenderer
 
             case 'embed':
                 return self::embed($content);
+
+            case 'icon':
+                return '<div class="ve-icon ve-align-' . self::align($content) . '">'
+                    . self::iconTag($content, (int)($content['size'] ?? 40)) . '</div>';
+
+            case 'iconbox':
+                return self::iconBox($content);
+
+            case 'imagebox':
+                return self::imageBox($content);
+
+            case 'alert':
+                return self::alert($content);
+
+            case 'progress':
+                return self::progress($content);
         }
         return '';
+    }
+
+    /**
+     * 图标标签。字号与颜色走内联样式而不是编译进 CSS：它们是控件内容
+     * （每个实例一份），不是样式白名单里那种可继承的属性。
+     *
+     * @param array<string,mixed> $content
+     */
+    private static function iconTag(array $content, int $size): string
+    {
+        $px = max(12, min(160, $size));
+        $color = VisualEditorValue::style('text_color', $content['color'] ?? '');
+        $inline = 'font-size:' . $px . 'px;line-height:1;'
+            . ($color !== null && $color !== '' ? 'color:' . $color . ';' : '');
+        return '<i class="' . e(VisualEditorSchema::iconClass((string)($content['name'] ?? '')))
+            . '" style="' . e($inline) . '" aria-hidden="true"></i>';
+    }
+
+    /** @param array<string,mixed> $content */
+    private static function iconBox(array $content): string
+    {
+        $layout = (string)($content['layout'] ?? 'top') === 'left' ? 'left' : 'top';
+        $title = (string)($content['title'] ?? '');
+        $text = (string)($content['text'] ?? '');
+        return '<div class="ve-iconbox ve-iconbox-' . $layout . ' ve-align-' . self::align($content) . '">'
+            . '<div class="ve-iconbox-icon">' . self::iconTag($content, (int)($content['size'] ?? 32)) . '</div>'
+            . '<div class="ve-iconbox-body">'
+            . ($title !== '' ? '<h3 class="ve-iconbox-title">' . e($title) . '</h3>' : '')
+            . ($text !== '' ? '<p class="ve-iconbox-text">' . e($text) . '</p>' : '')
+            . '</div></div>';
+    }
+
+    /** @param array<string,mixed> $content */
+    private static function imageBox(array $content): string
+    {
+        $src = (string)($content['src'] ?? '');
+        $media = $src !== '' && VisualEditorValue::isMediaUrl($src)
+            ? '<img src="' . e($src) . '" alt="' . e((string)($content['alt'] ?? '')) . '" loading="lazy">'
+            : '<div class="ve-image-placeholder">未选择图片</div>';
+        $url = (string)($content['url'] ?? '');
+        if ($url !== '' && VisualEditorValue::isSafeUrl($url)) {
+            $media = '<a href="' . e($url) . '">' . $media . '</a>';
+        }
+        $title = (string)($content['title'] ?? '');
+        $text = (string)($content['text'] ?? '');
+        return '<div class="ve-imagebox ve-align-' . self::align($content) . '">'
+            . '<div class="ve-imagebox-media">' . $media . '</div>'
+            . '<div class="ve-imagebox-body">'
+            . ($title !== '' ? '<h3 class="ve-imagebox-title">' . e($title) . '</h3>' : '')
+            . ($text !== '' ? '<p class="ve-imagebox-text">' . e($text) . '</p>' : '')
+            . '</div></div>';
+    }
+
+    /** @param array<string,mixed> $content */
+    private static function alert(array $content): string
+    {
+        $tone = in_array((string)($content['tone'] ?? 'info'), ['info', 'success', 'warning', 'danger'], true)
+            ? (string)$content['tone'] : 'info';
+        $title = (string)($content['title'] ?? '');
+        $text = (string)($content['text'] ?? '');
+        if ($title === '' && $text === '') return '';
+        return '<div class="ve-alert ve-alert-' . $tone . '" role="note">'
+            . ($title !== '' ? '<strong class="ve-alert-title">' . e($title) . '</strong>' : '')
+            . ($text !== '' ? '<span class="ve-alert-text">' . e($text) . '</span>' : '')
+            . '</div>';
+    }
+
+    /**
+     * 进度条。用 role="progressbar" 而不是纯装饰性 div：读屏用户也该拿到这个数值。
+     *
+     * @param array<string,mixed> $content
+     */
+    private static function progress(array $content): string
+    {
+        $value = max(0, min(100, (int)($content['value'] ?? 0)));
+        $label = (string)($content['label'] ?? '');
+        $color = VisualEditorValue::style('background_color', $content['color'] ?? '');
+        $barStyle = 'width:' . $value . '%;'
+            . ($color !== null && $color !== '' ? 'background-color:' . $color . ';' : '');
+        $showValue = (string)($content['showvalue'] ?? 'yes') !== 'no';
+        return '<div class="ve-progress">'
+            . ($label !== '' || $showValue
+                ? '<div class="ve-progress-head">'
+                    . ($label !== '' ? '<span class="ve-progress-label">' . e($label) . '</span>' : '')
+                    . ($showValue ? '<span class="ve-progress-value">' . $value . '%</span>' : '')
+                    . '</div>'
+                : '')
+            . '<div class="ve-progress-track" role="progressbar" aria-valuenow="' . $value . '"'
+            . ' aria-valuemin="0" aria-valuemax="100"'
+            . ($label !== '' ? ' aria-label="' . e($label) . '"' : '') . '>'
+            . '<div class="ve-progress-bar" style="' . e($barStyle) . '"></div>'
+            . '</div></div>';
     }
 
     /** @param array<string,mixed> $content */

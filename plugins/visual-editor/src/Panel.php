@@ -51,7 +51,13 @@ final class VisualEditorPanel
         return $modes;
     }
 
-    /** admin.content_editor.panel 动作入口：输出面板与初始状态。 */
+    /**
+     * admin.content_editor.panel 动作入口：输出面板骨架与初始状态。
+     *
+     * 刻意**不**在这里渲染画布：树可能要从整段 HTML 解析出来，那是首次编辑时
+     * 最慢的一步，放在表单渲染里会拖慢每一次打开内容页。改成用户点「可视化」时
+     * 由 convert 端点按需转换，界面在蒙版加载动画上如实告知首次会久一些。
+     */
     public static function renderPanel(array $context): void
     {
         if (!self::supportsContext($context)) return;
@@ -60,12 +66,12 @@ final class VisualEditorPanel
         $field = (string)($context['html_field'] ?? 'content');
         $record = is_array($context['record'] ?? null) ? $context['record'] : [];
         $currentHtml = is_string($record[$field] ?? null) ? (string)$record[$field] : '';
+        $sourceKey = $type . '-' . $id;
 
         $managed = VisualEditorContent::extract($currentHtml);
+        $stored = VisualEditorStore::load($sourceKey);
         $stale = false;
-        $tree = null;
         if ($managed !== null) {
-            $tree = $managed['tree'];
             $withoutMarkers = trim(str_replace(
                 [VisualEditorContent::MARKER_START, VisualEditorContent::MARKER_END],
                 '',
@@ -73,33 +79,35 @@ final class VisualEditorPanel
             ));
             $stale = !str_starts_with($withoutMarkers, $managed['rendered']);
         }
+        // 「首次」的判断只看插件存储：没有记录就意味着这次要把整段 HTML 解析成树。
+        $firstRun = $stored === null;
 
         echo \plugin_view('visual-editor', 'admin/panel', [
             'modeKey' => self::MODE_KEY,
             'sourceType' => $type,
             'sourceId' => $id,
-            'sourceKey' => $type . '-' . $id,
+            'sourceKey' => $sourceKey,
             'fieldName' => $field,
             'canUse' => \App\Core\Auth::isAdmin() && \App\Core\Auth::can('visual_editor.edit'),
             'canUseCodeWidget' => \App\Core\Auth::can('visual_editor.code'),
-            'managedTree' => $tree === null ? null : json_encode($tree, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT),
+            'managed' => $managed !== null,
             'stale' => $stale,
+            'firstRun' => $firstRun,
+            'hasOriginal' => VisualEditorStore::original($sourceKey) !== null,
             'convertUrl' => \admin_url('/visual-editor/convert'),
+            'saveUrl' => \admin_url('/visual-editor/save'),
+            'restoreUrl' => \admin_url('/visual-editor/restore'),
             'csrfToken' => \App\Core\Csrf::token(),
             'widgets' => VisualEditorSchema::widgets(),
+            'widgetGroups' => VisualEditorSchema::widgetGroups(),
             'styleProperties' => VisualEditorSchema::styleProperties(),
             'styleLabels' => VisualEditorSchema::styleLabels(),
             'fieldLabels' => VisualEditorSchema::fieldLabels(),
+            'presets' => VisualEditorSchema::sectionPresets(),
             'breakpoints' => VisualEditorSettings::breakpoints(),
             'containerMax' => VisualEditorSettings::containerMax(),
             // 结构基础样式由服务端下发一份：JS 编译产物与服务端逐字节同源。
             'baseCss' => VisualEditorStyleCompiler::baseCss(),
-            'canvasHtml' => $tree !== null
-                ? VisualEditorRenderer::render($type . '-' . $id, $tree, true)
-                : '',
-            'canvasCss' => $tree !== null
-                ? VisualEditorStyleCompiler::compile($type . '-' . $id, $tree)
-                : '',
         ]);
     }
 

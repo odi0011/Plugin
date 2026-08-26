@@ -1,22 +1,25 @@
 <?php
 /**
- * 可视化编辑器（visual-editor）1.1.0
+ * 可视化编辑器（visual-editor）1.2.0
  *
- * 给核心内容编辑器（文章 / 产品 / 页面 / 自定义内容）追加第三种模式：
- * 富文本、代码之外的可视化拖拽编辑。没有自己的菜单、列表页、前台接管，
- * 也没有任何数据表——托管文档以自包含 HTML 的形态住在核心内容字段里
- * （见 src/Content.php 顶部说明），插件停用或卸载后内容不受影响。
+ * 给核心内容编辑器（文章 / 产品 / 页面 / 自定义内容）追加一种全屏可视化编辑模式，
+ * 与原有的富文本 / 代码两个标签并存——那两个标签的行为一个字节都不改。
  *
- * 接线（全部是核心 7i 的内容编辑器钩子）：
- *   - admin.content_editor.modes：声明「可视化」模式按钮；
+ * 存储分两处，这是 1.2.0 的核心变化（见 src/Content.php 与 src/Store.php 顶部说明）：
+ *   - 核心内容字段：只写渲染产物（HTML + 作用域 CSS），停用 / 卸载后页面照常显示；
+ *   - 插件存储（STORAGE_PATH/visual-editor/*.json）：编辑树 + 首次接管前的原文备份。
+ * 插件不建任何数据表。
+ *
+ * 接线（全部是核心 7i 的内容编辑器钩子，核心代码零改动）：
+ *   - admin.content_editor.modes：声明「可视化」模式（按钮由前端移到「AI 编辑」之后）；
  *   - admin.content_editor.panel：输出编辑面板；
  *   - admin.head / admin.footer：仅在四个内容表单页注入面板资产；
- *   - routes.admin.register：导入转换端点（会话 + CSRF，见 src/AdminTransport.php）；
+ *   - routes.admin.register：convert / save / restore 三个后台端点（会话 + CSRF）；
  *   - plugin.activated：注册断点与宽度设置默认值。
  *
  * 三面对等（AGENTS.md）：公开 API 与 Agent 动作由 plugin.json 的 api 段声明，
  * 一条声明同时派生路由、ApiDoc 契约与 Agent 动作。api 段刻意**只读**——
- * 插件的写入路径只有内容表单提交本身，随核心 ContentWorkflow 入库。
+ * 写入内容字段的路径只有内容表单提交本身，随核心 ContentWorkflow 入库。
  */
 if (!defined('CODE_SCHEMA_VERSION')) exit;
 
@@ -26,6 +29,7 @@ require_once __DIR__ . '/src/Settings.php';
 require_once __DIR__ . '/src/StyleCompiler.php';
 require_once __DIR__ . '/src/Renderer.php';
 require_once __DIR__ . '/src/Content.php';
+require_once __DIR__ . '/src/Store.php';
 require_once __DIR__ . '/src/Panel.php';
 require_once __DIR__ . '/src/AdminTransport.php';
 require_once __DIR__ . '/src/Api.php';
@@ -45,5 +49,11 @@ add_action('admin.footer', ['VisualEditorPanel', 'footerAssets']);
 add_action('routes.admin.register', static function ($router) {
     $router->post('/admin/visual-editor/convert', static function (): void {
         VisualEditorAdminTransport::convert();
+    });
+    $router->post('/admin/visual-editor/save', static function (): void {
+        VisualEditorAdminTransport::save();
+    });
+    $router->post('/admin/visual-editor/restore', static function (): void {
+        VisualEditorAdminTransport::restore();
     });
 });

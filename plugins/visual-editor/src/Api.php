@@ -32,8 +32,10 @@ final class VisualEditorApi
         $page = max(1, min(100, (int)($arguments['page'] ?? 1) ?: 1));
         $perPage = max(1, min(50, (int)($arguments['per_page'] ?? 20) ?: 20));
 
-        [$table, $field] = VisualEditorContent::SOURCES[$sourceType]
-            ?? ['content_entries', 'content'];
+        // SOURCES 是 类型 => ['table'=>…,'field'=>…] 的关联数组，按键取而不是位置解构。
+        $mapping = VisualEditorContent::SOURCES[$sourceType] ?? ['table' => 'content_entries', 'field' => 'content'];
+        $table = (string)$mapping['table'];
+        $field = (string)$mapping['field'];
 
         // 先用 LIKE 粗筛出候选行，再对每行做精确解析：托管判定是字符串级的事，
         // LIKE 负责把它限制在少量候选上，精确解析负责不误报。

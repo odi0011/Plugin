@@ -155,7 +155,125 @@ final class VisualEditorSchema
                 'defaults' => ['html' => ''],
                 'needs_permission' => 'visual_editor.code',
             ],
+            // ---- 1.2.0 新增：对齐 Elementor 常用控件 ----
+            // 键名只用小写字母：Content::reconstructVeDoc() 靠 /ve-widget-([a-z]+)/
+            // 从渲染产物里回读类型，带下划线的键会在「重新导入」时静默退化成 html。
+            'icon' => [
+                'label' => '图标',
+                'icon' => 'bi-star',
+                'fields' => [
+                    'name' => 'token:40',
+                    'size' => 'number:12,160',
+                    'color' => 'color',
+                    'align' => 'enum:left,center,right',
+                ],
+                'defaults' => ['name' => 'star-fill', 'size' => 40, 'color' => '', 'align' => 'center'],
+                'needs_permission' => '',
+            ],
+            'iconbox' => [
+                'label' => '图标框',
+                'icon' => 'bi-bounding-box',
+                'fields' => [
+                    'name' => 'token:40',
+                    'title' => 'text:120',
+                    'text' => 'text:600',
+                    'size' => 'number:12,120',
+                    'color' => 'color',
+                    'layout' => 'enum:top,left',
+                    'align' => 'enum:left,center,right',
+                ],
+                'defaults' => [
+                    'name' => 'lightning-charge-fill', 'title' => '特性标题',
+                    'text' => '用一两句话说明这个特性解决了什么问题。',
+                    'size' => 32, 'color' => '', 'layout' => 'top', 'align' => 'center',
+                ],
+                'needs_permission' => '',
+            ],
+            'imagebox' => [
+                'label' => '图文框',
+                'icon' => 'bi-card-image',
+                'fields' => [
+                    'src' => 'media',
+                    'alt' => 'text:200',
+                    'title' => 'text:120',
+                    'text' => 'text:600',
+                    'url' => 'link',
+                    'align' => 'enum:left,center,right',
+                ],
+                'defaults' => [
+                    'src' => '', 'alt' => '', 'title' => '图文标题',
+                    'text' => '配图下方的一段说明文字。', 'url' => '', 'align' => 'center',
+                ],
+                'needs_permission' => '',
+            ],
+            'alert' => [
+                'label' => '提示框',
+                'icon' => 'bi-exclamation-square',
+                'fields' => [
+                    'tone' => 'enum:info,success,warning,danger',
+                    'title' => 'text:120',
+                    'text' => 'text:600',
+                ],
+                'defaults' => ['tone' => 'info', 'title' => '提示', 'text' => '这里是需要读者注意的一句话。'],
+                'needs_permission' => '',
+            ],
+            'progress' => [
+                'label' => '进度条',
+                'icon' => 'bi-bar-chart',
+                'fields' => [
+                    'label' => 'text:120',
+                    'value' => 'number:0,100',
+                    'color' => 'color',
+                    'showvalue' => 'enum:yes,no',
+                ],
+                'defaults' => ['label' => '完成度', 'value' => 70, 'color' => '', 'showvalue' => 'yes'],
+                'needs_permission' => '',
+            ],
         ];
+    }
+
+    /**
+     * 控件分组，只服务左侧面板的折叠分区。
+     *
+     * 与 widgets() 分开的理由同 styleLabels()：这是展示结构，不是能力定义。
+     * 未被任何分组收录的控件由面板兜到最后一组，新增控件忘了登记也不会消失。
+     *
+     * @return array<string,list<string>>
+     */
+    public static function widgetGroups(): array
+    {
+        return [
+            '基础' => ['heading', 'text', 'image', 'button', 'list', 'quote'],
+            '布局' => ['divider', 'spacer'],
+            '进阶' => ['icon', 'iconbox', 'imagebox', 'alert', 'progress', 'embed'],
+            '开发' => ['html'],
+        ];
+    }
+
+    /**
+     * 区块预设：新增区块时的分栏骨架。
+     *
+     * 值是各栏在桌面断点上的百分比宽度，栏数受 MAX_COLUMNS_PER_SECTION 约束。
+     *
+     * @return array<string,array{label:string,columns:list<int>}>
+     */
+    public static function sectionPresets(): array
+    {
+        return [
+            'one' => ['label' => '单栏', 'columns' => [100]],
+            'two' => ['label' => '两栏', 'columns' => [50, 50]],
+            'three' => ['label' => '三栏', 'columns' => [34, 33, 33]],
+            'four' => ['label' => '四栏', 'columns' => [25, 25, 25, 25]],
+            'sidebar-right' => ['label' => '正文 + 右侧栏', 'columns' => [66, 34]],
+            'sidebar-left' => ['label' => '左侧栏 + 正文', 'columns' => [34, 66]],
+        ];
+    }
+
+    /** 图标名 => Bootstrap Icons 类名。名字过 token 校验后仍要落到这个前缀上。 */
+    public static function iconClass(string $name): string
+    {
+        $name = strtolower(trim($name));
+        return preg_match('/^[a-z0-9-]{1,40}$/', $name) === 1 ? 'bi bi-' . $name : 'bi bi-square';
     }
 
     /** @return list<string> */
@@ -301,6 +419,12 @@ final class VisualEditorSchema
             'video_id' => '视频 ID',
             'ratio' => '比例',
             'title' => '标题',
+            'name' => '图标名（Bootstrap Icons，不含 bi- 前缀）',
+            'tone' => '语气',
+            'layout' => '排布',
+            'label' => '名称',
+            'value' => '数值（%）',
+            'showvalue' => '显示数值',
         ];
     }
 }

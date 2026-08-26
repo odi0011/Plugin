@@ -1,25 +1,28 @@
 <?php
 /**
- * 可视化编辑器：内容挂接（1.1.0 重做后的核心）。
+ * 可视化编辑器：内容挂接。
  *
- * 1.0.0 把文档存自己的表、接管前台 URL；1.1.0 起插件**不再有任何存储**：
- * 可视化文档以「自包含 HTML」的形态住在核心内容字段里（文章 content /
- * 产品 content / 页面 html / 自定义内容 content），由三段组成——
+ * 1.0.0 把文档存自己的表、接管前台 URL；1.1.0 改成把整个文档（含编辑树）塞进核心
+ * 内容字段；1.2.0 在两者之间落点：**渲染产物进核心字段，编辑树与原文备份进插件存储**。
+ *
+ * 核心内容字段（文章 content / 产品 content / 页面 html / 自定义内容 content）里是：
  *
  *   <!-- ve:managed -->            起始标记
  *   {Renderer 的结构 HTML}
  *   <style data-ve-css>…</style>   StyleCompiler 的作用域 CSS
- *   <script type="application/json" data-ve-tree="page-12">{编辑树 JSON}</script>
  *   <!-- /ve:managed -->           结束标记
  *
- * 这样安排的直接后果，正是这次重做要满足的两条需求：
- *   - **插件停用 / 卸载后内容不受影响**：字段里就是普通 HTML + 一段 CSS +
- *     一段不执行的 JSON；剥掉三个 ve 标记后前台照常渲染。
- *   - **再次打开还能继续可视化编辑**：树跟着内容走，不需要反查任何表；
- *     核心的修订 / 排期 / 审批天然覆盖可视化修改，因为写回走的是原表单提交。
+ * 编辑树与「首次接管前的原始内容」在 VisualEditorStore（STORAGE_PATH 下的 JSON）。
+ * 这样安排的直接后果，正是这次重做要满足的几条需求：
+ *   - **不影响用户原内容**：原文有一份完整备份，随时可还原；
+ *   - **插件停用 / 卸载后页面不出问题**：字段里只是普通 HTML + 一段 CSS，
+ *     没有插件私有数据，剥掉两个注释标记就能照常渲染；
+ *   - **再次打开还能继续编辑**：树按内容源键（page-12）在存储里一一对应；
+ *   - 核心的修订 / 排期 / 审批天然覆盖可视化修改，因为写回走的是原表单提交。
  *
- * 写入路径只有一条：后台表单提交时由编辑器 JS 把编译产物写进核心字段，
- * 随核心控制器入库。插件自己没有面向外的写入端点（见 plugin.json api 段）。
+ * 写入路径只有一条：后台表单提交时由编辑器 JS 把编译产物写进核心字段，随核心控制器
+ * 入库；同一次提交前编辑器先把树 POST 到 /admin/visual-editor/save 落进插件存储。
+ * 插件没有面向外的写入端点（见 plugin.json api 段）。
  */
 if (!defined('CODE_SCHEMA_VERSION')) exit;
 
@@ -33,8 +36,11 @@ final class VisualEditorContent
      *
      * 与核心 ContentWorkflow::TABLES 同一张映射：page/article/product 各有专表，
      * 其余一律是自定义内容类型，落在 content_entries 并用 content_type 区分。
+     *
+     * 公开是因为公开 API（Api.php）要按类型取表名；键是类型，值是
+     * ['table'=>…, 'field'=>…]，别按位置解构。
      */
-    private const SOURCES = [
+    public const SOURCES = [
         'page'    => ['table' => 'pages', 'field' => 'html'],
         'article' => ['table' => 'articles', 'field' => 'content'],
         'product' => ['table' => 'products', 'field' => 'content'],
@@ -95,7 +101,10 @@ final class VisualEditorContent
     /**
      * 从核心字段值里取出托管块。返回 null 表示这段内容不是可视化托管的。
      *
-     * @return array{rendered:string,css:string,key:string,tree:array}|null
+     * tree 只有 1.1.0 写出的内容才有（那时树内联在块里）；1.2.0 起树在插件存储里，
+     * 块内只有 HTML + CSS，此时 tree 为 null。两种都要能读——用户升级插件不该丢文档。
+     *
+     * @return array{rendered:string,css:string,key:string,tree:?array}|null
      */
     public static function extract(string $html): ?array
     {
@@ -104,50 +113,98 @@ final class VisualEditorContent
         if ($start === false || $end === false || $end < $start) return null;
         $body = substr($html, $start + strlen(self::MARKER_START), $end - $start - strlen(self::MARKER_START));
 
-        // 结构顺序由 wrap() 保证：结构 HTML、可选的 style、必有的树脚本。
+        // 结构顺序由 wrap() 保证：结构 HTML、可选的 style、（仅 1.1.0）树脚本。
         // 按位置切片而不是 str_replace，避免内容里碰巧出现相同子串时切错。
         $scriptTag = '<script type="application/json" data-ve-tree="';
         $scriptAt = strpos($body, $scriptTag);
-        if ($scriptAt === false) return null;
+        $limit = $scriptAt === false ? strlen($body) : $scriptAt;
 
         $styleTag = '<style data-ve-css>';
         $styleAt = strpos($body, $styleTag);
         $css = '';
-        if ($styleAt !== false && $styleAt < $scriptAt) {
+        if ($styleAt !== false && $styleAt < $limit) {
             $styleEndAt = strpos($body, '</style>', $styleAt);
-            if ($styleEndAt === false || $styleEndAt > $scriptAt) return null;
+            if ($styleEndAt === false || $styleEndAt > $limit) return null;
             $css = substr($body, $styleAt + strlen($styleTag), $styleEndAt - $styleAt - strlen($styleTag));
             $rendered = substr($body, 0, $styleAt);
         } else {
-            $rendered = substr($body, 0, $scriptAt);
+            $rendered = substr($body, 0, $limit);
         }
 
-        if (!preg_match('/' . preg_quote($scriptTag, '/') . '([^"]*)">(.*?)<\/script>/s', $body, $m)) {
-            return null;
+        $key = '';
+        $tree = null;
+        if ($scriptAt !== false
+            && preg_match('/' . preg_quote($scriptTag, '/') . '([^"]*)">(.*?)<\/script>/s', $body, $m)) {
+            $decoded = json_decode((string)$m[2], true);
+            // 树脚本被人为改坏时当作没有树：让上层退回导入，而不是拿半棵树渲染。
+            if (is_array($decoded)) {
+                $key = (string)$m[1];
+                $tree = $decoded;
+            }
         }
-        $key = (string)$m[1];
-        $decoded = json_decode((string)$m[2], true);
-        if (!is_array($decoded) || $key === '') {
-            // 树脚本被人为改坏时宁可当成未托管：让用户重新导入，而不是拿半棵树渲染。
-            return null;
-        }
-        return ['rendered' => trim($rendered), 'css' => trim($css), 'key' => $key, 'tree' => $decoded];
+        return ['rendered' => trim($rendered), 'css' => trim($css), 'key' => $key, 'tree' => $tree];
     }
 
     /**
-     * 组装自包含块。顺序固定：HTML → CSS → 树脚本，extract() 依赖这个顺序。
-     * JSON 用 HEX_TAG 系 flag 编码，</script> 不可能从数据里逃出去。
+     * 组装自包含块：结构 HTML + 作用域 CSS，就这两样。
+     *
+     * 1.2.0 起**不再**内联编辑树。核心字段里因此没有任何插件私有数据——
+     * 停用或卸载插件后，剥掉两个注释标记就是一段普通的静态 HTML。
+     * 树由 VisualEditorStore 另存，见 src/Store.php 的说明。
      */
-    public static function wrap(string $renderedHtml, string $css, string $sourceKey, array $tree): string
+    public static function wrap(string $renderedHtml, string $css): string
     {
-        $jsonFlags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
-            | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
         return self::MARKER_START . "\n"
             . rtrim($renderedHtml) . "\n"
             . ($css !== '' ? '<style data-ve-css>' . $css . '</style>' . "\n" : '')
-            . '<script type="application/json" data-ve-tree="' . e($sourceKey) . '">'
-            . json_encode($tree, $jsonFlags) . '</script>' . "\n"
             . self::MARKER_END;
+    }
+
+    /**
+     * 打开编辑器时决定「用哪棵树」。优先级依次是：
+     *
+     *   1. 插件存储里的树，且它记下的渲染哈希与字段当前内容一致——最常见的回访路径；
+     *   2. 存储里的树但字段被外部改过：仍然给这棵树，同时把 stale 标出来让界面提示；
+     *   3. 字段里内联着 1.1.0 的树：就地迁移进存储，之后走路径 1；
+     *   4. 什么都没有：从字段 HTML 导入（首次编辑，耗时的一次）。
+     *
+     * @return array{tree:array,stale:bool,managed:bool,imported:bool}
+     */
+    public static function resolveTree(array $source, string $field, bool $force = false): array
+    {
+        $managed = self::extract($field);
+        $stored = VisualEditorStore::load($source['key']);
+
+        // 「重新导入」：明确要求按内容字段的当前样子重新解析，已存的树让位。
+        if ($force) {
+            return [
+                'tree' => VisualEditorDocumentShape::normalize(self::importField($field)),
+                'stale' => false,
+                'managed' => $managed !== null,
+                'imported' => true,
+            ];
+        }
+
+        if ($stored !== null) {
+            $stale = $managed === null
+                || !VisualEditorStore::matchesRendered($source['key'], $managed['rendered']);
+            return ['tree' => $stored['tree'], 'stale' => $stale, 'managed' => $managed !== null, 'imported' => false];
+        }
+
+        if ($managed !== null && is_array($managed['tree'])) {
+            // 1.1.0 内联树的迁移：写进存储，并把块内结构 HTML 当作原始内容备份的替身
+            // （真正的原文在 1.1.0 那次接管时已经被覆盖，能救的只有这一份）。
+            $tree = VisualEditorDocumentShape::normalize($managed['tree']);
+            VisualEditorStore::save($source['key'], $tree, $managed['rendered'], $field);
+            return ['tree' => $tree, 'stale' => false, 'managed' => true, 'imported' => false];
+        }
+
+        return [
+            'tree' => VisualEditorDocumentShape::normalize(self::importField($field)),
+            'stale' => false,
+            'managed' => $managed !== null,
+            'imported' => true,
+        ];
     }
 
     /**
@@ -171,11 +228,15 @@ final class VisualEditorContent
         // 说明有人在可视化之外（代码 / 富文本模式）改过这段内容。
         $withoutMarkers = trim(str_replace([self::MARKER_START, self::MARKER_END], '', $field));
         $stale = !str_starts_with($withoutMarkers, $managed['rendered']);
+
+        // 树优先取插件存储；1.1.0 的内联树作为兜底（此时还没迁移过）。
+        $stored = VisualEditorStore::tree($source['key']);
+        $tree = $stored ?? (is_array($managed['tree']) ? $managed['tree'] : []);
         return [
             'managed' => true,
             'stale' => $stale,
-            'sections' => count(is_array($managed['tree']['sections'] ?? null) ? $managed['tree']['sections'] : []),
-            'widgets' => self::countWidgets($managed['tree']),
+            'sections' => count(is_array($tree['sections'] ?? null) ? $tree['sections'] : []),
+            'widgets' => self::countWidgets($tree),
             'bytes' => strlen($field),
         ];
     }
@@ -293,7 +354,7 @@ final class VisualEditorContent
     public static function importField(string $field): array
     {
         $managed = self::extract($field);
-        if ($managed !== null) {
+        if ($managed !== null && is_array($managed['tree'])) {
             $outer = trim(self::stripManagedBlock($field));
             if ($outer === '') return $managed['tree'];
             return self::capSections(array_merge(
@@ -302,8 +363,8 @@ final class VisualEditorContent
             ));
         }
         if (str_contains($field, self::MARKER_START) && str_contains($field, self::MARKER_END)) {
-            // 树脚本坏了不等于内容没了：块里的结构 HTML 仍是 Renderer 的产物，
-            // 剥掉两个附属标签后 reconstructVeDoc 能把它还原回区块。
+            // 块内没有可用的树（1.2.0 的块本来就没有，或 1.1.0 的树脚本坏了）：
+            // 块里的结构 HTML 仍是 Renderer 的产物，剥掉附属标签后 reconstructVeDoc 能还原成区块。
             $start = strpos($field, self::MARKER_START);
             $end = strpos($field, self::MARKER_END);
             $body = substr($field, $start + strlen(self::MARKER_START), $end - $start - strlen(self::MARKER_START));
@@ -558,8 +619,96 @@ final class VisualEditorContent
                     }
                 }
                 return null;
+
+            // ---- 1.2.0 控件的反向解析 ----
+            case 'icon':
+                $icon = $wrapper->getElementsByTagName('i')->item(0);
+                if (!$icon instanceof \DOMElement) return null;
+                return ['name' => self::iconNameOf($icon)] + self::sizeFromStyle($icon, 'size');
+            case 'iconbox':
+                $icon = $wrapper->getElementsByTagName('i')->item(0);
+                $content = [
+                    'title' => self::textOfClass($wrapper, 've-iconbox-title'),
+                    'text' => self::textOfClass($wrapper, 've-iconbox-text'),
+                    'layout' => self::hasDescendantClass($wrapper, 've-iconbox-left') ? 'left' : 'top',
+                ];
+                if ($icon instanceof \DOMElement) {
+                    $content['name'] = self::iconNameOf($icon);
+                    $content += self::sizeFromStyle($icon, 'size');
+                }
+                return $content;
+            case 'imagebox':
+                $img = $wrapper->getElementsByTagName('img')->item(0);
+                return [
+                    'src' => $img instanceof \DOMElement ? (string)$img->getAttribute('src') : '',
+                    'alt' => $img instanceof \DOMElement ? (string)$img->getAttribute('alt') : '',
+                    'title' => self::textOfClass($wrapper, 've-imagebox-title'),
+                    'text' => self::textOfClass($wrapper, 've-imagebox-text'),
+                ];
+            case 'alert':
+                $tone = 'info';
+                foreach (iterator_to_array($wrapper->getElementsByTagName('div')) as $box) {
+                    if ($box instanceof \DOMElement
+                        && preg_match('/ve-alert-(info|success|warning|danger)/', (string)$box->getAttribute('class'), $m)) {
+                        $tone = (string)$m[1];
+                        break;
+                    }
+                }
+                return [
+                    'tone' => $tone,
+                    'title' => self::textOfClass($wrapper, 've-alert-title'),
+                    'text' => self::textOfClass($wrapper, 've-alert-text'),
+                ];
+            case 'progress':
+                $value = null;
+                foreach (iterator_to_array($wrapper->getElementsByTagName('div')) as $track) {
+                    if ($track instanceof \DOMElement && $track->hasAttribute('aria-valuenow')) {
+                        $value = (int)$track->getAttribute('aria-valuenow');
+                        break;
+                    }
+                }
+                if ($value === null) return null;
+                return [
+                    'value' => max(0, min(100, $value)),
+                    'label' => self::textOfClass($wrapper, 've-progress-label'),
+                    'showvalue' => self::textOfClass($wrapper, 've-progress-value') === '' ? 'no' : 'yes',
+                ];
         }
         return null;
+    }
+
+    /** 从 <i class="bi bi-star-fill"> 取回图标名（不含 bi- 前缀）。 */
+    private static function iconNameOf(\DOMElement $icon): string
+    {
+        return preg_match('/\bbi-([a-z0-9-]+)/', (string)$icon->getAttribute('class'), $m)
+            ? (string)$m[1]
+            : '';
+    }
+
+    /** 内联 font-size 回读成控件字段。取不到就返回空数组，让默认值生效。 */
+    private static function sizeFromStyle(\DOMElement $node, string $field): array
+    {
+        return preg_match('/font-size:\s*(\d+)/', (string)$node->getAttribute('style'), $m)
+            ? [$field => (int)$m[1]]
+            : [];
+    }
+
+    private static function textOfClass(\DOMElement $wrapper, string $class): string
+    {
+        foreach (iterator_to_array($wrapper->getElementsByTagName('*')) as $node) {
+            if ($node instanceof \DOMElement && self::hasClass($node, $class)) {
+                return trim((string)$node->textContent);
+            }
+        }
+        return '';
+    }
+
+    private static function hasDescendantClass(\DOMElement $wrapper, string $class): bool
+    {
+        foreach (iterator_to_array($wrapper->getElementsByTagName('*')) as $node) {
+            if ($node instanceof \DOMElement && self::hasClass($node, $class)) return true;
+        }
+        return false;
     }
 
     private static function hasClass(\DOMElement $node, string $class): bool
@@ -690,6 +839,129 @@ if (!class_exists('VisualEditorDocumentShape')) {
         public static function validElementId(string $id): bool
         {
             return $id !== '' && (bool)preg_match('/^ve[0-9a-f]{10}$/', $id);
+        }
+
+        // ============================================================
+        // 归一化：不受信任的树 => 合法的树
+        // ============================================================
+
+        /**
+         * 把任意来源的树（客户端 POST、磁盘上的旧记录）收拾成合法结构。
+         *
+         * 这是 1.2.0 保存路径的守门人：编辑器把整棵树发上来，服务端**不**信任其中任何
+         * 一个字节。每个 id 重新校验、每条样式过白名单、每个控件字段过 Value::field，
+         * 校验不过就退回控件默认值而不是原样收下——渲染器对 text / html 是直出的，
+         * 消毒只能发生在入库之前。
+         *
+         * @param bool $allowCode 调用者是否具备 visual_editor.code；否则 html 控件降级为纯文本
+         */
+        public static function normalize(array $tree, bool $allowCode = true): array
+        {
+            $budget = VisualEditorSchema::MAX_WIDGETS_TOTAL;
+            $sections = [];
+            foreach ((is_array($tree['sections'] ?? null) ? $tree['sections'] : []) as $section) {
+                if (!is_array($section)) continue;
+                if (count($sections) >= VisualEditorSchema::MAX_SECTIONS) break;
+                $sections[] = self::normalizeSection($section, $allowCode, $budget);
+            }
+            if ($sections === []) $sections = [self::section([])];
+            return [
+                'version' => VisualEditorSchema::DOC_VERSION,
+                'style' => self::normalizeStyle($tree['style'] ?? null),
+                'sections' => $sections,
+            ];
+        }
+
+        private static function normalizeSection(array $section, bool $allowCode, int &$budget): array
+        {
+            $columns = [];
+            foreach ((is_array($section['columns'] ?? null) ? $section['columns'] : []) as $column) {
+                if (!is_array($column)) continue;
+                if (count($columns) >= VisualEditorSchema::MAX_COLUMNS_PER_SECTION) break;
+                $columns[] = self::normalizeColumn($column, $allowCode, $budget);
+            }
+            if ($columns === []) $columns = [self::column([])];
+            $id = (string)($section['id'] ?? '');
+            $layout = (string)($section['layout'] ?? 'boxed');
+            return [
+                'id' => self::validElementId($id) ? $id : self::newId(),
+                'layout' => in_array($layout, VisualEditorSchema::SECTION_LAYOUTS, true) ? $layout : 'boxed',
+                'style' => self::normalizeStyle($section['style'] ?? null),
+                'columns' => $columns,
+            ];
+        }
+
+        private static function normalizeColumn(array $column, bool $allowCode, int &$budget): array
+        {
+            $widgets = [];
+            foreach ((is_array($column['widgets'] ?? null) ? $column['widgets'] : []) as $widget) {
+                if (!is_array($widget)) continue;
+                if ($budget <= 0 || count($widgets) >= VisualEditorSchema::MAX_WIDGETS_PER_COLUMN) break;
+                $normalized = self::normalizeWidget($widget, $allowCode);
+                if ($normalized === null) continue;
+                $budget--;
+                $widgets[] = $normalized;
+            }
+            $width = [];
+            $rawWidth = is_array($column['width'] ?? null) ? $column['width'] : [];
+            foreach (VisualEditorSchema::BREAKPOINTS as $breakpoint) {
+                $value = $rawWidth[$breakpoint] ?? null;
+                $width[$breakpoint] = is_numeric($value) ? max(5, min(100, (int)round((float)$value))) : 100;
+            }
+            $id = (string)($column['id'] ?? '');
+            return [
+                'id' => self::validElementId($id) ? $id : self::newId(),
+                'width' => $width,
+                'style' => self::normalizeStyle($column['style'] ?? null),
+                'widgets' => $widgets,
+            ];
+        }
+
+        private static function normalizeWidget(array $widget, bool $allowCode): ?array
+        {
+            $type = strtolower(trim((string)($widget['type'] ?? '')));
+            $definition = VisualEditorSchema::widget($type);
+            // 未知类型直接丢弃：渲染器对它返回空串，留着只是一块看不见的垃圾。
+            if ($definition === null) return null;
+            $needs = (string)($definition['needs_permission'] ?? '');
+            if ($needs === 'visual_editor.code' && !$allowCode) return null;
+
+            $incoming = is_array($widget['content'] ?? null) ? $widget['content'] : [];
+            $defaults = is_array($definition['defaults'] ?? null) ? $definition['defaults'] : [];
+            $content = [];
+            foreach ((is_array($definition['fields'] ?? null) ? $definition['fields'] : []) as $field => $spec) {
+                $fallback = $defaults[$field] ?? '';
+                if (!array_key_exists($field, $incoming)) {
+                    $content[$field] = $fallback;
+                    continue;
+                }
+                [$ok, $value] = VisualEditorValue::field((string)$spec, $incoming[$field]);
+                $content[$field] = $ok ? $value : $fallback;
+            }
+            $id = (string)($widget['id'] ?? '');
+            return [
+                'id' => self::validElementId($id) ? $id : self::newId(),
+                'type' => $type,
+                'content' => $content,
+                'style' => self::normalizeStyle($widget['style'] ?? null),
+            ];
+        }
+
+        /** 样式骨架永远是三个断点齐全的；每个值都过一遍白名单校验，不合法的键直接不落。 */
+        private static function normalizeStyle(mixed $style): array
+        {
+            $source = is_array($style) ? $style : [];
+            $out = [];
+            foreach (VisualEditorSchema::BREAKPOINTS as $breakpoint) {
+                $out[$breakpoint] = [];
+                $values = is_array($source[$breakpoint] ?? null) ? $source[$breakpoint] : [];
+                foreach ($values as $property => $value) {
+                    $key = strtolower(trim((string)$property));
+                    $normalized = VisualEditorValue::style($key, $value);
+                    if ($normalized !== null) $out[$breakpoint][$key] = $normalized;
+                }
+            }
+            return $out;
         }
     };
 }
