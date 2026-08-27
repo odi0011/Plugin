@@ -135,7 +135,10 @@ final class VisualEditorAdminTransport
         if (!\App\Core\Auth::isAdmin()) {
             self::json(['ok' => false, 'message' => '只有管理员能使用可视化编辑'], 403);
         }
-        if (!\App\Core\Csrf::verify((string)($_POST['csrf_token'] ?? ''))) {
+        // 核心 Router 已经用 _csrf 校验过一遍（不通过连这里都到不了），
+        // 这里再自查一次：端点将来若被别的入口调用，校验不能只靠上游。
+        $token = (string)($_POST['_csrf'] ?? ($_POST['csrf_token'] ?? ''));
+        if (!\App\Core\Csrf::verify($token)) {
             self::json(['ok' => false, 'message' => 'CSRF 校验失败，请刷新页面重试'], 419);
         }
         if (!\App\Core\Auth::can($permission)) {

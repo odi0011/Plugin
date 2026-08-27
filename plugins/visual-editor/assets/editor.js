@@ -1056,6 +1056,10 @@
 
         function post(url, payload) {
             var body = new FormData();
+            // 核心 Router 在分发前统一校验 POST 的 CSRF，读的字段名是 _csrf；
+            // 名字不对会被它用纯文本「CSRF token mismatch」挡下（HTTP 419），
+            // 请求根本到不了插件的端点。csrf_token 一并带上，端点自己也认。
+            body.append('_csrf', config.csrfToken);
             body.append('csrf_token', config.csrfToken);
             body.append('source_type', config.sourceType);
             body.append('source_id', String(config.sourceId));
