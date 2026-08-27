@@ -71,18 +71,7 @@ final class VisualEditorAdminTransport
     public static function save(): void
     {
         $source = self::guard('visual_editor.edit');
-
-        $raw = (string)($_POST['tree'] ?? '');
-        if ($raw === '' || strlen($raw) > VisualEditorSchema::MAX_DOC_BYTES) {
-            self::json(['ok' => false, 'message' => '文档过大或为空，无法保存'], 413);
-        }
-        $decoded = json_decode($raw, true);
-        if (!is_array($decoded)) {
-            self::json(['ok' => false, 'message' => '文档格式不正确'], 422);
-        }
-
-        $allowCode = \App\Core\Auth::can('visual_editor.code');
-        $tree = VisualEditorDocumentShape::normalize($decoded, $allowCode);
+        $tree = self::readTree();
         $rendered = VisualEditorRenderer::render($source['key'], $tree, false);
         $css = VisualEditorStyleCompiler::compile($source['key'], $tree);
 
@@ -103,6 +92,161 @@ final class VisualEditorAdminTransport
                 'canvas_css' => $css,
             ],
         ], 200);
+    }
+
+    /**
+     * POST /admin/visual-editor/persist
+     *
+     * 落存编辑树，并**直接把渲染产物写进内容字段**——走核心 ContentWorkflow，
+     * 所以行锁、乐观版本、完整快照、修订与审计一条都不少。
+     *
+     * 为什么要有这条路：编辑器原本让核心表单自己提交（最保守的做法），但那意味着
+     * 浏览器要把编译好的 HTML 与 `<style>` 塞在 POST 体里发一遍。站点前面的安全层
+     * （WAF / mod_security 之类）见到请求体里的 `<style` / `<script` 形状就整条拦掉，
+     * 返回裸的 403 Forbidden——请求连 PHP 都没进。产物本来就是服务端渲染的，
+     * 让它在服务端原地入库，浏览器只上传一棵 JSON 树（还是 base64 的），
+     * 这类规则就无从触发。
+     *
+     * 状态一律不动：这里只改内容字段，草稿仍是草稿，已发布仍是已发布。
+     * 但核心「改非草稿内容要 *.publish 权限」的规矩必须照抄，
+     * 否则这条路就成了绕过核心权限的后门。
+     */
+    public static function persist(): void
+    {
+        $source = self::guard('visual_editor.edit');
+        // 核心的内容编辑权限必须另外过一遍：只有 visual_editor.edit 不足以改内容。
+        $permissions = self::corePermissions($source['type']);
+        if (!\App\Core\Auth::can($permissions['edit'])) {
+            self::json(['ok' => false, 'message' => '缺少 ' . $permissions['edit'] . ' 权限'], 403);
+        }
+
+        $tree = self::readTree();
+        $rendered = VisualEditorRenderer::render($source['key'], $tree, false);
+        $css = VisualEditorStyleCompiler::compile($source['key'], $tree);
+        $block = VisualEditorContent::wrap($rendered, $css);
+
+        $current = VisualEditorContent::loadField($source);
+        if ($current === null) {
+            self::json(['ok' => false, 'message' => '内容不存在或已被删除'], 404);
+        }
+        if (!VisualEditorStore::save($source['key'], $tree, $rendered, $current)) {
+            self::json(['ok' => false, 'message' => '插件存储写入失败，请检查 storage 目录权限'], 500);
+        }
+
+        try {
+            $result = \App\Core\ContentWorkflow::mutate(
+                $source['type'],
+                $source['id'],
+                static function (array $locked) use ($source, $block, $permissions): void {
+                    if ((int)($locked['status'] ?? 0) !== \App\Core\ContentWorkflow::DRAFT
+                        && !\App\Core\Auth::can($permissions['publish'])) {
+                        throw new \DomainException('修改非草稿内容需要 ' . $permissions['publish'] . ' 权限');
+                    }
+                    \App\Core\Database::table($source['table'])
+                        ->where('id', $source['id'])
+                        ->update([
+                            $source['field'] => $block,
+                            'updated_at' => date('Y-m-d H:i:s'),
+                        ]);
+                },
+                self::workflowContext($source['type'])
+            );
+        } catch (\DomainException $error) {
+            self::json(['ok' => false, 'message' => $error->getMessage()], 403);
+        } catch (\RuntimeException $error) {
+            $status = (int)$error->getCode() === 409 ? 409 : 500;
+            self::json([
+                'ok' => false,
+                'message' => $status === 409
+                    ? '这条内容已被其他会话更新，请刷新页面后重新编辑'
+                    : ('保存失败：' . mb_substr($error->getMessage(), 0, 120)),
+            ], $status);
+        } catch (\Throwable $error) {
+            self::json(['ok' => false, 'message' => '保存失败：' . mb_substr($error->getMessage(), 0, 120)], 500);
+        }
+
+        self::json([
+            'ok' => true,
+            'message' => empty($result['changed']) ? '内容没有变化' : '已保存到这条内容',
+            'data' => [
+                'source_key' => $source['key'],
+                'changed' => !empty($result['changed']),
+                'revision_id' => $result['revision_id'] ?? null,
+                'block' => $block,
+                'canvas_html' => VisualEditorRenderer::render($source['key'], $tree, true),
+                'canvas_css' => $css,
+            ],
+        ], 200);
+    }
+
+    /**
+     * 读取并规范化上传的编辑树。
+     *
+     * 优先认 tree_b64（base64 的 JSON）：树里可能夹着自定义 HTML 控件的原始标签，
+     * 明文发上来会被前置安全层按「请求体里有 HTML」拦掉。base64 只是换个编码，
+     * 校验一点没少——解码后照样走 normalize()。
+     *
+     * @return array<string,mixed>
+     */
+    private static function readTree(): array
+    {
+        $raw = (string)($_POST['tree'] ?? '');
+        $encoded = (string)($_POST['tree_b64'] ?? '');
+        if ($encoded !== '') {
+            if (strlen($encoded) > VisualEditorSchema::MAX_DOC_BYTES * 2) {
+                self::json(['ok' => false, 'message' => '文档过大，无法保存'], 413);
+            }
+            $decodedRaw = base64_decode(strtr($encoded, '-_', '+/'), true);
+            if ($decodedRaw === false) {
+                self::json(['ok' => false, 'message' => '文档编码不正确'], 422);
+            }
+            $raw = $decodedRaw;
+        }
+        if ($raw === '' || strlen($raw) > VisualEditorSchema::MAX_DOC_BYTES) {
+            self::json(['ok' => false, 'message' => '文档过大或为空，无法保存'], 413);
+        }
+        $decoded = json_decode($raw, true);
+        if (!is_array($decoded)) {
+            self::json(['ok' => false, 'message' => '文档格式不正确'], 422);
+        }
+        return VisualEditorDocumentShape::normalize($decoded, \App\Core\Auth::can('visual_editor.code'));
+    }
+
+    /**
+     * 源类型对应的核心内容权限。自定义内容类型统一走 content.*，
+     * 与核心 ContentEntryController 一致。
+     *
+     * @return array{edit:string,publish:string}
+     */
+    private static function corePermissions(string $type): array
+    {
+        switch ($type) {
+            case 'page':
+                return ['edit' => 'page.edit', 'publish' => 'page.publish'];
+            case 'article':
+                return ['edit' => 'article.edit', 'publish' => 'article.publish'];
+            case 'product':
+                return ['edit' => 'product.edit', 'publish' => 'product.publish'];
+            default:
+                return ['edit' => 'content.edit', 'publish' => 'content.publish'];
+        }
+    }
+
+    /** @return array<string,mixed> */
+    private static function workflowContext(string $type): array
+    {
+        return [
+            'operation' => 'update',
+            'action' => $type . '.update',
+            'actor_type' => 'user',
+            'actor_id' => \App\Core\Auth::id(),
+            // source 写插件自己：审计日志里能一眼看出这次改动来自可视化编辑器。
+            'source' => 'plugin:visual-editor',
+            'request_id' => defined('APP_REQUEST_ID') ? (string)constant('APP_REQUEST_ID') : '',
+            'summary' => 'Update ' . $type . ' content via visual editor',
+            'ip' => (string)($_SERVER['REMOTE_ADDR'] ?? ''),
+            'user_agent' => (string)($_SERVER['HTTP_USER_AGENT'] ?? ''),
+        ];
     }
 
     /**

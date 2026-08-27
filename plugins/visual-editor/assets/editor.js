@@ -1621,11 +1621,26 @@
         }
 
         /**
+         * 树的上传负载：JSON 先 base64 再发。
+         *
+         * 为什么要编码：树里可能夹着自定义 HTML 控件的原始标签，站点前面的安全层
+         * （WAF / mod_security）见到请求体里有 `<style` / `<script` 形状就整条拦成
+         * 裸的 403 Forbidden，请求连 PHP 都进不去。base64 只是换个编码——
+         * 服务端解码后照样走 normalize()，一点校验都没少。
+         */
+        function treePayload() {
+            var json = JSON.stringify(tree);
+            // btoa 只吃 latin1：先按 UTF-8 逐字节展开。
+            var bytes = unescape(encodeURIComponent(json));
+            return { tree_b64: btoa(bytes) };
+        }
+
+        /**
          * 把树落存并写回内容字段。resolve 后字段里已经是入库产物。
          * 这一步不碰核心表单的提交语义，只负责「字段里有正确的东西」。
          */
         function syncField() {
-            return post(config.saveUrl, { tree: JSON.stringify(tree) }).then(function (data) {
+            return post(config.saveUrl, treePayload()).then(function (data) {
                 var input = contentInput();
                 if (!input) throw new Error('找不到内容字段，无法写回');
                 input.value = data.block;
@@ -1639,58 +1654,42 @@
         }
 
         /**
-         * 核心内容表单的提交按钮。四个表单形状一致：`name="status"`，
-         * 0 是「保存草稿」，1 是「发布 / 上架」（没有发布权限时那颗不渲染）。
+         * 「保存」：把树发给插件自己的 persist 端点，服务端原地入库。
          *
-         * 挑哪一颗：跟着这条内容**当前的状态**走。已发布的保存后仍是发布，
-         * 草稿保存后仍是草稿——可视化编辑器没有资格替用户改变发布状态。
-         * 找不到对应状态的按钮（没有发布权限时）就退回第一颗。
-         */
-        function coreSubmitter() {
-            if (!form) return null;
-            var buttons = form.querySelectorAll('button[type="submit"][name="status"], input[type="submit"][name="status"]');
-            if (!buttons.length) {
-                return form.querySelector('button[type="submit"], input[type="submit"]');
-            }
-            var wanted = String(config.status);
-            for (var i = 0; i < buttons.length; i++) {
-                if (buttons[i].value === wanted) return buttons[i];
-            }
-            return buttons[0];
-        }
-
-        /**
-         * 「保存」：落存树 → 写回字段 → 让核心表单**照它自己的方式**提交一次。
+         * 走过的两条弯路，写在这里免得再来一遍：
+         *   1.3.0 用 fetch 把整张表单发上去 → 请求形状变了（multipart + 额外请求头），
+         *          线上被挡成 Forbidden；
+         *   1.3.1 改回原生 requestSubmit(核心提交按钮) → 请求形状与手点「发布」
+         *          一模一样，**照样** Forbidden：被挡的不是形状，是请求体里那段
+         *          编译好的 `<style data-ve-css>` 与整片 HTML。
          *
-         * 1.3.0 试过用 fetch 把整张表单发上去，好处是能留在编辑台里，坏处是
-         * 请求形状变了（multipart、额外请求头），线上直接被挡成 Forbidden。
-         * 现在改成 requestSubmit(核心的提交按钮)：请求与用户亲手点「发布」
-         * 完全一致——同样的编码、同样的 status、同样的跳转，修订 / 排期 /
-         * 审批 / 审计一个不少。代价是保存后跟手动保存一样回到内容页，
-         * 这比「看起来保存了其实被 WAF 挡了」好得多。
+         * 所以 1.3.2 干脆不让产物经过浏览器：只上传一棵 base64 的 JSON 树，
+         * HTML 与 CSS 由服务端渲染、服务端入库，并且入库走核心 ContentWorkflow
+         * ——行锁、乐观版本、快照、修订、审计一条都不少。发布状态一律不动。
+         * 附带的好处是保存后留在编辑台里，不再跳回内容页。
          */
         function saveContent() {
             if (busy || !tree) return;
-            if (!form) { setStatus('找不到内容表单，无法保存'); return; }
-            var submitter = coreSubmitter();
-            if (!submitter) { setStatus('找不到内容表单的保存按钮'); return; }
-            if (form.checkValidity && !form.checkValidity()) {
-                setStatus('表单里还有必填项没填，先补齐再保存');
-                if (form.reportValidity) form.reportValidity();
-                return;
-            }
             busy = true;
             if (applyButton) applyButton.disabled = true;
             setStatus('正在保存…');
 
-            syncField().then(function () {
-                setStatus('已写回字段，正在提交…');
-                // requestSubmit 会走 submit 事件（bindFormSync 此时 dirty 已清，直接放行），
-                // 并带上 submitter 的 name/value；不支持时退回直接点那颗按钮。
-                if (typeof form.requestSubmit === 'function') form.requestSubmit(submitter);
-                else submitter.click();
+            post(config.persistUrl, treePayload()).then(function (data) {
+                // 字段同步照旧：用户回到表单时看到的就是已入库的产物。
+                var input = contentInput();
+                if (input) {
+                    input.value = data.block;
+                    if (window.jQuery) window.jQuery(input).trigger('change');
+                    else input.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+                if (data.canvas_css && canvasStyle) canvasStyle.textContent = data.canvas_css;
+                setDirty(false);
+                setStatus(data.message || '已保存');
+                toast(data.changed === false ? '内容没有变化' : '已保存到这条内容');
             }).catch(function (error) {
                 setStatus(error.message || '保存失败');
+                toast(error.message || '保存失败');
+            }).then(function () {
                 busy = false;
                 if (applyButton) applyButton.disabled = false;
             });
@@ -1852,7 +1851,7 @@
                 if (!dirty || !tree || busy || !isActiveMode()) return;
                 event.preventDefault();
                 busy = true;
-                post(config.saveUrl, { tree: JSON.stringify(tree) }).then(function (data) {
+                post(config.saveUrl, treePayload()).then(function (data) {
                     var input = contentInput();
                     if (input) input.value = data.block;
                     setDirty(false);

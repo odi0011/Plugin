@@ -14,12 +14,13 @@
  *   - admin.content_editor.modes：声明「可视化」模式（按钮由前端移到「AI 编辑」之后）；
  *   - admin.content_editor.panel：输出编辑面板；
  *   - admin.head / admin.footer：仅在四个内容表单页注入面板资产；
- *   - routes.admin.register：convert / save / restore 三个后台端点（会话 + CSRF）；
+ *   - routes.admin.register：convert / save / persist / restore 四个后台端点（会话 + CSRF）；
  *   - plugin.activated：注册断点与宽度设置默认值。
  *
  * 三面对等（AGENTS.md）：公开 API 与 Agent 动作由 plugin.json 的 api 段声明，
  * 一条声明同时派生路由、ApiDoc 契约与 Agent 动作。api 段刻意**只读**——
- * 写入内容字段的路径只有内容表单提交本身，随核心 ContentWorkflow 入库。
+ * 写入内容字段的路径只有后台的 persist 端点，且它随核心 ContentWorkflow 入库
+ * （权限、行锁、修订、审计一条不少）。
  */
 if (!defined('CODE_SCHEMA_VERSION')) exit;
 
@@ -52,6 +53,9 @@ add_action('routes.admin.register', static function ($router) {
     });
     $router->post('/admin/visual-editor/save', static function (): void {
         VisualEditorAdminTransport::save();
+    });
+    $router->post('/admin/visual-editor/persist', static function (): void {
+        VisualEditorAdminTransport::persist();
     });
     $router->post('/admin/visual-editor/restore', static function (): void {
         VisualEditorAdminTransport::restore();

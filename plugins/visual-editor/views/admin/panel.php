@@ -32,6 +32,7 @@ if (!defined('CODE_SCHEMA_VERSION')) exit;
 /** @var bool $hasOriginal */
 /** @var string $convertUrl */
 /** @var string $saveUrl */
+/** @var string $persistUrl */
 /** @var string $restoreUrl */
 /** @var string $csrfToken */
 /** @var array $widgets */
@@ -57,11 +58,11 @@ $config = [
     'stale' => $stale,
     'firstRun' => $firstRun,
     'hasOriginal' => $hasOriginal,
-    // 这条内容当前的发布状态：「保存」按钮据此挑核心的提交按钮，
-    // 保存不会顺手改变发布状态。
+    // 这条内容当前的发布状态：编辑台只据此提示，保存不会改变它。
     'status' => $status,
     'convertUrl' => $convertUrl,
     'saveUrl' => $saveUrl,
+    'persistUrl' => $persistUrl,
     'restoreUrl' => $restoreUrl,
     'csrfToken' => $csrfToken,
     'widgets' => $widgets,
@@ -192,7 +193,7 @@ $loaderLines = $firstRun
             <button type="button" class="ve-btn ve-btn-quiet" data-ve-action="close">
                 <i class="bi bi-x-lg"></i> 关闭
             </button>
-            <button type="button" class="ve-btn ve-btn-primary" data-ve-action="apply" title="落存并提交这条内容，走核心的修订与审批">
+            <button type="button" class="ve-btn ve-btn-primary" data-ve-action="apply" title="直接保存到这条内容，走核心的修订与审计，发布状态不变">
                 <i class="bi bi-check2"></i> 保存
             </button>
         </div>
