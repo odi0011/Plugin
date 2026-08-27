@@ -502,6 +502,14 @@
                     event.stopPropagation();
                     select(selectionFromPath(node.getAttribute('data-ve-path')));
                 });
+                // 右键：先把这个节点选中，再在鼠标处开菜单——和 Elementor 一样，
+                // 右键本身就是一次选中，不需要先左键点一下。
+                node.addEventListener('contextmenu', function (event) {
+                    event.stopPropagation();
+                    event.preventDefault();
+                    select(selectionFromPath(node.getAttribute('data-ve-path')));
+                    openContextMenu(event.clientX, event.clientY);
+                });
             });
             // 画布里的链接在编辑期不该真的跳走。
             Array.prototype.forEach.call(canvas.querySelectorAll('a'), function (link) {
@@ -947,6 +955,87 @@
             return clone;
         }
 
+        // ---- 剪贴板与样式剪贴板（Elementor 的右键菜单核心就是这两样）----
+
+        /** {kind, node} —— 只在本次会话内有效，不落存储，不跨标签页。 */
+        var clipboard = null;
+        /** 单独一份样式剪贴板：拷样式比拷整个控件常用得多。 */
+        var styleClipboard = null;
+
+        function copySelection() {
+            var node = findNode(selection);
+            if (!node) return;
+            clipboard = { kind: selection.kind, node: JSON.parse(JSON.stringify(node)) };
+            styleClipboard = JSON.parse(JSON.stringify(node.style || emptyStyle()));
+            setStatus('已拷贝' + (selection.kind === 'widget' ? '控件' : (selection.kind === 'column' ? '栏' : '区块')));
+        }
+
+        /**
+         * 粘贴。区块只能粘到区块层；栏粘进当前区块；控件粘进当前栏。
+         * 类型对不上时不硬塞，直接说明——静默塞错位置比不粘更难排查。
+         */
+        function pasteClipboard() {
+            if (!clipboard || !tree) { setStatus('剪贴板是空的'); return; }
+            var copy = reidentify(clipboard.node);
+            if (clipboard.kind === 'section') {
+                if (tree.sections.length >= 60) { setStatus('区块数量已达上限'); return; }
+                var at = selection ? selection.si + 1 : tree.sections.length;
+                tree.sections.splice(at, 0, copy);
+                setDirty(true);
+                refreshCanvas();
+                select({ kind: 'section', si: at, ci: 0, wi: 0 });
+                return;
+            }
+            if (!selection) { setStatus('先选中要粘进去的位置'); return; }
+            var section = tree.sections[selection.si];
+            if (!section) return;
+            if (clipboard.kind === 'column') {
+                if ((section.columns || []).length >= 6) { setStatus('这个区块的栏数已达上限'); return; }
+                var ci = (selection.kind === 'section' ? section.columns.length : selection.ci + 1);
+                section.columns.splice(ci, 0, copy);
+                rebalance(section);
+                setDirty(true);
+                refreshCanvas();
+                select({ kind: 'column', si: selection.si, ci: ci, wi: 0 });
+                return;
+            }
+            // 控件：选中区块时落进第一栏末尾，选中栏 / 控件时落在当前位置之后。
+            var column = section.columns[selection.kind === 'section' ? 0 : selection.ci];
+            if (!column) { setStatus('这里没有可粘贴的栏'); return; }
+            if (countWidgets() >= 400) { setStatus('控件数量已达上限'); return; }
+            var wi = selection.kind === 'widget' ? selection.wi + 1 : column.widgets.length;
+            column.widgets.splice(wi, 0, copy);
+            setDirty(true);
+            refreshCanvas();
+            select({
+                kind: 'widget',
+                si: selection.si,
+                ci: selection.kind === 'section' ? 0 : selection.ci,
+                wi: wi
+            });
+        }
+
+        function pasteStyle() {
+            var node = findNode(selection);
+            if (!node) return;
+            if (!styleClipboard) { setStatus('还没有拷过样式'); return; }
+            node.style = JSON.parse(JSON.stringify(styleClipboard));
+            setDirty(true);
+            refreshCanvas();
+            renderInspector();
+            setStatus('已粘贴样式');
+        }
+
+        function resetStyle() {
+            var node = findNode(selection);
+            if (!node) return;
+            node.style = emptyStyle();
+            setDirty(true);
+            refreshCanvas();
+            renderInspector();
+            setStatus('已清空样式');
+        }
+
         function applyStructureAction(action) {
             var sel = selection;
             if (!sel || !tree) return;
@@ -1005,6 +1094,114 @@
             setDirty(true);
             refreshCanvas();
             select(next);
+        }
+
+        // ---- 右键菜单 ----
+
+        var contextMenu = null;
+
+        function closeContextMenu() {
+            if (contextMenu && contextMenu.parentNode) contextMenu.parentNode.removeChild(contextMenu);
+            contextMenu = null;
+        }
+
+        /**
+         * 右键菜单的条目随选中类型变：区块能加栏，栏能加控件，控件只关心自己。
+         * 顺序照 Elementor 的肌肉记忆走：编辑 → 复制 → 拷贝 / 粘贴 → 样式 → 删除。
+         */
+        function contextItems() {
+            var kind = selection ? selection.kind : null;
+            var noun = kind === 'widget' ? '控件' : (kind === 'column' ? '栏' : '区块');
+            var items = [
+                { icon: 'bi-sliders', label: '编辑' + noun, run: function () {
+                    inspectorTab = 'content';
+                    renderInspector();
+                } },
+                { icon: 'bi-palette', label: '样式设置', run: function () {
+                    inspectorTab = 'style';
+                    renderInspector();
+                } },
+                { sep: true },
+                { icon: 'bi-arrow-up', label: '上移', run: function () { applyStructureAction('move-up'); } },
+                { icon: 'bi-arrow-down', label: '下移', run: function () { applyStructureAction('move-down'); } },
+                { icon: 'bi-copy', label: '复制一份', hint: 'Ctrl+D', run: function () { applyStructureAction('duplicate'); } },
+                { sep: true },
+                { icon: 'bi-clipboard', label: '拷贝', hint: 'Ctrl+C', run: copySelection },
+                { icon: 'bi-clipboard-check', label: '粘贴', hint: 'Ctrl+V',
+                  disabled: !clipboard, run: pasteClipboard },
+                { icon: 'bi-clipboard-plus', label: '粘贴样式',
+                  disabled: !styleClipboard, run: pasteStyle },
+                { icon: 'bi-eraser', label: '清空样式', run: resetStyle },
+                { sep: true },
+                { icon: 'bi-trash', label: '删除' + noun, danger: true, hint: 'Del',
+                  run: function () { applyStructureAction('remove'); } }
+            ];
+            if (kind === 'section') {
+                items.splice(3, 0, { icon: 'bi-plus-square', label: '在下方插入区块', run: function () {
+                    addSection('one');
+                } });
+            }
+            return items;
+        }
+
+        function openContextMenu(x, y) {
+            closeContextMenu();
+            if (!selection) return;
+            var menu = el('div', 've-ctx');
+            contextItems().forEach(function (item) {
+                if (item.sep) { menu.appendChild(el('div', 've-ctx-sep')); return; }
+                var button = el('button', 've-ctx-item' + (item.danger ? ' ve-ctx-danger' : ''));
+                button.type = 'button';
+                button.disabled = !!item.disabled;
+                button.innerHTML = '<i class="bi ' + item.icon + '"></i>'
+                    + '<span class="ve-ctx-label">' + esc(item.label) + '</span>'
+                    + (item.hint ? '<kbd class="ve-ctx-hint">' + esc(item.hint) + '</kbd>' : '');
+                button.addEventListener('click', function () {
+                    closeContextMenu();
+                    item.run();
+                });
+                menu.appendChild(button);
+            });
+            // 先挂上再量尺寸：菜单不能被视口右下角切掉。
+            menu.style.left = '0px';
+            menu.style.top = '0px';
+            stage.appendChild(menu);
+            var box = menu.getBoundingClientRect();
+            var left = Math.min(x, window.innerWidth - box.width - 8);
+            var top = Math.min(y, window.innerHeight - box.height - 8);
+            menu.style.left = Math.max(8, left) + 'px';
+            menu.style.top = Math.max(8, top) + 'px';
+            contextMenu = menu;
+            if (gsap && !reduceMotion) {
+                gsap.fromTo(menu, { opacity: 0, scale: .96, transformOrigin: 'top left' },
+                    { opacity: 1, scale: 1, duration: .16, ease: 'power2.out' });
+            }
+        }
+
+        function bindContextMenu() {
+            document.addEventListener('click', function (event) {
+                if (contextMenu && !contextMenu.contains(event.target)) closeContextMenu();
+            });
+            document.addEventListener('scroll', closeContextMenu, true);
+            // 画布空白处右键：交回浏览器自己的菜单太突兀，这里只是关掉我们的。
+            canvas.addEventListener('contextmenu', function (event) {
+                event.preventDefault();
+                closeContextMenu();
+            });
+            document.addEventListener('keydown', function (event) {
+                if (stage.hidden) return;
+                if (event.key === 'Escape' && contextMenu) { closeContextMenu(); return; }
+                // 焦点在输入框里时快捷键归输入框——别把用户的复制粘贴抢走。
+                var tag = (event.target && event.target.tagName) || '';
+                if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
+                    || (event.target && event.target.isContentEditable)) return;
+                if (!selection) return;
+                var meta = event.ctrlKey || event.metaKey;
+                if (meta && (event.key === 'c' || event.key === 'C')) { event.preventDefault(); copySelection(); }
+                else if (meta && (event.key === 'v' || event.key === 'V')) { event.preventDefault(); pasteClipboard(); }
+                else if (meta && (event.key === 'd' || event.key === 'D')) { event.preventDefault(); applyStructureAction('duplicate'); }
+                else if (event.key === 'Delete') { event.preventDefault(); applyStructureAction('remove'); }
+            });
         }
 
         /** 新控件落在当前选中的栏里；没选中就落在最后一个区块的第一栏。 */
@@ -1442,17 +1639,41 @@
         }
 
         /**
-         * 「保存」：落存树 → 写回字段 → 真的提交核心表单。
+         * 核心内容表单的提交按钮。四个表单形状一致：`name="status"`，
+         * 0 是「保存草稿」，1 是「发布 / 上架」（没有发布权限时那颗不渲染）。
          *
-         * 之前这颗按钮只做到写回字段，用户还得退出编辑器再手动保存一次——这不合逻辑，
-         * 用户说得对。现在默认用 fetch 提交整张核心表单：修订 / 排期 / 审批 / 审计
-         * 全部照常由 ContentWorkflow 走，而用户留在编辑器里不被弹走。
-         * fetch 这条路走不通（响应异常、网络错误）就退回一次真实表单提交，
-         * 宁可跳页也不能让用户以为保存了其实没保存。
+         * 挑哪一颗：跟着这条内容**当前的状态**走。已发布的保存后仍是发布，
+         * 草稿保存后仍是草稿——可视化编辑器没有资格替用户改变发布状态。
+         * 找不到对应状态的按钮（没有发布权限时）就退回第一颗。
+         */
+        function coreSubmitter() {
+            if (!form) return null;
+            var buttons = form.querySelectorAll('button[type="submit"][name="status"], input[type="submit"][name="status"]');
+            if (!buttons.length) {
+                return form.querySelector('button[type="submit"], input[type="submit"]');
+            }
+            var wanted = String(config.status);
+            for (var i = 0; i < buttons.length; i++) {
+                if (buttons[i].value === wanted) return buttons[i];
+            }
+            return buttons[0];
+        }
+
+        /**
+         * 「保存」：落存树 → 写回字段 → 让核心表单**照它自己的方式**提交一次。
+         *
+         * 1.3.0 试过用 fetch 把整张表单发上去，好处是能留在编辑台里，坏处是
+         * 请求形状变了（multipart、额外请求头），线上直接被挡成 Forbidden。
+         * 现在改成 requestSubmit(核心的提交按钮)：请求与用户亲手点「发布」
+         * 完全一致——同样的编码、同样的 status、同样的跳转，修订 / 排期 /
+         * 审批 / 审计一个不少。代价是保存后跟手动保存一样回到内容页，
+         * 这比「看起来保存了其实被 WAF 挡了」好得多。
          */
         function saveContent() {
             if (busy || !tree) return;
             if (!form) { setStatus('找不到内容表单，无法保存'); return; }
+            var submitter = coreSubmitter();
+            if (!submitter) { setStatus('找不到内容表单的保存按钮'); return; }
             if (form.checkValidity && !form.checkValidity()) {
                 setStatus('表单里还有必填项没填，先补齐再保存');
                 if (form.reportValidity) form.reportValidity();
@@ -1463,34 +1684,13 @@
             setStatus('正在保存…');
 
             syncField().then(function () {
-                var body = new FormData(form);
-                // 核心的保存按钮多半带 name/value（如 action=publish）；FormData 不会
-                // 自动带上未点击的提交按钮，这里显式补一个默认提交项。
-                var submitter = form.querySelector('button[type="submit"][name], input[type="submit"][name]');
-                if (submitter && submitter.name && !body.has(submitter.name)) {
-                    body.append(submitter.name, submitter.value || '');
-                }
-                return fetch(form.getAttribute('action') || window.location.href, {
-                    method: (form.getAttribute('method') || 'POST').toUpperCase(),
-                    body: body,
-                    credentials: 'same-origin',
-                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
-                });
-            }).then(function (response) {
-                if (!response || !response.ok) throw new Error('fallback');
-                setStatus('已保存到这条内容');
-                toast('已保存');
+                setStatus('已写回字段，正在提交…');
+                // requestSubmit 会走 submit 事件（bindFormSync 此时 dirty 已清，直接放行），
+                // 并带上 submitter 的 name/value；不支持时退回直接点那颗按钮。
+                if (typeof form.requestSubmit === 'function') form.requestSubmit(submitter);
+                else submitter.click();
             }).catch(function (error) {
-                if (error && error.message && error.message !== 'fallback') {
-                    setStatus(error.message);
-                    busy = false;
-                    if (applyButton) applyButton.disabled = false;
-                    return;
-                }
-                // 字段已经写好了，交回表单做一次真实提交（会跳页，但一定保存得上）。
-                setStatus('改用表单提交保存…');
-                form.submit();
-            }).then(function () {
+                setStatus(error.message || '保存失败');
                 busy = false;
                 if (applyButton) applyButton.disabled = false;
             });
@@ -1503,6 +1703,7 @@
             setStatus('正在应用…');
             syncField().then(function () {
                 setStatus('已写回内容字段，尚未保存');
+                toast('已写回字段，未保存');
             }).catch(function (error) {
                 setStatus(error.message || '应用失败');
             }).then(function () { busy = false; });
@@ -1615,7 +1816,8 @@
             });
 
             document.addEventListener('keydown', function (event) {
-                if (event.key === 'Escape' && !stage.hidden && !dirty) {
+                // 右键菜单开着时 Esc 归菜单：一次 Esc 关一层，别把编辑台一起关掉。
+                if (event.key === 'Escape' && !stage.hidden && !dirty && !contextMenu) {
                     if (launcher) launcher.removeAttribute('data-ve-active');
                     closeStage();
                 }
@@ -1667,6 +1869,7 @@
         bindPalette();
         bindNotch();
         bindStageActions();
+        bindContextMenu();
         bindFormSync();
         setBreakpoint('desktop');
         renderInspector();

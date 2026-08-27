@@ -1048,6 +1048,73 @@ body.ve-stage-open {
 
 .ve-canvas [data-ve-drop-edge="after"]::after { bottom: -2px; }
 
+/* ---- 右键菜单 ---- */
+
+.ve-ctx {
+    position: fixed;
+    z-index: 40;
+    min-width: 12rem;
+    padding: .3rem;
+    border: 1px solid var(--ui-border, #e4e4e7);
+    border-radius: 10px;
+    background: var(--ui-surface, #fff);
+    box-shadow: 0 16px 44px rgba(0, 0, 0, .18);
+}
+
+.ve-ctx-item {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    width: 100%;
+    padding: .32rem .45rem;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--ui-text, #18181b);
+    font-size: .8125rem;
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.ve-ctx-item:hover:not(:disabled) {
+    background: rgba(37, 99, 235, .08);
+    color: #2563eb;
+}
+
+.ve-ctx-item:disabled {
+    color: var(--ui-text-muted, #a1a1aa);
+    cursor: default;
+}
+
+.ve-ctx-item > i {
+    flex: 0 0 1rem;
+    font-size: .8125rem;
+    text-align: center;
+}
+
+.ve-ctx-label { flex: 1 1 auto; }
+
+.ve-ctx-hint {
+    flex: 0 0 auto;
+    padding: 0 .3rem;
+    border: 1px solid var(--ui-border, #e4e4e7);
+    border-radius: 4px;
+    color: var(--ui-text-muted, #a1a1aa);
+    font-size: .625rem;
+    font-family: inherit;
+}
+
+.ve-ctx-danger:hover:not(:disabled) {
+    background: rgba(220, 38, 38, .08);
+    color: #dc2626;
+}
+
+.ve-ctx-sep {
+    margin: .25rem .2rem;
+    border-top: 1px solid var(--ui-border, #f4f4f5);
+}
+
 /* ---- 保存后的轻提示 ---- */
 
 .ve-toast {

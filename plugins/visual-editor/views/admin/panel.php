@@ -43,6 +43,7 @@ if (!defined('CODE_SCHEMA_VERSION')) exit;
 /** @var array $breakpoints */
 /** @var int $containerMax */
 /** @var string $baseCss */
+/** @var int $status */
 
 $config = [
     'modeKey' => $modeKey,
@@ -56,6 +57,9 @@ $config = [
     'stale' => $stale,
     'firstRun' => $firstRun,
     'hasOriginal' => $hasOriginal,
+    // 这条内容当前的发布状态：「保存」按钮据此挑核心的提交按钮，
+    // 保存不会顺手改变发布状态。
+    'status' => $status,
     'convertUrl' => $convertUrl,
     'saveUrl' => $saveUrl,
     'restoreUrl' => $restoreUrl,

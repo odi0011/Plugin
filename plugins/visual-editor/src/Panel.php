@@ -21,7 +21,7 @@ final class VisualEditorPanel
     public const MODE_KEY = 'visual-editor';
 
     /** 资源 URL 的缓存指纹：随插件版本走，升级后浏览器一定重新取 CSS/JS。 */
-    public const VERSION = '1.3.0';
+    public const VERSION = '1.3.1';
 
     /**
      * admin.content_editor.modes 过滤器入口。
@@ -101,6 +101,10 @@ final class VisualEditorPanel
             'stale' => $stale,
             'firstRun' => $firstRun,
             'hasOriginal' => VisualEditorStore::original($sourceKey) !== null,
+            // 「保存」要挑核心表单里与当前状态一致的那颗提交按钮：
+            // 可视化编辑不该顺手把草稿变成已发布。缺字段时按草稿处理，
+            // 宁可少发布一次，也不误发布。
+            'status' => (int)($record['status'] ?? 0),
             'convertUrl' => \admin_url('/visual-editor/convert'),
             'saveUrl' => \admin_url('/visual-editor/save'),
             'restoreUrl' => \admin_url('/visual-editor/restore'),
