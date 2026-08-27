@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="AI Customer Service">
+  <rect width="128" height="128" rx="24" fill="#0D6EFD"/>
+  <path d="M30 35h68a12 12 0 0 1 12 12v34a12 12 0 0 1-12 12H65l-20 16V93H30a12 12 0 0 1-12-12V47a12 12 0 0 1 12-12Z" fill="#fff"/>
+  <circle cx="47" cy="64" r="6" fill="#0D6EFD"/>
+  <circle cx="64" cy="64" r="6" fill="#0D6EFD"/>
+  <circle cx="81" cy="64" r="6" fill="#0D6EFD"/>
+</svg>

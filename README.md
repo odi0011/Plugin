@@ -26,6 +26,7 @@ index.json.pub             公钥（公开）
 | redirect-rules | 重定向规则管理 |
 | preset-components | 预设组件（内容工作流） |
 | visual-editor | 可视化编辑器（拖拽搭页面 + 白名单样式编译 + 三面对等 API） |
+| ai-customer-service | 前台 AI 客服浮窗（规则、样式、知识库与模型来源可配置） |
 | agent-hello | Agent 扩展示例（动作/资源/角色/事件） |
 | agent-task-ledger | Agent 写动作示例（插件迁移 + 台账） |
 | agent-content-integrity | Agent 资源类型 + 委派角色示例 |
