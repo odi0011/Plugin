@@ -182,11 +182,14 @@ $loaderLines = $firstRun
                     <i class="bi bi-clock-history"></i> 还原原文
                 </button>
             <?php endif; ?>
+            <button type="button" class="ve-btn ve-btn-ghost" data-ve-action="apply-only" title="只写回内容字段，不提交这条内容">
+                <i class="bi bi-arrow-down-square"></i> 仅写回字段
+            </button>
             <button type="button" class="ve-btn ve-btn-quiet" data-ve-action="close">
                 <i class="bi bi-x-lg"></i> 关闭
             </button>
-            <button type="button" class="ve-btn ve-btn-primary" data-ve-action="apply">
-                <i class="bi bi-check2"></i> 应用到内容
+            <button type="button" class="ve-btn ve-btn-primary" data-ve-action="apply" title="落存并提交这条内容，走核心的修订与审批">
+                <i class="bi bi-check2"></i> 保存
             </button>
         </div>
     </header>

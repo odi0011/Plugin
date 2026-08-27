@@ -308,7 +308,7 @@
             tree.sections.forEach(function (section, si) {
                 html += '<section data-ve="' + esc(section.id) + '" class="ve-section ve-section-'
                     + (section.layout === 'full' ? 'full' : 'boxed') + '"'
-                    + (editing ? ' data-ve-kind="section" data-ve-path="' + si + '"' : '') + '>'
+                    + (editing ? ' data-ve-kind="section" data-ve-path="' + si + '" draggable="true"' : '') + '>'
                     + '<div class="ve-section-inner">';
                 (section.columns || []).forEach(function (column, ci) {
                     html += '<div data-ve="' + esc(column.id) + '" class="ve-column"'
@@ -317,9 +317,9 @@
                         var definition = config.widgets[widget.type];
                         if (!definition) return;
                         html += '<div data-ve="' + esc(widget.id) + '" class="ve-widget ve-widget-' + esc(widget.type) + '"'
-                            + (editing ? ' data-ve-kind="widget" data-ve-path="' + si + '.' + ci + '.' + wi + '"' : '')
+                            + (editing ? ' data-ve-kind="widget" data-ve-path="' + si + '.' + ci + '.' + wi + '" draggable="true"' : '')
                             + '>' + widgetBodyHtml(widget)
-                            + (editing ? '<span class="ve-handle">' + esc(definition.label) + '</span>' : '')
+                            + (editing ? '<span class="ve-handle"><i class="bi bi-grip-vertical"></i>' + esc(definition.label) + '</span>' : '')
                             + '</div>';
                     });
                     if (editing && !(column.widgets || []).length) {
@@ -327,7 +327,7 @@
                     }
                     html += (editing ? '<span class="ve-handle">栏</span>' : '') + '</div>';
                 });
-                html += '</div>' + (editing ? '<span class="ve-handle">区块</span>' : '') + '</section>';
+                html += '</div>' + (editing ? '<span class="ve-handle"><i class="bi bi-grip-vertical"></i>区块</span>' : '') + '</section>';
             });
             return html + '</div>';
         }
@@ -512,18 +512,75 @@
         // ================= 检查器 =================
 
         var styleBreakpoint = 'desktop';
+        var inspectorTab = 'content';
+        /** 折叠状态按「选中类型 + 分组名」记，切换选中时不会把用户展开的组收回去。 */
+        var openGroups = { '间距': true, '文字': true };
 
+        /**
+         * 枚举值的中文名。服务端的枚举值是 CSS 关键字（flex-start 之类），
+         * 直接摊在下拉里没人看得懂；这张表只服务显示，值本身不变。
+         */
+        var VALUE_LABELS = {
+            left: '左', center: '居中', right: '右', justify: '两端对齐',
+            top: '上', bottom: '下',
+            cover: '铺满裁切', contain: '完整放入', auto: '原始尺寸',
+            'no-repeat': '不平铺', repeat: '平铺', 'repeat-x': '横向平铺', 'repeat-y': '纵向平铺',
+            none: '无', solid: '实线', dashed: '虚线', dotted: '点线',
+            block: '块', flex: '弹性布局', 'inline-block': '行内块',
+            'flex-start': '起始', 'flex-end': '末尾', 'space-between': '两端分散',
+            'space-around': '周围留白', stretch: '拉伸',
+            sm: '轻', md: '中', lg: '重',
+            '300': '细 300', '400': '常规 400', '500': '中 500',
+            '600': '半粗 600', '700': '粗 700', '800': '特粗 800'
+        };
+
+        /** 标签表有两种形态：fieldLabels 是字符串，styleLabels 是 {group,label}。 */
         function labelOf(key, fallback) {
-            return config.fieldLabels[key] || config.styleLabels[key] || fallback || key;
+            var one = config.fieldLabels[key];
+            if (typeof one === 'string' && one) return one;
+            var two = config.styleLabels[key];
+            if (two && typeof two === 'object' && two.label) return two.label;
+            if (typeof two === 'string' && two) return two;
+            return VALUE_LABELS[key] || fallback || key;
         }
 
-        function group(title) {
-            var node = el('div', 've-group-title', title);
-            inspectorBody.appendChild(node);
+        function groupOf(property) {
+            var meta = config.styleLabels[property];
+            return (meta && typeof meta === 'object' && meta.group) ? meta.group : '其他';
+        }
+
+        /**
+         * 可折叠分组。参数堆在一张长条里是上一版最大的毛病：分组必须能收起，
+         * 而且要在标题上直接告诉用户「这一组里有没有设过东西」。
+         */
+        function group(title, opts) {
+            opts = opts || {};
+            var box = el('div', 've-acc');
+            var head = el('button', 've-acc-head');
+            head.type = 'button';
+            head.innerHTML = '<i class="bi bi-chevron-right ve-acc-caret"></i>'
+                + '<span class="ve-acc-title">' + esc(title) + '</span>'
+                + (opts.count ? '<span class="ve-acc-count">' + opts.count + '</span>' : '');
+            var body = el('div', 've-acc-body');
             var grid = el('div', 've-field-grid');
-            inspectorBody.appendChild(grid);
+            body.appendChild(grid);
+            if (opts.collapsible === false) {
+                box.setAttribute('data-ve-open', '1');
+                head.disabled = true;
+            } else {
+                if (openGroups[title]) box.setAttribute('data-ve-open', '1');
+                head.addEventListener('click', function () {
+                    var open = box.getAttribute('data-ve-open') === '1';
+                    if (open) { box.removeAttribute('data-ve-open'); openGroups[title] = false; }
+                    else { box.setAttribute('data-ve-open', '1'); openGroups[title] = true; }
+                });
+            }
+            box.appendChild(head);
+            box.appendChild(body);
+            inspectorBody.appendChild(box);
             return grid;
         }
+
 
         function field(grid, labelText, control, wide, hint) {
             var wrap = el('div', 've-field' + (wide ? ' ve-field-wide' : ''));
@@ -546,19 +603,38 @@
             }
             if (selection.kind === 'widget') {
                 inspectorTarget.textContent = (config.widgets[node.type] || {}).label || node.type;
-                renderContentFields(node);
             } else if (selection.kind === 'column') {
                 inspectorTarget.textContent = '栏 ' + (selection.ci + 1);
-                renderColumnFields(node);
             } else {
                 inspectorTarget.textContent = '区块 ' + (selection.si + 1);
-                renderSectionFields(node);
             }
-            renderStyleEditor(node);
+
+            // 内容与样式分两页：一页只回答一个问题，比把二十多个参数摊平好读得多。
+            var tabs = el('div', 've-tabs');
+            [['content', '内容', 'bi-pencil-square'], ['style', '样式', 'bi-palette']].forEach(function (one) {
+                var button = el('button', 've-tab');
+                button.type = 'button';
+                button.innerHTML = '<i class="bi ' + one[2] + '"></i><span>' + one[1] + '</span>';
+                if (inspectorTab === one[0]) button.setAttribute('data-ve-active', '1');
+                button.addEventListener('click', function () {
+                    inspectorTab = one[0];
+                    renderInspector();
+                });
+                tabs.appendChild(button);
+            });
+            inspectorBody.appendChild(tabs);
+
+            if (inspectorTab === 'style') {
+                renderStyleEditor(node);
+                return;
+            }
+            if (selection.kind === 'widget') renderContentFields(node);
+            else if (selection.kind === 'column') renderColumnFields(node);
+            else renderSectionFields(node);
         }
 
         function renderSectionFields(section) {
-            var grid = group('区块');
+            var grid = group('区块', { collapsible: false });
             var select_ = el('select');
             [['boxed', '定宽容器'], ['full', '通栏']].forEach(function (pair) {
                 var option = el('option', null, pair[1]);
@@ -594,7 +670,7 @@
         }
 
         function renderColumnFields(column) {
-            var grid = group('栏宽（%）');
+            var grid = group('栏宽（%）', { collapsible: false });
             BREAKPOINTS.forEach(function (bp) {
                 var input = el('input');
                 input.type = 'number';
@@ -614,7 +690,7 @@
         function renderContentFields(widget) {
             var definition = config.widgets[widget.type];
             if (!definition) return;
-            var grid = group('内容');
+            var grid = group('内容', { collapsible: false });
             Object.keys(definition.fields).forEach(function (key) {
                 buildContentField(grid, widget, key, definition.fields[key]);
             });
@@ -696,10 +772,8 @@
             }
         }
 
+        /** 样式页：断点条 + 按分组折叠的字段。分组顺序跟着 styleLabels 的声明顺序。 */
         function renderStyleEditor(node) {
-            var head = el('div', 've-group-title', '样式');
-            inspectorBody.appendChild(head);
-
             var tabs = el('div', 've-breakpoint-tabs');
             BREAKPOINTS.forEach(function (bp) {
                 var button = el('button', null, BP_LABELS[bp]);
@@ -713,18 +787,100 @@
                 tabs.appendChild(button);
             });
             inspectorBody.appendChild(tabs);
-            inspectorBody.appendChild(el('div', 've-field-hint',
+            inspectorBody.appendChild(el('div', 've-bp-hint',
                 styleBreakpoint === 'desktop'
                     ? '桌面是基准：只在这里填，平板与手机自动继承。'
                     : BP_LABELS[styleBreakpoint] + '只写覆盖值，留空表示沿用桌面。'));
 
-            var grid = el('div', 've-field-grid');
-            inspectorBody.appendChild(grid);
             if (!node.style) node.style = emptyStyle();
             if (!node.style[styleBreakpoint]) node.style[styleBreakpoint] = {};
+            var values = node.style[styleBreakpoint];
+
+            // 先按分组归拢，再一组一个折叠面板；标题上带「这组设了几项」的计数。
+            var order = [];
+            var byGroup = {};
             Object.keys(config.styleProperties).forEach(function (property) {
-                buildStyleField(grid, node, property);
+                var name = groupOf(property);
+                if (!byGroup[name]) { byGroup[name] = []; order.push(name); }
+                byGroup[name].push(property);
             });
+
+            order.forEach(function (name) {
+                var properties = byGroup[name];
+                var set = properties.filter(function (property) {
+                    return values[property] !== undefined && values[property] !== '';
+                });
+                // 设过值的组默认展开：用户回来第一眼就该看见自己改过的地方。
+                if (set.length && openGroups[name] === undefined) openGroups[name] = true;
+                var grid = group(name, { count: set.length });
+                properties.forEach(function (property) {
+                    buildStyleField(grid, node, property);
+                });
+                if (set.length) {
+                    var clear = el('button', 've-btn ve-btn-quiet ve-field-wide', '清空这一组');
+                    clear.type = 'button';
+                    clear.addEventListener('click', function () {
+                        set.forEach(function (property) { delete values[property]; });
+                        setDirty(true);
+                        refreshCanvas();
+                        renderInspector();
+                    });
+                    grid.appendChild(clear);
+                }
+            });
+        }
+
+        var LENGTH_UNITS = ['px', 'rem', 'em', '%', 'vh', 'vw'];
+
+        /** 长度值拆成「数字 + 单位」两个控件：手打 16px 比拨一个数字慢得多。 */
+        function lengthControl(current, commit) {
+            var wrap = el('div', 've-input-row');
+            var match = /^(-?\d+(?:\.\d+)?)(px|rem|em|%|vh|vw)?$/.exec(String(current || '').trim());
+            var number = el('input', 've-input-num');
+            number.type = 'number';
+            number.step = '1';
+            number.placeholder = '—';
+            number.value = match ? match[1] : '';
+            var unit = el('select', 've-input-unit');
+            LENGTH_UNITS.forEach(function (one) {
+                var option = el('option', null, one);
+                option.value = one;
+                if ((match && match[2] ? match[2] : 'px') === one) option.selected = true;
+                unit.appendChild(option);
+            });
+            var push = function () {
+                var raw = number.value.trim();
+                commit(raw === '' ? '' : raw + unit.value);
+            };
+            number.addEventListener('input', push);
+            unit.addEventListener('change', push);
+            wrap.appendChild(number);
+            wrap.appendChild(unit);
+            return wrap;
+        }
+
+        /** 颜色值配一个原生取色器：能取色，也能保留 var(--ui-primary) 这类写法。 */
+        function colorControl(current, commit) {
+            var wrap = el('div', 've-input-row');
+            var swatch = el('input', 've-input-swatch');
+            swatch.type = 'color';
+            swatch.value = /^#[0-9a-fA-F]{6}$/.test(String(current || '')) ? current : '#2563eb';
+            var text = el('input', 've-input-text');
+            text.type = 'text';
+            text.value = current || '';
+            text.placeholder = '#2563eb / rgba(…) / var(--ui-primary)';
+            swatch.addEventListener('input', function () {
+                text.value = swatch.value;
+                commit(swatch.value);
+            });
+            text.addEventListener('input', function () {
+                var raw = text.value.trim();
+                if (/^#[0-9a-fA-F]{6}$/.test(raw)) swatch.value = raw;
+                commit(raw);
+            });
+            wrap.appendChild(swatch);
+            wrap.appendChild(text);
+            return wrap;
         }
 
         function buildStyleField(grid, node, property) {
@@ -733,6 +889,14 @@
             var values = node.style[styleBreakpoint];
             var options = type === 'shadow' ? Object.keys(SHADOWS) : enumOf(type);
             var control;
+            var wide = false;
+
+            var commit = function (raw) {
+                if (raw === '' || raw == null) delete values[property];
+                else values[property] = raw;
+                setDirty(true);
+                refreshCanvas();
+            };
 
             if (options.length) {
                 control = el('select');
@@ -745,28 +909,28 @@
                     if (String(values[property] || '') === value) option.selected = true;
                     control.appendChild(option);
                 });
+                control.addEventListener('change', function () { commit(control.value.trim()); });
+            } else if (type === 'length') {
+                control = lengthControl(values[property] || '', commit);
+                wide = true;
+            } else if (type === 'color') {
+                control = colorControl(values[property] || '', commit);
+                wide = true;
             } else {
                 control = el('input');
                 control.type = 'text';
                 control.value = values[property] || '';
-                if (type === 'color') control.placeholder = '#2563eb / rgba(…) / var(--ui-primary)';
-                else if (type === 'ratio') control.placeholder = '如 1.6';
+                if (type === 'ratio') control.placeholder = '如 1.6';
                 else if (type === 'image') control.placeholder = '图片地址';
-                else control.placeholder = '如 16px（不写单位按 px）';
+                else control.placeholder = '值';
+                wide = type === 'image';
+                control.addEventListener('input', function () { commit(control.value.trim()); });
             }
 
-            control.addEventListener(control.tagName === 'SELECT' ? 'change' : 'input', function () {
-                var raw = control.value.trim();
-                if (raw === '') {
-                    delete values[property];
-                } else {
-                    values[property] = raw;
-                }
-                setDirty(true);
-                refreshCanvas();
-            });
-
-            field(grid, labelOf(property), control, type === 'image');
+            var wrap = field(grid, labelOf(property), control, wide);
+            if (values[property] !== undefined && values[property] !== '') {
+                wrap.setAttribute('data-ve-set', '1');
+            }
         }
 
         // ================= 结构操作 =================
@@ -894,22 +1058,53 @@
             select({ kind: 'section', si: at, ci: 0, wi: 0 });
         }
 
-        // ---- 拖放：从左侧控件轨拖到某一栏 ----
+        // ---- 拖放：左侧控件轨 → 栏；画布内控件换位；区块换序 ----
 
+        /**
+         * 当前拖动的东西。三种来源共用一个状态：
+         *   {mode:'new',     type}                — 从左侧控件轨拖出的新控件
+         *   {mode:'widget',  from:{si,ci,wi}}     — 画布里已有的控件（跨栏也走这条）
+         *   {mode:'section', from:{si}}           — 区块整体换序
+         * dataTransfer 只用来让浏览器认账（Firefox 不 setData 就不触发 drop）。
+         */
+        var drag = null;
+        /** 兼容旧字段名：外部代码若还读 dragType，仍能拿到控件类型。 */
         var dragType = null;
+
+        function clearDropMarks() {
+            Array.prototype.forEach.call(canvas.querySelectorAll('[data-ve-drop],[data-ve-drop-edge]'), function (node) {
+                node.removeAttribute('data-ve-drop');
+                node.removeAttribute('data-ve-drop-edge');
+            });
+        }
+
+        function endDrag() {
+            drag = null;
+            dragType = null;
+            clearDropMarks();
+            canvas.removeAttribute('data-ve-dragging');
+        }
+
+        function pathParts(node) {
+            return (node.getAttribute('data-ve-path') || '').split('.').map(function (one) {
+                return parseInt(one, 10);
+            });
+        }
 
         function bindPalette() {
             Array.prototype.forEach.call(stage.querySelectorAll('[data-ve-add]'), function (chip) {
                 var type = chip.getAttribute('data-ve-add');
                 chip.addEventListener('click', function () { addWidget(type); });
                 chip.addEventListener('dragstart', function (event) {
+                    drag = { mode: 'new', type: type };
                     dragType = type;
+                    canvas.setAttribute('data-ve-dragging', 'new');
                     if (event.dataTransfer) {
                         event.dataTransfer.effectAllowed = 'copy';
                         event.dataTransfer.setData('text/plain', type);
                     }
                 });
-                chip.addEventListener('dragend', function () { dragType = null; });
+                chip.addEventListener('dragend', endDrag);
             });
             Array.prototype.forEach.call(stage.querySelectorAll('[data-ve-add-section]'), function (button) {
                 button.addEventListener('click', function () {
@@ -918,29 +1113,153 @@
             });
         }
 
+        /** 从树上摘下一个控件，返回它本身；摘完不刷新画布，由调用方统一收尾。 */
+        function detachWidget(from) {
+            var section = tree.sections[from.si];
+            var column = section && (section.columns || [])[from.ci];
+            if (!column || !column.widgets[from.wi]) return null;
+            return column.widgets.splice(from.wi, 1)[0];
+        }
+
+        /** 把控件插进目标栏的指定位置。同栏内移动时索引要按摘除后的数组算。 */
+        function moveWidget(from, to) {
+            var widget = detachWidget(from);
+            if (!widget) return;
+            var target = tree.sections[to.si] && (tree.sections[to.si].columns || [])[to.ci];
+            if (!target) { // 目标没了（理论上不会）——放回原处，别把用户的控件弄丢。
+                var back = tree.sections[from.si].columns[from.ci];
+                back.widgets.splice(from.wi, 0, widget);
+                return;
+            }
+            var index = to.wi;
+            if (from.si === to.si && from.ci === to.ci && from.wi < index) index -= 1;
+            index = Math.max(0, Math.min(index, target.widgets.length));
+            target.widgets.splice(index, 0, widget);
+            setDirty(true);
+            refreshCanvas();
+            select({ kind: 'widget', si: to.si, ci: to.ci, wi: index });
+        }
+
+        function moveSection(fromIndex, toIndex) {
+            if (fromIndex === toIndex || fromIndex + 1 === toIndex) return;
+            var moved = tree.sections.splice(fromIndex, 1)[0];
+            var index = toIndex > fromIndex ? toIndex - 1 : toIndex;
+            index = Math.max(0, Math.min(index, tree.sections.length));
+            tree.sections.splice(index, 0, moved);
+            setDirty(true);
+            refreshCanvas();
+            select({ kind: 'section', si: index, ci: 0, wi: 0 });
+        }
+
+        /**
+         * 落点索引：按鼠标在各控件上的位置算「插在第几个之前」，
+         * 并把提示线画在对应控件的上边或下边——Elementor 的手感全在这条线上。
+         */
+        function widgetDropIndex(column, event) {
+            var items = column.querySelectorAll(':scope > [data-ve-kind="widget"]');
+            if (!items.length) return 0;
+            for (var i = 0; i < items.length; i++) {
+                var box = items[i].getBoundingClientRect();
+                if (event.clientY < box.top + box.height / 2) {
+                    items[i].setAttribute('data-ve-drop-edge', 'before');
+                    return i;
+                }
+            }
+            items[items.length - 1].setAttribute('data-ve-drop-edge', 'after');
+            return items.length;
+        }
+
         function bindDropTargets() {
+            // 画布内的控件与区块自己就是拖动源。
+            Array.prototype.forEach.call(canvas.querySelectorAll('[data-ve-kind="widget"]'), function (node) {
+                node.addEventListener('dragstart', function (event) {
+                    event.stopPropagation();
+                    var parts = pathParts(node);
+                    drag = { mode: 'widget', from: { si: parts[0], ci: parts[1], wi: parts[2] } };
+                    dragType = null;
+                    canvas.setAttribute('data-ve-dragging', 'widget');
+                    node.setAttribute('data-ve-drag-source', '1');
+                    if (event.dataTransfer) {
+                        event.dataTransfer.effectAllowed = 'move';
+                        event.dataTransfer.setData('text/plain', 've-widget');
+                    }
+                });
+                node.addEventListener('dragend', function () {
+                    node.removeAttribute('data-ve-drag-source');
+                    endDrag();
+                });
+            });
+
+            Array.prototype.forEach.call(canvas.querySelectorAll('[data-ve-kind="section"]'), function (node) {
+                node.addEventListener('dragstart', function (event) {
+                    // 控件的 dragstart 已经 stopPropagation，能到这里的就是拖区块本身。
+                    drag = { mode: 'section', from: { si: pathParts(node)[0] } };
+                    dragType = null;
+                    canvas.setAttribute('data-ve-dragging', 'section');
+                    node.setAttribute('data-ve-drag-source', '1');
+                    if (event.dataTransfer) {
+                        event.dataTransfer.effectAllowed = 'move';
+                        event.dataTransfer.setData('text/plain', 've-section');
+                    }
+                });
+                node.addEventListener('dragend', function () {
+                    node.removeAttribute('data-ve-drag-source');
+                    endDrag();
+                });
+                node.addEventListener('dragover', function (event) {
+                    if (!drag || drag.mode !== 'section') return;
+                    event.preventDefault();
+                    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+                    clearDropMarks();
+                    var box = node.getBoundingClientRect();
+                    node.setAttribute('data-ve-drop-edge',
+                        event.clientY < box.top + box.height / 2 ? 'before' : 'after');
+                });
+                node.addEventListener('drop', function (event) {
+                    if (!drag || drag.mode !== 'section') return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    var edge = node.getAttribute('data-ve-drop-edge');
+                    var at = pathParts(node)[0] + (edge === 'after' ? 1 : 0);
+                    var from = drag.from.si;
+                    endDrag();
+                    moveSection(from, at);
+                });
+            });
+
             Array.prototype.forEach.call(canvas.querySelectorAll('[data-ve-kind="column"]'), function (node) {
                 node.addEventListener('dragover', function (event) {
-                    if (!dragType) return;
+                    if (!drag || drag.mode === 'section') return;
                     event.preventDefault();
                     event.stopPropagation();
-                    if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+                    if (event.dataTransfer) {
+                        event.dataTransfer.dropEffect = drag.mode === 'new' ? 'copy' : 'move';
+                    }
+                    clearDropMarks();
                     node.setAttribute('data-ve-drop', '1');
+                    widgetDropIndex(node, event);
                 });
-                node.addEventListener('dragleave', function () { node.removeAttribute('data-ve-drop'); });
+                node.addEventListener('dragleave', function (event) {
+                    if (event.target === node) node.removeAttribute('data-ve-drop');
+                });
                 node.addEventListener('drop', function (event) {
+                    if (!drag || drag.mode === 'section') return;
                     event.preventDefault();
                     event.stopPropagation();
-                    node.removeAttribute('data-ve-drop');
-                    var type = dragType || (event.dataTransfer && event.dataTransfer.getData('text/plain'));
-                    dragType = null;
-                    if (!type || !config.widgets[type]) return;
-                    var parts = node.getAttribute('data-ve-path').split('.');
-                    var si = parseInt(parts[0], 10);
-                    var ci = parseInt(parts[1], 10);
+                    var parts = pathParts(node);
+                    var si = parts[0];
+                    var ci = parts[1];
                     var column = tree.sections[si] && tree.sections[si].columns[ci];
+                    var wi = column ? widgetDropIndex(node, event) : 0;
+                    var current = drag;
+                    endDrag();
                     if (!column) return;
-                    addWidget(type, { column: column, si: si, ci: ci });
+                    if (current.mode === 'new') {
+                        if (!config.widgets[current.type]) return;
+                        addWidget(current.type, { column: column, si: si, ci: ci, wi: wi });
+                    } else {
+                        moveWidget(current.from, { si: si, ci: ci, wi: wi });
+                    }
                 });
             });
         }
@@ -1104,12 +1423,12 @@
             return nodes.length ? nodes[nodes.length - 1] : null;
         }
 
-        function applyToField() {
-            if (busy || !tree) return;
-            busy = true;
-            if (applyButton) applyButton.disabled = true;
-            setStatus('正在应用…');
-            post(config.saveUrl, { tree: JSON.stringify(tree) }).then(function (data) {
+        /**
+         * 把树落存并写回内容字段。resolve 后字段里已经是入库产物。
+         * 这一步不碰核心表单的提交语义，只负责「字段里有正确的东西」。
+         */
+        function syncField() {
+            return post(config.saveUrl, { tree: JSON.stringify(tree) }).then(function (data) {
                 var input = contentInput();
                 if (!input) throw new Error('找不到内容字段，无法写回');
                 input.value = data.block;
@@ -1118,13 +1437,89 @@
                 // 服务端重新渲染过一遍，画布跟着换成入库产物，避免两边不一致。
                 if (data.canvas_css && canvasStyle) canvasStyle.textContent = data.canvas_css;
                 setDirty(false);
-                setStatus('已应用到内容字段，记得保存这条内容');
+                return data;
+            });
+        }
+
+        /**
+         * 「保存」：落存树 → 写回字段 → 真的提交核心表单。
+         *
+         * 之前这颗按钮只做到写回字段，用户还得退出编辑器再手动保存一次——这不合逻辑，
+         * 用户说得对。现在默认用 fetch 提交整张核心表单：修订 / 排期 / 审批 / 审计
+         * 全部照常由 ContentWorkflow 走，而用户留在编辑器里不被弹走。
+         * fetch 这条路走不通（响应异常、网络错误）就退回一次真实表单提交，
+         * 宁可跳页也不能让用户以为保存了其实没保存。
+         */
+        function saveContent() {
+            if (busy || !tree) return;
+            if (!form) { setStatus('找不到内容表单，无法保存'); return; }
+            if (form.checkValidity && !form.checkValidity()) {
+                setStatus('表单里还有必填项没填，先补齐再保存');
+                if (form.reportValidity) form.reportValidity();
+                return;
+            }
+            busy = true;
+            if (applyButton) applyButton.disabled = true;
+            setStatus('正在保存…');
+
+            syncField().then(function () {
+                var body = new FormData(form);
+                // 核心的保存按钮多半带 name/value（如 action=publish）；FormData 不会
+                // 自动带上未点击的提交按钮，这里显式补一个默认提交项。
+                var submitter = form.querySelector('button[type="submit"][name], input[type="submit"][name]');
+                if (submitter && submitter.name && !body.has(submitter.name)) {
+                    body.append(submitter.name, submitter.value || '');
+                }
+                return fetch(form.getAttribute('action') || window.location.href, {
+                    method: (form.getAttribute('method') || 'POST').toUpperCase(),
+                    body: body,
+                    credentials: 'same-origin',
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                });
+            }).then(function (response) {
+                if (!response || !response.ok) throw new Error('fallback');
+                setStatus('已保存到这条内容');
+                toast('已保存');
             }).catch(function (error) {
-                setStatus(error.message || '应用失败');
+                if (error && error.message && error.message !== 'fallback') {
+                    setStatus(error.message);
+                    busy = false;
+                    if (applyButton) applyButton.disabled = false;
+                    return;
+                }
+                // 字段已经写好了，交回表单做一次真实提交（会跳页，但一定保存得上）。
+                setStatus('改用表单提交保存…');
+                form.submit();
             }).then(function () {
                 busy = false;
                 if (applyButton) applyButton.disabled = false;
             });
+        }
+
+        /** 只写回字段、不提交：给「先看看效果再决定」的人留一条路。 */
+        function applyToField() {
+            if (busy || !tree) return;
+            busy = true;
+            setStatus('正在应用…');
+            syncField().then(function () {
+                setStatus('已写回内容字段，尚未保存');
+            }).catch(function (error) {
+                setStatus(error.message || '应用失败');
+            }).then(function () { busy = false; });
+        }
+
+        /** 轻提示：保存留在编辑器里时，状态栏之外再给一个看得见的确认。 */
+        function toast(message) {
+            var node = el('div', 've-toast', message);
+            stage.appendChild(node);
+            var remove = function () { if (node.parentNode) node.parentNode.removeChild(node); };
+            if (gsap && !reduceMotion) {
+                gsap.fromTo(node, { y: 16, opacity: 0 },
+                    { y: 0, opacity: 1, duration: .32, ease: 'back.out(1.8)' });
+                gsap.to(node, { opacity: 0, y: 8, duration: .3, delay: 2.2, onComplete: remove });
+            } else {
+                setTimeout(remove, 2400);
+            }
         }
 
         function restoreOriginal() {
@@ -1204,6 +1599,8 @@
                         if (launcher) launcher.removeAttribute('data-ve-active');
                         closeStage();
                     } else if (action === 'apply') {
+                        saveContent();
+                    } else if (action === 'apply-only') {
                         applyToField();
                     } else if (action === 'restore') {
                         restoreOriginal();

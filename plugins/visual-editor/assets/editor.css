@@ -880,6 +880,191 @@ body.ve-stage-open {
     box-shadow: 0 1px 2px rgba(0, 0, 0, .1);
 }
 
+/* ---- 检查器：内容 / 样式两个页签 ---- */
+
+.ve-tabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: .15rem;
+    margin-bottom: .6rem;
+    padding: .15rem;
+    border: 1px solid var(--ui-border, #e4e4e7);
+    border-radius: 9px;
+    background: var(--ui-bg, #f4f4f5);
+}
+
+.ve-tab {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: .3rem;
+    padding: .35rem .5rem;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--ui-text-muted, #71717a);
+    font-size: .75rem;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: background .18s ease, color .18s ease;
+}
+
+.ve-tab:hover { color: var(--ui-text, #18181b); }
+
+.ve-tab[data-ve-active="1"] {
+    background: var(--ui-surface, #fff);
+    color: #2563eb;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .1);
+}
+
+.ve-bp-hint {
+    margin: .4rem 0 .7rem;
+    color: var(--ui-text-muted, #a1a1aa);
+    font-size: .6875rem;
+    line-height: 1.6;
+}
+
+/* ---- 检查器：可折叠分组 ---- */
+
+.ve-acc {
+    margin-bottom: .45rem;
+    border: 1px solid var(--ui-border, #e4e4e7);
+    border-radius: 9px;
+    background: var(--ui-surface, #fff);
+    overflow: hidden;
+}
+
+.ve-acc-head {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    width: 100%;
+    padding: .5rem .6rem;
+    border: 0;
+    background: var(--ui-bg, #fafafa);
+    color: var(--ui-text, #18181b);
+    font-size: .75rem;
+    font-weight: 600;
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.ve-acc-head:disabled { cursor: default; }
+
+.ve-acc-head:hover:not(:disabled) { color: #2563eb; }
+
+.ve-acc-caret {
+    flex: 0 0 auto;
+    font-size: .6875rem;
+    color: var(--ui-text-muted, #a1a1aa);
+    transition: transform .2s ease;
+}
+
+.ve-acc-head:disabled .ve-acc-caret { visibility: hidden; }
+
+.ve-acc[data-ve-open="1"] .ve-acc-caret { transform: rotate(90deg); }
+
+.ve-acc-title { flex: 1 1 auto; min-width: 0; }
+
+/* 「这一组已经设了几项」——不点开也知道哪里被改过。 */
+.ve-acc-count {
+    flex: 0 0 auto;
+    min-width: 1.1rem;
+    padding: 0 .3rem;
+    border-radius: 999px;
+    background: rgba(37, 99, 235, .12);
+    color: #2563eb;
+    font-size: .625rem;
+    line-height: 1.2rem;
+    text-align: center;
+}
+
+.ve-acc-body { display: none; padding: .6rem; }
+
+.ve-acc[data-ve-open="1"] .ve-acc-body { display: block; }
+
+/* 设过值的字段左侧加一道蓝条：一眼看出哪几项被覆盖了。 */
+.ve-field[data-ve-set="1"] > label {
+    color: #2563eb;
+    font-weight: 600;
+}
+
+.ve-field[data-ve-set="1"] > label::before {
+    content: "";
+    display: inline-block;
+    width: .25rem;
+    height: .55rem;
+    margin-right: .25rem;
+    border-radius: 2px;
+    background: #2563eb;
+    vertical-align: -1px;
+}
+
+/* 长度 / 颜色的复合控件：数字 + 单位、色块 + 文本。 */
+.ve-input-row {
+    display: flex;
+    gap: .3rem;
+    min-width: 0;
+}
+
+.ve-field .ve-input-num { flex: 1 1 auto; min-width: 0; }
+
+.ve-field .ve-input-unit { flex: 0 0 4.25rem; width: 4.25rem; }
+
+.ve-field .ve-input-text { flex: 1 1 auto; min-width: 0; }
+
+.ve-field .ve-input-swatch {
+    flex: 0 0 2rem;
+    width: 2rem;
+    height: 1.9rem;
+    padding: .1rem;
+    cursor: pointer;
+}
+
+/* ---- 拖放：插入位置提示线 ---- */
+
+.ve-canvas[data-ve-dragging] .ve-handle { display: block; }
+
+.ve-canvas [data-ve-drag-source="1"] { opacity: .45; }
+
+.ve-canvas [data-ve-drop-edge] { position: relative; }
+
+.ve-canvas [data-ve-drop-edge]::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    z-index: 3;
+    height: 3px;
+    border-radius: 2px;
+    background: #2563eb;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, .18);
+    pointer-events: none;
+}
+
+.ve-canvas [data-ve-drop-edge="before"]::after { top: -2px; }
+
+.ve-canvas [data-ve-drop-edge="after"]::after { bottom: -2px; }
+
+/* ---- 保存后的轻提示 ---- */
+
+.ve-toast {
+    position: absolute;
+    left: 50%;
+    bottom: 1.5rem;
+    z-index: 30;
+    transform: translateX(-50%);
+    padding: .5rem .9rem;
+    border-radius: 999px;
+    background: #18181b;
+    color: #fff;
+    font-size: .8125rem;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, .25);
+    pointer-events: none;
+}
+
 /* 窄屏（后台在笔电上很常见）把三栏压成两栏：检查器优先，控件轨收窄。 */
 @media (max-width: 1200px) {
     .ve-rail { flex-basis: 180px; }
