@@ -2,16 +2,24 @@
 declare(strict_types=1);
 
 /**
- * AI客服插件。
+ * AI客服插件（1.2.0）。
  *
- * 前台对话经过同源会话 POST 通道，避免把管理员 API token 暴露给访客；
- * 后台配置复用插件声明式 settings，因此仍有系统生成的 API 与 Agent 动作，
- * 配置页自身拆成四个独立子页面：conversation / trigger / appearance / ai。
+ * 结构：
+ * - 后台 8 个子页面（会话/触发/外观/AI/资料/工具/边界/输入），逐页保存；
+ * - 后台异步动作（上传资料文件、检索站内内容、上传表情包、取预设）走同一组 POST 路由；
+ * - 前台两个同源端点：/ai-customer-service/chat 与 /ai-customer-service/action。
+ *   两者都不是 /api/v1 端点——访客没有后台账号，做成 API 会把匿名会话绑到管理员身上。
+ *   CSRF 由核心 Router 对所有非 /api/ 的 POST 统一校验。
  */
 if (!defined('CODE_SCHEMA_VERSION')) exit;
 
 require_once __DIR__ . '/src/AiCustomerService.php';
+require_once __DIR__ . '/src/AiCustomerServiceCards.php';
+require_once __DIR__ . '/src/AiCustomerServiceGuardrails.php';
+require_once __DIR__ . '/src/AiCustomerServiceKnowledge.php';
+require_once __DIR__ . '/src/AiCustomerServiceTools.php';
 require_once __DIR__ . '/src/AiCustomerServiceChat.php';
+require_once __DIR__ . '/src/AiCustomerServiceAdmin.php';
 
 add_filter('admin.menu.register', static function (array $items): array {
     if (!\App\Core\Auth::can('ai_customer_service.manage')) {
@@ -32,7 +40,7 @@ add_action('routes.admin.register', static function ($router): void {
         \App\Core\Auth::requirePermission('ai_customer_service.manage');
         echo plugin_view('ai-customer-service', 'admin', AiCustomerService::adminPageData($page));
     };
-    $redirectToPage = static function (string $page): void {
+    $redirect = static function (string $page): void {
         $page = array_key_exists($page, AiCustomerService::ADMIN_PAGES) ? $page : 'conversation';
         header('Location: ' . admin_url('/ai-customer-service/' . $page));
         exit;
@@ -42,25 +50,33 @@ add_action('routes.admin.register', static function ($router): void {
         $render('conversation');
     });
 
-    $router->get('/admin/ai-customer-service/{page}', static function (string $page = '') use ($render, $redirectToPage): void {
+    // 异步动作放在 /x/{action} 下，避免和 /{page} 抢同一段路径。
+    $router->post('/admin/ai-customer-service/x/{action}', static function (string $action = '') : void {
+        AiCustomerServiceAdmin::handle(AiCustomerService::slugValue($action, 40));
+    });
+
+    $router->get('/admin/ai-customer-service/{page}', static function (string $page = '') use ($render, $redirect): void {
         if (!array_key_exists($page, AiCustomerService::ADMIN_PAGES)) {
-            $redirectToPage('conversation');
+            $redirect('conversation');
         }
         $render($page);
     });
 
-    $router->post('/admin/ai-customer-service', static function () use ($redirectToPage): void {
+    $router->post('/admin/ai-customer-service', static function () use ($redirect): void {
         \App\Core\Auth::requirePermission('ai_customer_service.manage');
         $returnPage = AiCustomerService::adminReturnPage();
         $result = AiCustomerService::saveAdminConfiguration();
         flash(!empty($result['ok']) ? 'success' : 'error', (string)($result['message'] ?? '保存失败'));
-        $redirectToPage($returnPage);
+        $redirect($returnPage);
     });
 });
 
 add_action('routes.frontend.register', static function ($router): void {
     $router->post('/ai-customer-service/chat', static function (): void {
         AiCustomerServiceChat::dispatch();
+    });
+    $router->post('/ai-customer-service/action', static function (): void {
+        AiCustomerServiceChat::dispatchAction();
     });
 });
 

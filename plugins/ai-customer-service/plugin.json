@@ -1,643 +1,1026 @@
 {
-  "slug": "ai-customer-service",
-  "name": "AI客服",
-  "version": "1.1.0",
-  "author": "odi0011",
-  "author_url": "",
-  "homepage": "",
-  "description": "为前台站点提供可配置的悬浮 AI 客服窗口：欢迎语与快捷问题、设备/页面/滚动/离开意图触发、提醒动画与角标、气泡级配色、字体与圆角细节、系统 AI 模型或插件独立的 OpenAI 兼容服务，以及人工客服跳转。",
-  "icon": "icon.svg",
-  "screenshots": [],
-  "requires": "7i",
-  "requires_php": "8.0",
-  "license": "MIT",
-  "category": "other",
-  "changelog": "后台拆分为四个独立子页面并支持逐页保存；前台窗口默认收起且可正常关闭；新增悬浮提示、引流气泡、未读角标、提醒动画、自定义浮标图片、顶栏/双方气泡独立配色、字号、圆角与投影等细粒度配置；右侧预览随左侧修改实时刷新。",
-  "tags": ["AI", "客服", "聊天", "知识库", "前台悬浮窗"],
-  "permissions": [
-    {
-      "key": "ai_customer_service.view",
-      "label": "查看 AI 客服状态",
-      "group": "plugin",
-      "sort_order": 1340
-    },
-    {
-      "key": "ai_customer_service.manage",
-      "label": "配置 AI 客服",
-      "group": "plugin",
-      "sort_order": 1350
-    }
-  ],
-  "assets": [
-    {
-      "handle": "ai-customer-service-widget-css",
-      "type": "css",
-      "area": "frontend",
-      "src": "assets/customer-service.css",
-      "version": "1.1.0"
-    },
-    {
-      "handle": "ai-customer-service-widget-js",
-      "type": "js",
-      "area": "frontend",
-      "src": "assets/customer-service.js",
-      "version": "1.1.0",
-      "defer": true
-    },
-    {
-      "handle": "ai-customer-service-admin-css",
-      "type": "css",
-      "area": "admin",
-      "src": "assets/admin.css",
-      "version": "1.1.0"
-    },
-    {
-      "handle": "ai-customer-service-admin-js",
-      "type": "js",
-      "area": "admin",
-      "src": "assets/admin.js",
-      "version": "1.1.0",
-      "defer": true
-    }
-  ],
-  "settings": {
-    "title": "AI客服",
-    "permission": "ai_customer_service.manage",
-    "sections": [
-      {
-        "key": "conversation",
-        "label": "会话内容",
-        "description": "访客看到的身份、欢迎消息、快捷问题与人工转接入口。",
-        "fields": [
-          {
-            "key": "enabled",
-            "label": "启用前台 AI 客服",
-            "type": "boolean",
-            "default": true
-          },
-          {
-            "key": "brand_name",
-            "label": "客服名称",
-            "type": "text",
-            "default": "AI客服",
-            "max_length": 80,
-            "placeholder": "例如：产品顾问"
-          },
-          {
-            "key": "team_label",
-            "label": "副标题",
-            "type": "text",
-            "default": "智能在线服务",
-            "max_length": 120,
-            "placeholder": "例如：通常几分钟内回复"
-          },
-          {
-            "key": "welcome_message",
-            "label": "欢迎语",
-            "type": "textarea",
-            "default": "您好，我是您的 AI 客服。有什么可以帮您？",
-            "max_length": 1000
-          },
-          {
-            "key": "input_placeholder",
-            "label": "输入框提示语",
-            "type": "text",
-            "default": "输入您的问题...",
-            "max_length": 160
-          },
-          {
-            "key": "quick_replies_title",
-            "label": "快捷问题标题",
-            "type": "text",
-            "default": "",
-            "max_length": 60,
-            "placeholder": "例如：猜你想问",
-            "help": "显示在快捷问题上方的分组标题，留空时不显示。"
-          },
-          {
-            "key": "quick_replies",
-            "label": "快捷问题",
-            "type": "textarea",
-            "default": "我想了解产品\n如何获取报价\n如何联系人工客服",
-            "max_length": 1000,
-            "help": "每行一个问题，最多显示 8 条。"
-          },
-          {
-            "key": "unavailable_message",
-            "label": "服务不可用提示",
-            "type": "textarea",
-            "default": "当前客服暂时不可用，请稍后再试。",
-            "max_length": 500
-          },
-          {
-            "key": "handoff_label",
-            "label": "人工客服按钮文案",
-            "type": "text",
-            "default": "联系人工客服",
-            "max_length": 80
-          },
-          {
-            "key": "handoff_url",
-            "label": "人工客服跳转链接",
-            "type": "url",
-            "default": "",
-            "max_length": 2048,
-            "help": "留空时不显示人工客服按钮。"
-          },
-          {
-            "key": "history_limit",
-            "label": "单次会话保留消息数",
-            "type": "number",
-            "default": 8,
-            "min": 2,
-            "max": 20,
-            "step": 1
-          },
-          {
-            "key": "rate_limit_per_minute",
-            "label": "每访客每分钟最多提问次数",
-            "type": "number",
-            "default": 8,
-            "min": 1,
-            "max": 60,
-            "step": 1
-          }
+    "slug": "ai-customer-service",
+    "name": "AI客服",
+    "version": "1.2.0",
+    "author": "odi0011",
+    "author_url": "",
+    "homepage": "",
+    "description": "为前台站点提供一个会办事的悬浮 AI 客服：描述词与资料分离管理（站内产品/文章/页面 + 上传知识库文件），可调用工具回一张能点击跳转的站内卡片，支持询盘转化与转人工的自然语言识别、话题边界约束、拖拽布局与预设主题、emoji 与自定义表情包。",
+    "icon": "icon.svg",
+    "screenshots": [],
+    "requires": "7i",
+    "requires_php": "8.0",
+    "license": "MIT",
+    "category": "other",
+    "changelog": "后台整体按 Ant Design 语言重做（分组导航、表单控件、颜色画板、拖拽定位、预设主题）；知识库拆成「描述词」与「资料」两套，资料可选站内产品/文章/页面/自定义内容或上传文件；新增工具调用与站内卡片（产品/文章/名片/询盘/社媒，多套预设可切换、点击可跳转）；新增话题边界约束与询盘转化、转人工等意图识别；前台改为 Ant Design X 风格的对话布局，新增飘带、定时主动问候、气泡动效、emoji 与自定义表情包；修复引流气泡塌成竖条、正文与次要文字颜色不可配置、逐页保存互相锁死、每次渲染重复解析清单等问题。",
+    "tags": [
+        "AI",
+        "客服",
+        "聊天",
+        "知识库",
+        "工具调用",
+        "询盘",
+        "前台悬浮窗"
+    ],
+    "permissions": [
+        {
+            "key": "ai_customer_service.view",
+            "label": "查看 AI 客服状态",
+            "group": "plugin",
+            "sort_order": 1340
+        },
+        {
+            "key": "ai_customer_service.manage",
+            "label": "配置 AI 客服",
+            "group": "plugin",
+            "sort_order": 1350
+        }
+    ],
+    "assets": [
+        {
+            "handle": "ai-customer-service-widget-css",
+            "type": "css",
+            "area": "frontend",
+            "src": "assets/customer-service.css",
+            "version": "1.2.0"
+        },
+        {
+            "handle": "ai-customer-service-widget-js",
+            "type": "js",
+            "area": "frontend",
+            "src": "assets/customer-service.js",
+            "version": "1.2.0",
+            "defer": true
+        },
+        {
+            "handle": "ai-customer-service-admin-css",
+            "type": "css",
+            "area": "admin",
+            "src": "assets/admin.css",
+            "version": "1.2.0"
+        },
+        {
+            "handle": "ai-customer-service-admin-js",
+            "type": "js",
+            "area": "admin",
+            "src": "assets/admin.js",
+            "version": "1.2.0",
+            "defer": true
+        }
+    ],
+    "settings": {
+        "title": "AI客服",
+        "permission": "ai_customer_service.manage",
+        "sections": [
+            {
+                "key": "conversation",
+                "label": "会话内容",
+                "description": "访客看到的身份、欢迎消息、快捷问题与人工转接入口。",
+                "fields": [
+                    {
+                        "key": "enabled",
+                        "label": "启用前台 AI 客服",
+                        "type": "boolean",
+                        "default": true
+                    },
+                    {
+                        "key": "brand_name",
+                        "label": "客服名称",
+                        "type": "text",
+                        "default": "AI客服",
+                        "max_length": 80,
+                        "placeholder": "例如：产品顾问"
+                    },
+                    {
+                        "key": "team_label",
+                        "label": "副标题",
+                        "type": "text",
+                        "default": "智能在线服务",
+                        "max_length": 120,
+                        "placeholder": "例如：通常几分钟内回复"
+                    },
+                    {
+                        "key": "welcome_message",
+                        "label": "欢迎语",
+                        "type": "textarea",
+                        "default": "您好，我是您的 AI 客服。有什么可以帮您？",
+                        "max_length": 1000
+                    },
+                    {
+                        "key": "input_placeholder",
+                        "label": "输入框提示语",
+                        "type": "text",
+                        "default": "输入您的问题...",
+                        "max_length": 160
+                    },
+                    {
+                        "key": "quick_replies_title",
+                        "label": "快捷问题标题",
+                        "type": "text",
+                        "default": "",
+                        "max_length": 60,
+                        "placeholder": "例如：猜你想问",
+                        "help": "显示在快捷问题上方的分组标题，留空时不显示。"
+                    },
+                    {
+                        "key": "quick_replies",
+                        "label": "快捷问题",
+                        "type": "textarea",
+                        "default": "我想了解产品\n如何获取报价\n如何联系人工客服",
+                        "max_length": 1000,
+                        "help": "每行一个问题，最多显示 8 条。"
+                    },
+                    {
+                        "key": "unavailable_message",
+                        "label": "服务不可用提示",
+                        "type": "textarea",
+                        "default": "当前客服暂时不可用，请稍后再试。",
+                        "max_length": 500
+                    },
+                    {
+                        "key": "handoff_label",
+                        "label": "人工客服按钮文案",
+                        "type": "text",
+                        "default": "联系人工客服",
+                        "max_length": 80
+                    },
+                    {
+                        "key": "handoff_url",
+                        "label": "人工客服跳转链接",
+                        "type": "url",
+                        "default": "",
+                        "max_length": 2048,
+                        "help": "留空时不显示人工客服按钮。"
+                    },
+                    {
+                        "key": "history_limit",
+                        "label": "单次会话保留消息数",
+                        "type": "number",
+                        "default": 8,
+                        "min": 2,
+                        "max": 20,
+                        "step": 1
+                    },
+                    {
+                        "key": "rate_limit_per_minute",
+                        "label": "每访客每分钟最多提问次数",
+                        "type": "number",
+                        "default": 8,
+                        "min": 1,
+                        "max": 60,
+                        "step": 1
+                    }
+                ]
+            },
+            {
+                "key": "trigger",
+                "label": "显示与触发",
+                "description": "按设备、页面、时间、滚动深度或离开意图控制挂件何时出现，以及浮标端的提醒方式。",
+                "fields": [
+                    {
+                        "key": "device_mode",
+                        "label": "显示设备",
+                        "type": "select",
+                        "default": "all",
+                        "options": [
+                            {
+                                "value": "all",
+                                "label": "桌面与移动端"
+                            },
+                            {
+                                "value": "desktop",
+                                "label": "仅桌面端"
+                            },
+                            {
+                                "value": "mobile",
+                                "label": "仅移动端"
+                            }
+                        ]
+                    },
+                    {
+                        "key": "url_mode",
+                        "label": "页面规则",
+                        "type": "select",
+                        "default": "all",
+                        "options": [
+                            {
+                                "value": "all",
+                                "label": "全部前台页面"
+                            },
+                            {
+                                "value": "include",
+                                "label": "仅匹配的页面"
+                            },
+                            {
+                                "value": "exclude",
+                                "label": "排除匹配的页面"
+                            }
+                        ]
+                    },
+                    {
+                        "key": "url_rules",
+                        "label": "页面路径规则",
+                        "type": "textarea",
+                        "default": "",
+                        "max_length": 5000,
+                        "placeholder": "/products/*\n/contact",
+                        "help": "每行一条相对路径，支持 * 通配符；“仅匹配”模式为空时不会显示。"
+                    },
+                    {
+                        "key": "delay_seconds",
+                        "label": "延迟出现（秒）",
+                        "type": "number",
+                        "default": 0,
+                        "min": 0,
+                        "max": 300,
+                        "step": 1
+                    },
+                    {
+                        "key": "scroll_percent",
+                        "label": "滚动后出现（%）",
+                        "type": "number",
+                        "default": 0,
+                        "min": 0,
+                        "max": 100,
+                        "step": 1,
+                        "help": "填 0 表示不使用滚动触发。多个触发条件中先满足的条件生效。"
+                    },
+                    {
+                        "key": "exit_intent",
+                        "label": "离开页面时出现",
+                        "type": "boolean",
+                        "default": false
+                    },
+                    {
+                        "key": "initial_open",
+                        "label": "首次显示时自动打开窗口",
+                        "type": "boolean",
+                        "default": false
+                    },
+                    {
+                        "key": "initial_open_delay",
+                        "label": "自动打开延迟（秒）",
+                        "type": "number",
+                        "default": 0,
+                        "min": 0,
+                        "max": 120,
+                        "step": 1,
+                        "help": "挂件出现后等待多少秒再自动展开窗口；访客先手动打开则跳过。"
+                    },
+                    {
+                        "key": "once_per_session",
+                        "label": "自动动作只执行一次",
+                        "type": "boolean",
+                        "default": false,
+                        "help": "同一浏览器会话内，自动展开、提醒动画与角标只出现一次，翻页不再打扰。"
+                    },
+                    {
+                        "key": "show_launcher",
+                        "label": "显示浮标按钮",
+                        "type": "boolean",
+                        "default": true,
+                        "help": "关闭后不渲染浮标，仍可通过站点的 window.AiCustomerService API 打开窗口。"
+                    },
+                    {
+                        "key": "tooltip_text",
+                        "label": "浮标悬停提示",
+                        "type": "text",
+                        "default": "",
+                        "max_length": 80,
+                        "placeholder": "例如：有疑问？点我咨询",
+                        "help": "鼠标悬停或聚焦浮标时出现的引导文字，留空不显示。"
+                    },
+                    {
+                        "key": "teaser_enabled",
+                        "label": "显示引流气泡",
+                        "type": "boolean",
+                        "default": false,
+                        "help": "在浮标旁常驻一条可关闭的短消息，主动引导访客发起对话。"
+                    },
+                    {
+                        "key": "teaser_text",
+                        "label": "引流气泡文字",
+                        "type": "text",
+                        "default": "有问题？随时咨询",
+                        "max_length": 120
+                    },
+                    {
+                        "key": "badge_enabled",
+                        "label": "显示未读红点角标",
+                        "type": "boolean",
+                        "default": false,
+                        "help": "在浮标右上角显示一个红点，访客打开窗口后消失。"
+                    },
+                    {
+                        "key": "attention_effect",
+                        "label": "浮标提醒动画",
+                        "type": "select",
+                        "default": "none",
+                        "options": [
+                            {
+                                "value": "none",
+                                "label": "无动画"
+                            },
+                            {
+                                "value": "wiggle",
+                                "label": "摆动"
+                            },
+                            {
+                                "value": "bounce",
+                                "label": "弹跳"
+                            },
+                            {
+                                "value": "pulse",
+                                "label": "脉冲光圈"
+                            }
+                        ],
+                        "help": "在访客第一次打开窗口前循环播放的吸引注意动画。"
+                    },
+                    {
+                        "key": "ribbon_enabled",
+                        "label": "显示气泡飘带",
+                        "type": "boolean",
+                        "default": false,
+                        "help": "在窗口顶部飘一条可定时出现的横幅，用来打活动或公告。"
+                    },
+                    {
+                        "key": "ribbon_text",
+                        "label": "飘带文字",
+                        "type": "text",
+                        "default": "新客首单立减 5%",
+                        "max_length": 60
+                    },
+                    {
+                        "key": "greeting_json",
+                        "label": "定时主动问候",
+                        "type": "textarea",
+                        "default": "{\"enabled\":false,\"once_per_session\":true,\"stop_after_reply\":true,\"steps\":[{\"after\":20,\"text\":\"需要我帮您找型号或报价吗？\"}]}",
+                        "max_length": 4000,
+                        "help": "窗口打开后按时间点主动发一条问候；访客回复后自动停止。由上方可视化编辑器写入。"
+                    },
+                    {
+                        "key": "schedule_enabled",
+                        "label": "按服务时段显示",
+                        "type": "boolean",
+                        "default": false
+                    },
+                    {
+                        "key": "schedule_days",
+                        "label": "服务日",
+                        "type": "text",
+                        "default": "1,2,3,4,5,6,7",
+                        "max_length": 13,
+                        "pattern": "^[1-7](,[1-7]){0,6}$",
+                        "help": "ISO 周序号，1 为周一、7 为周日，例如 1,2,3,4,5。"
+                    },
+                    {
+                        "key": "schedule_start",
+                        "label": "服务开始时间",
+                        "type": "text",
+                        "default": "00:00",
+                        "max_length": 5,
+                        "pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d$",
+                        "placeholder": "09:00"
+                    },
+                    {
+                        "key": "schedule_end",
+                        "label": "服务结束时间",
+                        "type": "text",
+                        "default": "23:59",
+                        "max_length": 5,
+                        "pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d$",
+                        "placeholder": "18:00"
+                    }
+                ]
+            },
+            {
+                "key": "appearance",
+                "label": "外观与位置",
+                "description": "浮标形状图片、窗口尺寸投影、双方气泡配色、字体与桌面/移动端边距。位置可直接在右侧预览里拖。",
+                "fields": [
+                    {
+                        "key": "theme_json",
+                        "label": "主题与气泡样式",
+                        "type": "textarea",
+                        "default": "{\"preset\":\"aurora\",\"bubble_style\":\"soft\",\"bubble_anim\":\"rise\",\"typing\":\"dots\",\"density\":\"cozy\",\"header_style\":\"solid\",\"quick_style\":\"capsule\"}",
+                        "max_length": 3000,
+                        "help": "预设主题、气泡形态与动效、打字指示器等，由上方样式面板写入。"
+                    },
+                    {
+                        "key": "layout_json",
+                        "label": "拖拽布局",
+                        "type": "textarea",
+                        "default": "{\"panel_align\":\"right\",\"panel_gap\":12,\"teaser\":{\"dx\":-12,\"dy\":0},\"ribbon\":{\"dx\":0,\"dy\":-10},\"badge\":{\"dx\":2,\"dy\":2},\"launcher_nudge\":{\"dx\":0,\"dy\":0},\"z_index\":2147480000,\"locked\":false}",
+                        "max_length": 3000,
+                        "help": "浮标、引流气泡、飘带与角标的微调偏移；在右侧预览里拖动元素即可写入。"
+                    },
+                    {
+                        "key": "font_family",
+                        "label": "界面字体",
+                        "type": "select",
+                        "default": "system",
+                        "options": [
+                            {
+                                "value": "system",
+                                "label": "系统默认（跟随站点）"
+                            },
+                            {
+                                "value": "inter",
+                                "label": "Inter / 无衬线（现代）"
+                            },
+                            {
+                                "value": "pingfang",
+                                "label": "苹方 / 思源黑体（中文优先）"
+                            },
+                            {
+                                "value": "serif",
+                                "label": "思源宋体 / 衬线"
+                            },
+                            {
+                                "value": "rounded",
+                                "label": "圆体（亲和）"
+                            },
+                            {
+                                "value": "mono",
+                                "label": "等宽（技术感）"
+                            }
+                        ]
+                    },
+                    {
+                        "key": "launcher_style",
+                        "label": "浮标样式",
+                        "type": "select",
+                        "default": "bubble",
+                        "options": [
+                            {
+                                "value": "bubble",
+                                "label": "圆形气泡"
+                            },
+                            {
+                                "value": "pill",
+                                "label": "带文字胶囊"
+                            }
+                        ]
+                    },
+                    {
+                        "key": "launcher_icon",
+                        "label": "浮标图标",
+                        "type": "select",
+                        "default": "chat",
+                        "options": [
+                            {
+                                "value": "chat",
+                                "label": "对话"
+                            },
+                            {
+                                "value": "sparkles",
+                                "label": "闪光"
+                            },
+                            {
+                                "value": "headset",
+                                "label": "耳机"
+                            },
+                            {
+                                "value": "question",
+                                "label": "问号"
+                            }
+                        ]
+                    },
+                    {
+                        "key": "launcher_image_url",
+                        "label": "自定义浮标图片",
+                        "type": "url",
+                        "default": "",
+                        "max_length": 2048,
+                        "help": "填写后将替代图标显示这张图片（建议正方形）。胶囊样式会同时替换文字位置。"
+                    },
+                    {
+                        "key": "launcher_corner",
+                        "label": "胶囊圆角（px）",
+                        "type": "number",
+                        "default": 10,
+                        "min": 0,
+                        "max": 30,
+                        "step": 1,
+                        "help": "仅对“带文字胶囊”样式生效；圆形气泡始终为正圆。"
+                    },
+                    {
+                        "key": "position",
+                        "label": "桌面端位置",
+                        "type": "select",
+                        "default": "right",
+                        "options": [
+                            {
+                                "value": "right",
+                                "label": "右下角"
+                            },
+                            {
+                                "value": "left",
+                                "label": "左下角"
+                            }
+                        ]
+                    },
+                    {
+                        "key": "widget_size",
+                        "label": "浮标尺寸（px）",
+                        "type": "number",
+                        "default": 56,
+                        "min": 40,
+                        "max": 96,
+                        "step": 1
+                    },
+                    {
+                        "key": "panel_width",
+                        "label": "弹窗宽度（px）",
+                        "type": "number",
+                        "default": 396,
+                        "min": 300,
+                        "max": 560,
+                        "step": 1
+                    },
+                    {
+                        "key": "panel_height",
+                        "label": "弹窗高度（px）",
+                        "type": "number",
+                        "default": 600,
+                        "min": 380,
+                        "max": 800,
+                        "step": 1
+                    },
+                    {
+                        "key": "panel_radius",
+                        "label": "弹窗圆角（px）",
+                        "type": "number",
+                        "default": 16,
+                        "min": 0,
+                        "max": 32,
+                        "step": 1
+                    },
+                    {
+                        "key": "panel_shadow",
+                        "label": "弹窗投影强度",
+                        "type": "select",
+                        "default": "md",
+                        "options": [
+                            {
+                                "value": "none",
+                                "label": "无投影"
+                            },
+                            {
+                                "value": "sm",
+                                "label": "较浅"
+                            },
+                            {
+                                "value": "md",
+                                "label": "适中"
+                            },
+                            {
+                                "value": "lg",
+                                "label": "较深"
+                            }
+                        ]
+                    },
+                    {
+                        "key": "font_size",
+                        "label": "界面字号（px）",
+                        "type": "number",
+                        "default": 14,
+                        "min": 12,
+                        "max": 18,
+                        "step": 1
+                    },
+                    {
+                        "key": "desktop_offset_x",
+                        "label": "桌面端水平边距（px）",
+                        "type": "number",
+                        "default": 24,
+                        "min": 0,
+                        "max": 120,
+                        "step": 1
+                    },
+                    {
+                        "key": "desktop_offset_y",
+                        "label": "桌面端底部边距（px）",
+                        "type": "number",
+                        "default": 24,
+                        "min": 0,
+                        "max": 120,
+                        "step": 1
+                    },
+                    {
+                        "key": "mobile_offset_x",
+                        "label": "移动端水平边距（px）",
+                        "type": "number",
+                        "default": 16,
+                        "min": 4,
+                        "max": 48,
+                        "step": 1
+                    },
+                    {
+                        "key": "mobile_offset_y",
+                        "label": "移动端底部边距（px）",
+                        "type": "number",
+                        "default": 16,
+                        "min": 4,
+                        "max": 80,
+                        "step": 1
+                    },
+                    {
+                        "key": "accent_color",
+                        "label": "主色（浮标/发送按钮）",
+                        "type": "color",
+                        "default": "#4F46E5"
+                    },
+                    {
+                        "key": "surface_color",
+                        "label": "窗口背景色",
+                        "type": "color",
+                        "default": "#FFFFFF"
+                    },
+                    {
+                        "key": "text_color",
+                        "label": "窗口正文颜色",
+                        "type": "color",
+                        "default": "#111827"
+                    },
+                    {
+                        "key": "muted_color",
+                        "label": "次要文字颜色",
+                        "type": "color",
+                        "default": "#6B7280"
+                    },
+                    {
+                        "key": "header_color",
+                        "label": "顶栏背景色",
+                        "type": "color",
+                        "default": "#4F46E5"
+                    },
+                    {
+                        "key": "header_text_color",
+                        "label": "顶栏文字颜色",
+                        "type": "color",
+                        "default": "#FFFFFF"
+                    },
+                    {
+                        "key": "bot_bubble_color",
+                        "label": "客服消息气泡底色",
+                        "type": "color",
+                        "default": "#F3F4F6"
+                    },
+                    {
+                        "key": "bot_bubble_text_color",
+                        "label": "客服消息文字颜色",
+                        "type": "color",
+                        "default": "#111827"
+                    },
+                    {
+                        "key": "visitor_bubble_color",
+                        "label": "访客消息气泡底色",
+                        "type": "color",
+                        "default": "#4F46E5"
+                    },
+                    {
+                        "key": "visitor_bubble_text_color",
+                        "label": "访客消息文字颜色",
+                        "type": "color",
+                        "default": "#FFFFFF"
+                    },
+                    {
+                        "key": "avatar_url",
+                        "label": "客服头像或 Logo 地址",
+                        "type": "url",
+                        "default": "",
+                        "max_length": 2048
+                    },
+                    {
+                        "key": "show_avatar",
+                        "label": "显示客服头像",
+                        "type": "boolean",
+                        "default": true
+                    },
+                    {
+                        "key": "show_powered_by",
+                        "label": "显示 AI 客服标识",
+                        "type": "boolean",
+                        "default": false
+                    }
+                ]
+            },
+            {
+                "key": "ai",
+                "label": "AI 与模型",
+                "description": "模型来源与「描述词」。这里只写客服该怎么说话；它该知道什么放到“知识与资料”页。",
+                "fields": [
+                    {
+                        "key": "provider_mode",
+                        "label": "模型来源",
+                        "type": "select",
+                        "default": "system",
+                        "options": [
+                            {
+                                "value": "system",
+                                "label": "使用系统 AI 配置"
+                            },
+                            {
+                                "value": "custom",
+                                "label": "使用插件独立接口"
+                            }
+                        ]
+                    },
+                    {
+                        "key": "system_model_id",
+                        "label": "系统对话模型 ID",
+                        "type": "number",
+                        "default": 0,
+                        "min": 0,
+                        "max": 99999999,
+                        "step": 1,
+                        "help": "填 0 时使用系统“对话”默认模型。"
+                    },
+                    {
+                        "key": "custom_api_endpoint",
+                        "label": "独立接口地址",
+                        "type": "url",
+                        "default": "https://api.openai.com/v1/chat/completions",
+                        "max_length": 2048,
+                        "help": "仅支持公网 HTTPS 的 OpenAI Chat Completions 兼容地址。"
+                    },
+                    {
+                        "key": "custom_model",
+                        "label": "独立接口模型名称",
+                        "type": "text",
+                        "default": "",
+                        "max_length": 160,
+                        "placeholder": "例如：gpt-4.1-mini"
+                    },
+                    {
+                        "key": "system_prompt",
+                        "label": "描述词（角色与说话方式）",
+                        "type": "textarea",
+                        "default": "你是站点的前台客服。语气专业、友好、简洁；先给结论再给理由。资料里没写的一律不要编。",
+                        "max_length": 6000,
+                        "help": "只描述身份、语气、回答结构与流程，不要在这里堆产品资料——资料放到“知识与资料”页。"
+                    },
+                    {
+                        "key": "temperature",
+                        "label": "回复随机性",
+                        "type": "number",
+                        "default": 0.3,
+                        "min": 0,
+                        "max": 2,
+                        "step": 0.1
+                    },
+                    {
+                        "key": "max_tokens",
+                        "label": "单次回复最大 Token 数",
+                        "type": "number",
+                        "default": 800,
+                        "min": 128,
+                        "max": 4096,
+                        "step": 1
+                    }
+                ]
+            },
+            {
+                "key": "knowledge",
+                "label": "知识与资料",
+                "description": "客服能引用的事实来源：站内已有内容、上传的知识库文件，以及手工补充的文本。与描述词分开管理。",
+                "fields": [
+                    {
+                        "key": "knowledge_mode",
+                        "label": "资料来源",
+                        "type": "select",
+                        "default": "both",
+                        "options": [
+                            {
+                                "value": "off",
+                                "label": "不使用资料（只按描述词回答）"
+                            },
+                            {
+                                "value": "sources",
+                                "label": "站内内容 + 手工补充"
+                            },
+                            {
+                                "value": "files",
+                                "label": "上传文件 + 手工补充"
+                            },
+                            {
+                                "value": "both",
+                                "label": "全部来源（站内内容 + 上传文件 + 手工补充）"
+                            }
+                        ],
+                        "help": "「手工补充资料」只要非空就一直参与，除非选“不使用资料”。"
+                    },
+                    {
+                        "key": "knowledge_json",
+                        "label": "资料清单",
+                        "type": "textarea",
+                        "default": "{\"sources\":[],\"auto\":{\"products\":false,\"articles\":false,\"pages\":false,\"limit\":12},\"files\":[]}",
+                        "max_length": 16000,
+                        "help": "已选的站内内容与已上传的知识库文件；由上方资料柜写入，不要手改。"
+                    },
+                    {
+                        "key": "knowledge_base",
+                        "label": "手工补充资料",
+                        "type": "textarea",
+                        "default": "",
+                        "max_length": 8000,
+                        "placeholder": "可粘贴报价规则、服务流程、常见问答等短资料。",
+                        "help": "当作一直带着的小抄：每次提问都优先注入，但最多占用注入额度的四成，剩下的留给按相关度挑出的片段。"
+                    },
+                    {
+                        "key": "knowledge_budget",
+                        "label": "单次注入资料上限（字）",
+                        "type": "number",
+                        "default": 4000,
+                        "min": 500,
+                        "max": 12000,
+                        "step": 100,
+                        "help": "按与访客问题的相关度挑选片段，直到用满这个额度。"
+                    },
+                    {
+                        "key": "knowledge_strategy",
+                        "label": "片段挑选方式",
+                        "type": "select",
+                        "default": "relevance",
+                        "options": [
+                            {
+                                "value": "relevance",
+                                "label": "按相关度（推荐）"
+                            },
+                            {
+                                "value": "order",
+                                "label": "按清单顺序"
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                "key": "tools",
+                "label": "工具与卡片",
+                "description": "让客服能\"做事\"：查站内内容并回一张可点击的卡片、拉起询盘表单、转人工、递名片。工具可自定义。",
+                "fields": [
+                    {
+                        "key": "tools_enabled",
+                        "label": "启用工具调用",
+                        "type": "boolean",
+                        "default": true,
+                        "help": "关闭后客服只会用文字回答，不再返回任何卡片。"
+                    },
+                    {
+                        "key": "tools_json",
+                        "label": "工具清单",
+                        "type": "textarea",
+                        "default": "{\"builtin\":{\"recommend_products\":true,\"recommend_articles\":true,\"search_site\":true,\"lookup_knowledge\":true,\"show_inquiry_form\":true,\"request_handoff\":true,\"show_owner_card\":false,\"show_social_links\":false},\"custom\":[]}",
+                        "max_length": 8000,
+                        "help": "内置工具开关与自定义工具定义；由上方工具面板写入。"
+                    },
+                    {
+                        "key": "tool_max_rounds",
+                        "label": "单次提问最多工具轮次",
+                        "type": "number",
+                        "default": 2,
+                        "min": 1,
+                        "max": 3,
+                        "step": 1,
+                        "help": "一轮 = 模型调一次工具再据结果续写。轮次越多越慢越贵。"
+                    },
+                    {
+                        "key": "cards_json",
+                        "label": "卡片样式",
+                        "type": "textarea",
+                        "default": "{\"product\":{\"preset\":\"stack\",\"show_price\":true,\"show_summary\":true,\"cta\":\"查看详情\",\"max\":3},\"article\":{\"preset\":\"minimal\",\"cta\":\"阅读全文\",\"max\":3},\"owner\":{\"preset\":\"doodle\"},\"inquiry\":{\"preset\":\"panel\",\"fields\":[\"name\",\"email\",\"phone\",\"message\"],\"submit\":\"提交询盘\",\"success\":\"已收到，我们会尽快联系您。\"},\"social\":{\"preset\":\"chips\"}}",
+                        "max_length": 8000,
+                        "help": "产品卡、文章卡、名片、询盘卡、社媒卡各自的预设与文案。"
+                    },
+                    {
+                        "key": "owner_json",
+                        "label": "站长名片资料",
+                        "type": "textarea",
+                        "default": "{\"name\":\"\",\"title\":\"\",\"avatar\":\"\",\"bio\":\"\",\"socials\":[]}",
+                        "max_length": 4000,
+                        "help": "名片与社媒卡片的数据源：姓名、头衔、头像、简介与社媒链接。"
+                    }
+                ]
+            },
+            {
+                "key": "guardrails",
+                "label": "边界与事件",
+                "description": "能聊什么、不能聊什么、越界怎么回；以及询盘转化与转人工这类自然语言意图的识别动作。",
+                "fields": [
+                    {
+                        "key": "scope_mode",
+                        "label": "话题范围",
+                        "type": "select",
+                        "default": "open",
+                        "options": [
+                            {
+                                "value": "open",
+                                "label": "开放（除禁止项外都可聊）"
+                            },
+                            {
+                                "value": "restricted",
+                                "label": "收敛（只聊允许清单里的话题）"
+                            }
+                        ]
+                    },
+                    {
+                        "key": "guardrails_json",
+                        "label": "约束清单",
+                        "type": "textarea",
+                        "default": "{\"allow_topics\":[],\"deny_topics\":[],\"must_do\":[],\"never_do\":[\"不要承诺交期、折扣或任何未在资料中写明的条件\"],\"blocked_words\":[],\"max_reply_chars\":1200,\"language\":\"auto\"}",
+                        "max_length": 6000,
+                        "help": "允许/禁止话题、必须做/绝不做、屏蔽词与回复长度上限；由上方约束面板写入。"
+                    },
+                    {
+                        "key": "refusal_message",
+                        "label": "越界时的回复",
+                        "type": "textarea",
+                        "default": "这个问题超出了我能回答的范围，我帮您转人工客服好吗？",
+                        "max_length": 500
+                    },
+                    {
+                        "key": "events_json",
+                        "label": "意图事件",
+                        "type": "textarea",
+                        "default": "{\"inquiry\":{\"enabled\":true,\"keywords\":[\"报价\",\"价格\",\"多少钱\",\"采购\",\"下单\",\"询盘\",\"quote\",\"price\"],\"message\":\"我帮您留个联系方式，销售会尽快回复。\"},\"handoff\":{\"enabled\":true,\"keywords\":[\"人工\",\"转人工\",\"真人\",\"投诉\",\"human\",\"agent\"],\"message\":\"正在为您转接人工客服。\"},\"social\":{\"enabled\":false,\"keywords\":[\"微信\",\"联系方式\",\"社交\",\"whatsapp\",\"wechat\"],\"message\":\"这是我们的联系方式。\"},\"owner\":{\"enabled\":false,\"keywords\":[\"站长\",\"负责人\",\"老板\",\"owner\"],\"message\":\"这是负责人的名片。\"}}",
+                        "max_length": 6000,
+                        "help": "询盘、转人工、社媒、名片四类意图的关键词与触发动作。"
+                    },
+                    {
+                        "key": "event_log_enabled",
+                        "label": "记录意图命中日志",
+                        "type": "boolean",
+                        "default": false,
+                        "help": "命中询盘/转人工意图时写一条应用日志（不含访客原文），便于回溯转化。"
+                    },
+                    {
+                        "key": "inquiry_notify_email",
+                        "label": "询盘通知邮箱",
+                        "type": "email",
+                        "default": "",
+                        "max_length": 190,
+                        "help": "留空则只在会话里回执，不额外发信。"
+                    }
+                ]
+            },
+            {
+                "key": "composer",
+                "label": "输入与表情",
+                "description": "输入框行为、字符限制、emoji 与自定义表情包。",
+                "fields": [
+                    {
+                        "key": "message_max_chars",
+                        "label": "单条消息字符上限",
+                        "type": "number",
+                        "default": 2000,
+                        "min": 100,
+                        "max": 4000,
+                        "step": 1
+                    },
+                    {
+                        "key": "send_on_enter",
+                        "label": "回车直接发送",
+                        "type": "boolean",
+                        "default": true,
+                        "help": "关闭后回车换行，需点发送按钮。Shift+Enter 始终换行。"
+                    },
+                    {
+                        "key": "emoji_enabled",
+                        "label": "启用 emoji 面板",
+                        "type": "boolean",
+                        "default": true
+                    },
+                    {
+                        "key": "sticker_enabled",
+                        "label": "启用自定义表情包",
+                        "type": "boolean",
+                        "default": false,
+                        "help": "开启后输入框旁出现表情包按钮，内容来自下方上传的图片/GIF。"
+                    },
+                    {
+                        "key": "stickers_json",
+                        "label": "表情与表情包",
+                        "type": "textarea",
+                        "default": "{\"emoji\":true,\"emoji_set\":[\"😀\",\"😄\",\"😊\",\"🙂\",\"😉\",\"👍\",\"🙏\",\"🎉\",\"❤️\",\"🔥\",\"✨\",\"💡\",\"📦\",\"🚚\",\"💰\",\"📞\"],\"gif\":false,\"packs\":[]}",
+                        "max_length": 12000,
+                        "help": "emoji 列表与已上传的表情包；由上方表情面板写入。"
+                    }
+                ]
+            }
         ]
-      },
-      {
-        "key": "trigger",
-        "label": "显示与触发",
-        "description": "按设备、页面、时间、滚动深度或离开意图控制挂件何时出现，以及浮标端的提醒方式。",
-        "fields": [
-          {
-            "key": "device_mode",
-            "label": "显示设备",
-            "type": "select",
-            "default": "all",
-            "options": [
-              {"value": "all", "label": "桌面与移动端"},
-              {"value": "desktop", "label": "仅桌面端"},
-              {"value": "mobile", "label": "仅移动端"}
-            ]
-          },
-          {
-            "key": "url_mode",
-            "label": "页面规则",
-            "type": "select",
-            "default": "all",
-            "options": [
-              {"value": "all", "label": "全部前台页面"},
-              {"value": "include", "label": "仅匹配的页面"},
-              {"value": "exclude", "label": "排除匹配的页面"}
-            ]
-          },
-          {
-            "key": "url_rules",
-            "label": "页面路径规则",
-            "type": "textarea",
-            "default": "",
-            "max_length": 5000,
-            "placeholder": "/products/*\n/contact",
-            "help": "每行一条相对路径，支持 * 通配符；“仅匹配”模式为空时不会显示。"
-          },
-          {
-            "key": "delay_seconds",
-            "label": "延迟出现（秒）",
-            "type": "number",
-            "default": 0,
-            "min": 0,
-            "max": 300,
-            "step": 1
-          },
-          {
-            "key": "scroll_percent",
-            "label": "滚动后出现（%）",
-            "type": "number",
-            "default": 0,
-            "min": 0,
-            "max": 100,
-            "step": 1,
-            "help": "填 0 表示不使用滚动触发。多个触发条件中先满足的条件生效。"
-          },
-          {
-            "key": "exit_intent",
-            "label": "离开页面时出现",
-            "type": "boolean",
-            "default": false
-          },
-          {
-            "key": "initial_open",
-            "label": "首次显示时自动打开窗口",
-            "type": "boolean",
-            "default": false
-          },
-          {
-            "key": "initial_open_delay",
-            "label": "自动打开延迟（秒）",
-            "type": "number",
-            "default": 0,
-            "min": 0,
-            "max": 120,
-            "step": 1,
-            "help": "挂件出现后等待多少秒再自动展开窗口；访客先手动打开则跳过。"
-          },
-          {
-            "key": "once_per_session",
-            "label": "自动动作只执行一次",
-            "type": "boolean",
-            "default": false,
-            "help": "同一浏览器会话内，自动展开、提醒动画与角标只出现一次，翻页不再打扰。"
-          },
-          {
-            "key": "show_launcher",
-            "label": "显示浮标按钮",
-            "type": "boolean",
-            "default": true,
-            "help": "关闭后不渲染浮标，仍可通过站点的 window.AiCustomerService API 打开窗口。"
-          },
-          {
-            "key": "tooltip_text",
-            "label": "浮标悬停提示",
-            "type": "text",
-            "default": "",
-            "max_length": 80,
-            "placeholder": "例如：有疑问？点我咨询",
-            "help": "鼠标悬停或聚焦浮标时出现的引导文字，留空不显示。"
-          },
-          {
-            "key": "teaser_enabled",
-            "label": "显示引流气泡",
-            "type": "boolean",
-            "default": false,
-            "help": "在浮标旁常驻一条可关闭的短消息，主动引导访客发起对话。"
-          },
-          {
-            "key": "teaser_text",
-            "label": "引流气泡文字",
-            "type": "text",
-            "default": "有问题？随时咨询",
-            "max_length": 120
-          },
-          {
-            "key": "badge_enabled",
-            "label": "显示未读红点角标",
-            "type": "boolean",
-            "default": false,
-            "help": "在浮标右上角显示一个红点，访客打开窗口后消失。"
-          },
-          {
-            "key": "attention_effect",
-            "label": "浮标提醒动画",
-            "type": "select",
-            "default": "none",
-            "options": [
-              {"value": "none", "label": "无动画"},
-              {"value": "wiggle", "label": "摆动"},
-              {"value": "bounce", "label": "弹跳"},
-              {"value": "pulse", "label": "脉冲光圈"}
-            ],
-            "help": "在访客第一次打开窗口前循环播放的吸引注意动画。"
-          },
-          {
-            "key": "schedule_enabled",
-            "label": "按服务时段显示",
-            "type": "boolean",
-            "default": false
-          },
-          {
-            "key": "schedule_days",
-            "label": "服务日",
-            "type": "text",
-            "default": "1,2,3,4,5,6,7",
-            "max_length": 13,
-            "pattern": "[1-7](,[1-7]){0,6}",
-            "help": "ISO 周序号，1 为周一、7 为周日，例如 1,2,3,4,5。"
-          },
-          {
-            "key": "schedule_start",
-            "label": "服务开始时间",
-            "type": "text",
-            "default": "00:00",
-            "max_length": 5,
-            "pattern": "(?:[01]\\d|2[0-3]):[0-5]\\d",
-            "placeholder": "09:00"
-          },
-          {
-            "key": "schedule_end",
-            "label": "服务结束时间",
-            "type": "text",
-            "default": "23:59",
-            "max_length": 5,
-            "pattern": "(?:[01]\\d|2[0-3]):[0-5]\\d",
-            "placeholder": "18:00"
-          }
-        ]
-      },
-      {
-        "key": "appearance",
-        "label": "外观与位置",
-        "description": "浮标形状图片、窗口尺寸投影、双方气泡配色与桌面/移动端边距。",
-        "fields": [
-          {
-            "key": "launcher_style",
-            "label": "浮标样式",
-            "type": "select",
-            "default": "bubble",
-            "options": [
-              {"value": "bubble", "label": "圆形气泡"},
-              {"value": "pill", "label": "带文字胶囊"}
-            ]
-          },
-          {
-            "key": "launcher_icon",
-            "label": "浮标图标",
-            "type": "select",
-            "default": "chat",
-            "options": [
-              {"value": "chat", "label": "对话"},
-              {"value": "sparkles", "label": "闪光"},
-              {"value": "headset", "label": "耳机"},
-              {"value": "question", "label": "问号"}
-            ]
-          },
-          {
-            "key": "launcher_image_url",
-            "label": "自定义浮标图片",
-            "type": "url",
-            "default": "",
-            "max_length": 2048,
-            "help": "填写后将替代图标显示这张图片（建议正方形）。胶囊样式会同时替换文字位置。"
-          },
-          {
-            "key": "launcher_corner",
-            "label": "胶囊圆角（px）",
-            "type": "number",
-            "default": 10,
-            "min": 0,
-            "max": 30,
-            "step": 1,
-            "help": "仅对“带文字胶囊”样式生效；圆形气泡始终为正圆。"
-          },
-          {
-            "key": "position",
-            "label": "桌面端位置",
-            "type": "select",
-            "default": "right",
-            "options": [
-              {"value": "right", "label": "右下角"},
-              {"value": "left", "label": "左下角"}
-            ]
-          },
-          {
-            "key": "widget_size",
-            "label": "浮标尺寸（px）",
-            "type": "number",
-            "default": 56,
-            "min": 48,
-            "max": 80,
-            "step": 1
-          },
-          {
-            "key": "panel_width",
-            "label": "弹窗宽度（px）",
-            "type": "number",
-            "default": 388,
-            "min": 320,
-            "max": 520,
-            "step": 1
-          },
-          {
-            "key": "panel_height",
-            "label": "弹窗高度（px）",
-            "type": "number",
-            "default": 580,
-            "min": 420,
-            "max": 760,
-            "step": 1
-          },
-          {
-            "key": "panel_radius",
-            "label": "弹窗圆角（px）",
-            "type": "number",
-            "default": 10,
-            "min": 4,
-            "max": 24,
-            "step": 1
-          },
-          {
-            "key": "panel_shadow",
-            "label": "弹窗投影强度",
-            "type": "select",
-            "default": "md",
-            "options": [
-              {"value": "none", "label": "无投影"},
-              {"value": "sm", "label": "较浅"},
-              {"value": "md", "label": "适中"},
-              {"value": "lg", "label": "较深"}
-            ]
-          },
-          {
-            "key": "font_size",
-            "label": "界面字号（px）",
-            "type": "number",
-            "default": 14,
-            "min": 12,
-            "max": 18,
-            "step": 1
-          },
-          {
-            "key": "desktop_offset_x",
-            "label": "桌面端水平边距（px）",
-            "type": "number",
-            "default": 20,
-            "min": 0,
-            "max": 96,
-            "step": 1
-          },
-          {
-            "key": "desktop_offset_y",
-            "label": "桌面端底部边距（px）",
-            "type": "number",
-            "default": 20,
-            "min": 0,
-            "max": 96,
-            "step": 1
-          },
-          {
-            "key": "mobile_offset_x",
-            "label": "移动端水平边距（px）",
-            "type": "number",
-            "default": 16,
-            "min": 8,
-            "max": 32,
-            "step": 1
-          },
-          {
-            "key": "mobile_offset_y",
-            "label": "移动端底部边距（px）",
-            "type": "number",
-            "default": 16,
-            "min": 8,
-            "max": 64,
-            "step": 1
-          },
-          {
-            "key": "accent_color",
-            "label": "主色（浮标/发送按钮）",
-            "type": "color",
-            "default": "#0D6EFD"
-          },
-          {
-            "key": "surface_color",
-            "label": "窗口背景色",
-            "type": "color",
-            "default": "#FFFFFF"
-          },
-          {
-            "key": "header_color",
-            "label": "顶栏背景色",
-            "type": "color",
-            "default": "#0D6EFD"
-          },
-          {
-            "key": "header_text_color",
-            "label": "顶栏文字颜色",
-            "type": "color",
-            "default": "#FFFFFF"
-          },
-          {
-            "key": "bot_bubble_color",
-            "label": "客服消息气泡底色",
-            "type": "color",
-            "default": "#F2F4F7"
-          },
-          {
-            "key": "bot_bubble_text_color",
-            "label": "客服消息文字颜色",
-            "type": "color",
-            "default": "#1F2937"
-          },
-          {
-            "key": "visitor_bubble_color",
-            "label": "访客消息气泡底色",
-            "type": "color",
-            "default": "#0D6EFD"
-          },
-          {
-            "key": "visitor_bubble_text_color",
-            "label": "访客消息文字颜色",
-            "type": "color",
-            "default": "#FFFFFF"
-          },
-          {
-            "key": "avatar_url",
-            "label": "客服头像或 Logo 地址",
-            "type": "url",
-            "default": "",
-            "max_length": 2048
-          },
-          {
-            "key": "show_avatar",
-            "label": "显示客服头像",
-            "type": "boolean",
-            "default": true
-          },
-          {
-            "key": "show_powered_by",
-            "label": "显示 AI 客服标识",
-            "type": "boolean",
-            "default": false
-          }
-        ]
-      },
-      {
-        "key": "ai",
-        "label": "AI 与知识库",
-        "description": "默认复用系统已配置的对话模型；也可填入独立的 OpenAI 兼容接口。独立接口密钥只在本页提交并加密保存。",
-        "fields": [
-          {
-            "key": "provider_mode",
-            "label": "模型来源",
-            "type": "select",
-            "default": "system",
-            "options": [
-              {"value": "system", "label": "使用系统 AI 配置"},
-              {"value": "custom", "label": "使用插件独立接口"}
-            ]
-          },
-          {
-            "key": "system_model_id",
-            "label": "系统对话模型 ID",
-            "type": "number",
-            "default": 0,
-            "min": 0,
-            "max": 99999999,
-            "step": 1,
-            "help": "填 0 时使用系统“对话”默认模型。"
-          },
-          {
-            "key": "custom_api_endpoint",
-            "label": "独立接口地址",
-            "type": "url",
-            "default": "https://api.openai.com/v1/chat/completions",
-            "max_length": 2048,
-            "help": "仅支持公网 HTTPS 的 OpenAI Chat Completions 兼容地址。"
-          },
-          {
-            "key": "custom_model",
-            "label": "独立接口模型名称",
-            "type": "text",
-            "default": "",
-            "max_length": 160,
-            "placeholder": "例如：gpt-4.1-mini"
-          },
-          {
-            "key": "system_prompt",
-            "label": "客服角色与回复规则",
-            "type": "textarea",
-            "default": "以专业、友好、简洁的方式回答访客问题。仅在信息明确时给出结论；信息不足时明确说明并引导访客联系人工客服。",
-            "max_length": 8000
-          },
-          {
-            "key": "knowledge_base",
-            "label": "知识库",
-            "type": "textarea",
-            "default": "",
-            "max_length": 30000,
-            "placeholder": "可粘贴产品说明、报价规则、服务流程、常见问答等内部资料。"
-          },
-          {
-            "key": "temperature",
-            "label": "回复随机性",
-            "type": "number",
-            "default": 0.3,
-            "min": 0,
-            "max": 2,
-            "step": 0.1
-          },
-          {
-            "key": "max_tokens",
-            "label": "单次回复最大 Token 数",
-            "type": "number",
-            "default": 800,
-            "min": 128,
-            "max": 4096,
-            "step": 1
-          }
-        ]
-      }
+    },
+    "api": [
+        {
+            "endpoint": "status",
+            "method": "GET",
+            "label": "读取 AI 客服状态",
+            "description": "读取 AI 客服是否启用、当前模型来源、资料规模、已启用工具与公开显示规则摘要；不返回描述词全文、资料正文、密钥或访客会话。",
+            "handler": "AiCustomerServiceApi::status",
+            "permission": "ai_customer_service.view",
+            "params": [],
+            "risk": "low"
+        }
     ]
-  },
-  "api": [
-    {
-      "endpoint": "status",
-      "method": "GET",
-      "label": "读取 AI 客服状态",
-      "description": "读取 AI 客服是否启用、当前模型来源、知识库长度与公开显示规则摘要；不返回提示词全文、密钥或访客会话。",
-      "handler": "AiCustomerServiceApi::status",
-      "permission": "ai_customer_service.view",
-      "params": [],
-      "risk": "low"
-    }
-  ]
 }
