@@ -80,7 +80,7 @@ final class VisualEditorContent
     public static function loadField(array $source): ?string
     {
         try {
-            $query = \Database::table($source['table'])->where('id', $source['id']);
+            $query = \App\Core\Database::table($source['table'])->where('id', $source['id']);
             if ($source['content_type'] !== null) {
                 $query->where('content_type', $source['content_type']);
             }

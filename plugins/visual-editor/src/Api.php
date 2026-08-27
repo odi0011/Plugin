@@ -40,13 +40,15 @@ final class VisualEditorApi
         // 先用 LIKE 粗筛出候选行，再对每行做精确解析：托管判定是字符串级的事，
         // LIKE 负责把它限制在少量候选上，精确解析负责不误报。
         try {
-            $query = \Database::table($table);
+            $query = \App\Core\Database::table($table);
             if ($table === 'content_entries') {
                 $query->where('content_type', $sourceType);
             }
-            $total = (clone $query)->whereLike($field, '%' . VisualEditorContent::MARKER_START . '%')->count();
+            // 核心 QueryBuilder 没有 whereLike()，LIKE 走 where() 的三参形式。
+            $like = '%' . VisualEditorContent::MARKER_START . '%';
+            $total = (clone $query)->where($field, 'LIKE', $like)->count();
             $rows = (clone $query)
-                ->whereLike($field, '%' . VisualEditorContent::MARKER_START . '%')
+                ->where($field, 'LIKE', $like)
                 ->orderBy('updated_at', 'desc')
                 ->paginate($perPage, $page);
         } catch (\Throwable $error) {
