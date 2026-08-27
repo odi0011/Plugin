@@ -179,17 +179,43 @@ $loaderLines = $firstRun
         </div>
         <div class="ve-stage-actions">
             <span class="ve-stage-status" data-ve-status></span>
-            <button type="button" class="ve-btn ve-btn-ghost" data-ve-action="reimport" title="按当前内容字段重新解析">
-                <i class="bi bi-arrow-repeat"></i> 重新导入
-            </button>
-            <?php if ($hasOriginal): ?>
-                <button type="button" class="ve-btn ve-btn-ghost" data-ve-action="restore" title="取回首次接管前的原始内容">
-                    <i class="bi bi-clock-history"></i> 还原原文
+            <?php /*
+              这三个动作不是日常操作（重新导入 / 还原原文 / 仅写回字段），
+              直接摆在顶栏只会让人以为「保存」有四种，还得猜每一种是干什么。
+              收进一颗「更多」里，每一条带一句说明——用得上的人找得到，
+              用不上的人不会误点。
+            */ ?>
+            <div class="ve-more" data-ve-more>
+                <button type="button" class="ve-btn ve-btn-ghost ve-more-toggle" data-ve-more-toggle
+                        title="更多操作" aria-haspopup="true" aria-expanded="false">
+                    <i class="bi bi-three-dots"></i>
                 </button>
-            <?php endif; ?>
-            <button type="button" class="ve-btn ve-btn-ghost" data-ve-action="apply-only" title="只写回内容字段，不提交这条内容">
-                <i class="bi bi-arrow-down-square"></i> 仅写回字段
-            </button>
+                <div class="ve-more-menu" data-ve-more-menu hidden>
+                    <button type="button" class="ve-more-item" data-ve-action="apply-only">
+                        <i class="bi bi-arrow-down-square"></i>
+                        <span class="ve-more-text">
+                            <span class="ve-more-label">仅写回字段</span>
+                            <span class="ve-more-desc">把排版结果填进内容框，不入库；想回表单先看看时用。</span>
+                        </span>
+                    </button>
+                    <button type="button" class="ve-more-item" data-ve-action="reimport">
+                        <i class="bi bi-arrow-repeat"></i>
+                        <span class="ve-more-text">
+                            <span class="ve-more-label">重新导入</span>
+                            <span class="ve-more-desc">丢弃当前编辑，按内容字段现在的样子重新解析一次。</span>
+                        </span>
+                    </button>
+                    <?php if ($hasOriginal): ?>
+                        <button type="button" class="ve-more-item ve-more-danger" data-ve-action="restore">
+                            <i class="bi bi-clock-history"></i>
+                            <span class="ve-more-text">
+                                <span class="ve-more-label">还原原文</span>
+                                <span class="ve-more-desc">取回第一次用可视化编辑之前的原始内容。</span>
+                            </span>
+                        </button>
+                    <?php endif; ?>
+                </div>
+            </div>
             <button type="button" class="ve-btn ve-btn-quiet" data-ve-action="close">
                 <i class="bi bi-x-lg"></i> 关闭
             </button>

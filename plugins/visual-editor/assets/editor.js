@@ -537,10 +537,77 @@
             block: '块', flex: '弹性布局', 'inline-block': '行内块',
             'flex-start': '起始', 'flex-end': '末尾', 'space-between': '两端分散',
             'space-around': '周围留白', stretch: '拉伸',
-            sm: '轻', md: '中', lg: '重',
+            sm: '小', md: '中', lg: '大',
             '300': '细 300', '400': '常规 400', '500': '中 500',
-            '600': '半粗 600', '700': '粗 700', '800': '特粗 800'
+            '600': '半粗 600', '700': '粗 700', '800': '特粗 800',
+            // 控件内容字段的枚举值
+            _self: '当前窗口', _blank: '新窗口',
+            primary: '主色', outline: '描边', ghost: '文字',
+            disc: '圆点', decimal: '数字', check: '对勾',
+            info: '信息', success: '成功', warning: '提醒', danger: '警示',
+            youtube: 'YouTube', vimeo: 'Vimeo', bilibili: '哔哩哔哩',
+            '16-9': '16:9', '4-3': '4:3', '1-1': '1:1',
+            yes: '显示', no: '隐藏',
+            boxed: '定宽容器', full: '通栏'
         };
+
+        /**
+         * 枚举**值**的显示名。
+         *
+         * 刻意不复用 labelOf()：那个函数会先查 fieldLabels，而字段名与枚举值
+         * 有重名的（style / color / value / size…），查串了就会给按钮贴上
+         * 「线型」这种莫名其妙的标签。值只查值表，查不到就原样显示。
+         */
+        function valueLabel(value) {
+            return VALUE_LABELS[value] || String(value);
+        }
+
+
+        /**
+         * 枚举值的图标。Elementor 里对齐、排布这类枚举从来不是下拉框——
+         * 四个对齐图标一眼就能认出来，读「两端对齐」这四个字反而更慢。
+         * 表里没有的值退回文字按钮，不是所有枚举都有公认的图形（背景平铺就没有）。
+         */
+        var ENUM_ICONS = {
+            text_align: { left: 'bi-text-left', center: 'bi-text-center', right: 'bi-text-right', justify: 'bi-justify' },
+            align: { left: 'bi-text-left', center: 'bi-text-center', right: 'bi-text-right', justify: 'bi-justify' },
+            justify_content: {
+                'flex-start': 'bi-align-start', center: 'bi-align-center', 'flex-end': 'bi-align-end',
+                'space-between': 'bi-distribute-horizontal', 'space-around': 'bi-distribute-vertical'
+            },
+            align_items: {
+                stretch: 'bi-arrows-expand', 'flex-start': 'bi-align-top',
+                center: 'bi-align-middle', 'flex-end': 'bi-align-bottom'
+            },
+            display: {
+                block: 'bi-square', flex: 'bi-layout-three-columns',
+                'inline-block': 'bi-square-half', none: 'bi-eye-slash'
+            },
+            background_position: {
+                center: 'bi-align-center', top: 'bi-align-top', bottom: 'bi-align-bottom',
+                left: 'bi-align-start', right: 'bi-align-end'
+            }
+        };
+
+        /**
+         * 长度属性的滑块量程：[最小, 最大, 步长]。
+         * 有量程的属性配一条滑块——调字号、调内边距靠拖比敲数字快，
+         * 而且能看见「现在处在整个范围的什么位置」。没登记的属性只给数字框。
+         */
+        var LENGTH_RANGES = {
+            margin_top: [0, 200, 1], margin_bottom: [0, 200, 1],
+            padding_top: [0, 200, 1], padding_bottom: [0, 200, 1],
+            padding_left: [0, 200, 1], padding_right: [0, 200, 1],
+            gap: [0, 120, 1], font_size: [8, 96, 1], letter_spacing: [-5, 20, 0.5],
+            border_width: [0, 20, 1], border_radius: [0, 100, 1],
+            min_height: [0, 1000, 10], max_width: [0, 1600, 10]
+        };
+
+        /** 成组的四边 / 两边属性：间距组按「一个盒子」呈现，而不是六个独立字段。 */
+        var SIDE_GROUPS = [
+            { label: '内边距', keys: ['padding_top', 'padding_right', 'padding_bottom', 'padding_left'], sides: ['上', '右', '下', '左'] },
+            { label: '外边距', keys: ['margin_top', 'margin_bottom'], sides: ['上', '下'] }
+        ];
 
         /** 标签表有两种形态：fieldLabels 是字符串，styleLabels 是 {group,label}。 */
         function labelOf(key, fallback) {
@@ -643,19 +710,13 @@
 
         function renderSectionFields(section) {
             var grid = group('区块', { collapsible: false });
-            var select_ = el('select');
-            [['boxed', '定宽容器'], ['full', '通栏']].forEach(function (pair) {
-                var option = el('option', null, pair[1]);
-                option.value = pair[0];
-                if ((section.layout || 'boxed') === pair[0]) option.selected = true;
-                select_.appendChild(option);
-            });
-            select_.addEventListener('change', function () {
-                section.layout = select_.value === 'full' ? 'full' : 'boxed';
+            // 只有两个值，下拉框比按钮更费手：直接摆成分段按钮，带图标一眼看出差别。
+            var layoutSeg = segmentedControl(['boxed', 'full'], section.layout || 'boxed', function (value) {
+                section.layout = value === 'full' ? 'full' : 'boxed';
                 setDirty(true);
                 refreshCanvas();
-            });
-            field(grid, '宽度模式', select_, true);
+            }, { boxed: 'bi-square', full: 'bi-arrows-angle-expand' }, false);
+            field(grid, '宽度模式', layoutSeg, true);
 
             var addColumn = el('button', 've-btn', '＋ 添加一栏');
             addColumn.type = 'button';
@@ -716,16 +777,36 @@
             var control;
             var wide = false;
 
+            var commit = function (value) {
+                widget.content[key] = value;
+                setDirty(true);
+                refreshCanvas();
+            };
+
             if (type === 'enum') {
-                control = el('select');
-                constraint.split(',').forEach(function (raw) {
-                    var value = raw.trim();
-                    if (!value) return;
-                    var option = el('option', null, labelOf(value, value));
-                    option.value = value;
-                    if (String(current) === value) option.selected = true;
-                    control.appendChild(option);
-                });
+                var options = constraint.split(',').map(function (raw) { return raw.trim(); })
+                    .filter(function (raw) { return raw !== ''; });
+                // 选项不多就摆成分段按钮（对齐这类还带图标）；多了才退回下拉。
+                if (options.length <= 6) {
+                    control = segmentedControl(options, String(current), commit, ENUM_ICONS[key], false);
+                    wide = true;
+                } else {
+                    control = el('select');
+                    options.forEach(function (value) {
+                        var option = el('option', null, valueLabel(value));
+                        option.value = value;
+                        if (String(current) === value) option.selected = true;
+                        control.appendChild(option);
+                    });
+                    control.addEventListener('change', function () { commit(control.value); });
+                }
+            } else if (type === 'media') {
+                // 图片字段直接唤起系统媒体库；仍然可以手填地址。
+                control = imageControl(current, commit);
+                wide = true;
+            } else if (type === 'color') {
+                control = colorControl(current, commit);
+                wide = true;
             } else if (type === 'number') {
                 var bounds = constraint.split(',');
                 control = el('input');
@@ -733,51 +814,26 @@
                 if (bounds[0]) control.min = bounds[0].trim();
                 if (bounds[1]) control.max = bounds[1].trim();
                 control.value = current;
+                control.addEventListener('input', function () { commit(control.value); });
             } else if (type === 'rich' || type === 'html_block' || type === 'lines') {
                 control = el('textarea');
                 control.rows = type === 'lines' ? 4 : 6;
                 control.value = current;
                 wide = true;
                 if (type === 'lines') control.placeholder = '每行一项';
+                control.addEventListener('input', function () { commit(control.value); });
             } else {
                 control = el('input');
                 control.type = 'text';
                 control.value = current;
-                wide = (type === 'link' || type === 'media' || type === 'text');
+                wide = (type === 'link' || type === 'text');
                 if (type === 'link') control.placeholder = 'https:// 或 /about';
-                if (type === 'media') control.placeholder = '图片地址';
-                if (type === 'color') control.placeholder = '#2563eb / rgba(…) / var(--ui-primary)';
                 if (type === 'token') control.placeholder = '字母数字与 - _';
+                control.addEventListener('input', function () { commit(control.value); });
             }
-
-            var commit = function () {
-                widget.content[key] = control.value;
-                setDirty(true);
-                refreshCanvas();
-            };
-            control.addEventListener(control.tagName === 'SELECT' ? 'change' : 'input', commit);
 
             var hint = type === 'html_block' ? '会经服务端消毒后再入库：script / style / iframe 一律剥掉。' : '';
-            var wrap = field(grid, labelOf(key), control, wide, hint);
-
-            // 媒体字段：能挂上站点自带的选择器就挂，拿不到时手填地址依然可用。
-            if (type === 'media') {
-                var pick = el('button', 've-btn', '从媒体库选择');
-                pick.type = 'button';
-                pick.addEventListener('click', function () {
-                    if (window.MediaPicker && typeof window.MediaPicker.open === 'function') {
-                        window.MediaPicker.open({
-                            onSelect: function (item) {
-                                control.value = (item && (item.url || item.path)) || control.value;
-                                commit();
-                            }
-                        });
-                    } else {
-                        control.focus();
-                    }
-                });
-                wrap.appendChild(pick);
-            }
+            field(grid, labelOf(key), control, wide, hint);
         }
 
         /** 样式页：断点条 + 按分组折叠的字段。分组顺序跟着 styleLabels 的声明顺序。 */
@@ -821,9 +877,22 @@
                 // 设过值的组默认展开：用户回来第一眼就该看见自己改过的地方。
                 if (set.length && openGroups[name] === undefined) openGroups[name] = true;
                 var grid = group(name, { count: set.length });
+
+                // 成组的边（内 / 外边距）先以「盒子」形式出现，再排剩下的字段。
+                var boxed = {};
+                SIDE_GROUPS.forEach(function (spec) {
+                    if (properties.indexOf(spec.keys[0]) === -1) return;
+                    spec.keys.forEach(function (key) { boxed[key] = true; });
+                    var box = sideBoxControl(node, spec);
+                    box.classList.add('ve-field-wide');
+                    grid.appendChild(box);
+                });
+
                 properties.forEach(function (property) {
+                    if (boxed[property]) return;
                     buildStyleField(grid, node, property);
                 });
+
                 if (set.length) {
                     var clear = el('button', 've-btn ve-btn-quiet ve-field-wide', '清空这一组');
                     clear.type = 'button';
@@ -840,13 +909,225 @@
 
         var LENGTH_UNITS = ['px', 'rem', 'em', '%', 'vh', 'vw'];
 
+        /**
+         * 分段按钮：枚举值的默认呈现方式。
+         *
+         * 下拉框对枚举是最差的选择——要点开才知道有哪些选项，选完还得再点开
+         * 才能确认选的是哪个。分段按钮把「有哪些」和「现在是哪个」同时摆在眼前，
+         * 有图标就用图标（对齐、排布），没有就用短文字。
+         *
+         * @param options list<string>  可选值
+         * @param current string        当前值
+         * @param commit  function      提交回调，传 '' 表示不设置
+         * @param icons   object|null   值 => Bootstrap Icons 类名
+         * @param clearable bool        是否允许清空（内容字段是必填的，样式不是）
+         */
+        function segmentedControl(options, current, commit, icons, clearable) {
+            var wrap = el('div', 've-seg');
+            var buttons = [];
+            var sync = function (value) {
+                buttons.forEach(function (one) {
+                    if (one.getAttribute('data-ve-value') === String(value)) one.setAttribute('data-ve-active', '1');
+                    else one.removeAttribute('data-ve-active');
+                });
+            };
+            options.forEach(function (value) {
+                var icon = icons && icons[value];
+                var button = el('button', 've-seg-btn' + (icon ? ' ve-seg-icon' : ''));
+                button.type = 'button';
+                button.setAttribute('data-ve-value', value);
+                button.title = valueLabel(value);
+                if (icon) button.innerHTML = '<i class="bi ' + icon + '"></i>';
+                else button.textContent = valueLabel(value);
+                button.addEventListener('click', function () {
+                    // 再点一次已选中的值 = 取消设置（样式字段才允许）。
+                    var next = (clearable && String(current) === String(value)) ? '' : value;
+                    current = next;
+                    sync(next);
+                    commit(next);
+                });
+                buttons.push(button);
+                wrap.appendChild(button);
+            });
+            if (clearable) {
+                var clear = el('button', 've-seg-btn ve-seg-clear');
+                clear.type = 'button';
+                clear.title = '不设置';
+                clear.innerHTML = '<i class="bi bi-x-lg"></i>';
+                clear.addEventListener('click', function () {
+                    current = '';
+                    sync('');
+                    commit('');
+                });
+                wrap.appendChild(clear);
+            }
+            sync(current);
+            return wrap;
+        }
+
+        /**
+         * 图片值：缩略预览 + 「选择图片」按钮 + 仍然可手填的地址。
+         *
+         * 唤起的是站点自带的媒体库（window.MediaPicker，后台布局里已经加载）。
+         * 拿不到它时不报错，退化成一个纯地址输入框——执意贴 URL 的人不该被拦住。
+         */
+        function imageControl(current, commit) {
+            var wrap = el('div', 've-media');
+            var preview = el('div', 've-media-preview');
+            var text = el('input', 've-input-text');
+            text.type = 'text';
+            text.placeholder = '图片地址，或点右边从媒体库选';
+            text.value = current || '';
+
+            var paint = function () {
+                var value = text.value.trim();
+                preview.innerHTML = '';
+                if (value) {
+                    var image = el('img');
+                    image.src = value;
+                    image.alt = '';
+                    preview.appendChild(image);
+                } else {
+                    preview.innerHTML = '<i class="bi bi-image"></i>';
+                }
+            };
+
+            var pick = el('button', 've-media-pick');
+            pick.type = 'button';
+            pick.innerHTML = '<i class="bi bi-images"></i><span>选择图片</span>';
+            pick.addEventListener('click', function () {
+                if (window.MediaPicker && typeof window.MediaPicker.open === 'function') {
+                    window.MediaPicker.open({
+                        type: 'image',
+                        onSelect: function (item) {
+                            var url = item && (item.url || item.path || item.thumb_url);
+                            if (!url) return;
+                            text.value = url;
+                            paint();
+                            commit(url);
+                        }
+                    });
+                } else {
+                    text.focus();
+                }
+            });
+
+            var clear = el('button', 've-media-clear');
+            clear.type = 'button';
+            clear.title = '清除';
+            clear.innerHTML = '<i class="bi bi-trash"></i>';
+            clear.addEventListener('click', function () {
+                text.value = '';
+                paint();
+                commit('');
+            });
+
+            text.addEventListener('input', function () { paint(); commit(text.value.trim()); });
+            paint();
+
+            var actions = el('div', 've-media-actions');
+            actions.appendChild(pick);
+            actions.appendChild(clear);
+            var body = el('div', 've-media-body');
+            body.appendChild(text);
+            body.appendChild(actions);
+            wrap.appendChild(preview);
+            wrap.appendChild(body);
+            return wrap;
+        }
+
+        /**
+         * 四边 / 两边成组的间距盒子：一行摆完所有边，外加一个联动开关。
+         *
+         * Elementor 的 Margin / Padding 就是这个形状，理由很实在——间距几乎总是
+         * 一起调的，拆成六个独立字段会让用户在一个折叠面板里上下找六次。
+         * 「联动」打开时改任意一边，其余边跟着走。
+         */
+        function sideBoxControl(node, spec) {
+            var values = node.style[styleBreakpoint];
+            var wrap = el('div', 've-sides');
+            var head = el('div', 've-sides-head');
+            head.appendChild(el('span', 've-sides-label', spec.label));
+            var link = el('button', 've-sides-link');
+            link.type = 'button';
+            link.title = '联动：改一边，其余边跟着改';
+            link.innerHTML = '<i class="bi bi-link-45deg"></i>';
+            if (sideLinked[spec.label]) link.setAttribute('data-ve-active', '1');
+            head.appendChild(link);
+            wrap.appendChild(head);
+
+            var row = el('div', 've-sides-row');
+            var cells = [];
+            spec.keys.forEach(function (key, index) {
+                var cell = el('div', 've-sides-cell');
+                var input = el('input', 've-sides-input');
+                input.type = 'number';
+                input.placeholder = '—';
+                var match = /^(-?\d+(?:\.\d+)?)/.exec(String(values[key] || ''));
+                input.value = match ? match[1] : '';
+                input.addEventListener('input', function () {
+                    var raw = input.value.trim();
+                    var apply = function (target, text) {
+                        if (text === '') delete values[target];
+                        else values[target] = text + sideUnit;
+                    };
+                    apply(key, raw);
+                    if (sideLinked[spec.label]) {
+                        spec.keys.forEach(function (other, otherIndex) {
+                            if (otherIndex === index) return;
+                            apply(other, raw);
+                            cells[otherIndex].value = raw;
+                        });
+                    }
+                    setDirty(true);
+                    refreshCanvas();
+                });
+                cells.push(input);
+                cell.appendChild(input);
+                cell.appendChild(el('span', 've-sides-side', spec.sides[index]));
+                row.appendChild(cell);
+            });
+            wrap.appendChild(row);
+
+            var unit = el('select', 've-input-unit');
+            LENGTH_UNITS.forEach(function (one) {
+                var option = el('option', null, one);
+                option.value = one;
+                if (sideUnit === one) option.selected = true;
+                unit.appendChild(option);
+            });
+            unit.addEventListener('change', function () {
+                sideUnit = unit.value;
+                // 单位一换，已填的边全部按新单位重写一遍，不留下混着单位的一组值。
+                spec.keys.forEach(function (key, index) {
+                    var raw = cells[index].value.trim();
+                    if (raw !== '') values[key] = raw + sideUnit;
+                });
+                setDirty(true);
+                refreshCanvas();
+            });
+            head.insertBefore(unit, link);
+
+            link.addEventListener('click', function () {
+                sideLinked[spec.label] = !sideLinked[spec.label];
+                if (sideLinked[spec.label]) link.setAttribute('data-ve-active', '1');
+                else link.removeAttribute('data-ve-active');
+            });
+            return wrap;
+        }
+
+        /** 间距盒子的当前单位与联动开关：会话内记住，免得每次都重设。 */
+        var sideUnit = 'px';
+        var sideLinked = {};
+
         /** 长度值拆成「数字 + 单位」两个控件：手打 16px 比拨一个数字慢得多。 */
-        function lengthControl(current, commit) {
-            var wrap = el('div', 've-input-row');
+        function lengthControl(current, commit, range) {
+            var wrap = el('div', 've-len');
             var match = /^(-?\d+(?:\.\d+)?)(px|rem|em|%|vh|vw)?$/.exec(String(current || '').trim());
+            var row = el('div', 've-input-row');
             var number = el('input', 've-input-num');
             number.type = 'number';
-            number.step = '1';
+            number.step = range ? String(range[2]) : '1';
             number.placeholder = '—';
             number.value = match ? match[1] : '';
             var unit = el('select', 've-input-unit');
@@ -856,16 +1137,35 @@
                 if ((match && match[2] ? match[2] : 'px') === one) option.selected = true;
                 unit.appendChild(option);
             });
-            var push = function () {
+            var slider = null;
+            var push = function (source) {
                 var raw = number.value.trim();
+                if (slider && source !== 'slider') slider.value = raw === '' ? String(range[0]) : raw;
                 commit(raw === '' ? '' : raw + unit.value);
             };
-            number.addEventListener('input', push);
-            unit.addEventListener('change', push);
-            wrap.appendChild(number);
-            wrap.appendChild(unit);
+            number.addEventListener('input', function () { push('number'); });
+            unit.addEventListener('change', function () { push('unit'); });
+            row.appendChild(number);
+            row.appendChild(unit);
+            wrap.appendChild(row);
+
+            // 滑块只在 px 这类绝对量程下有意义；单位换成 % 后仍可用，量程照旧。
+            if (range) {
+                slider = el('input', 've-input-slider');
+                slider.type = 'range';
+                slider.min = String(range[0]);
+                slider.max = String(range[1]);
+                slider.step = String(range[2]);
+                slider.value = match ? match[1] : String(range[0]);
+                slider.addEventListener('input', function () {
+                    number.value = slider.value;
+                    push('slider');
+                });
+                wrap.appendChild(slider);
+            }
             return wrap;
         }
+
 
         /** 颜色值配一个原生取色器：能取色，也能保留 var(--ui-primary) 这类写法。 */
         function colorControl(current, commit) {
@@ -904,42 +1204,42 @@
                 else values[property] = raw;
                 setDirty(true);
                 refreshCanvas();
+                markSet(wrap, values[property]);
             };
+            var wrap;
 
             if (options.length) {
-                control = el('select');
-                var blank = el('option', null, '（不设置）');
-                blank.value = '';
-                control.appendChild(blank);
-                options.forEach(function (value) {
-                    var option = el('option', null, labelOf(value, value));
-                    option.value = value;
-                    if (String(values[property] || '') === value) option.selected = true;
-                    control.appendChild(option);
-                });
-                control.addEventListener('change', function () { commit(control.value.trim()); });
+                // 枚举一律分段按钮：有图标用图标，没图标用短文字，都比下拉快。
+                control = segmentedControl(options, values[property] || '', commit, ENUM_ICONS[property], true);
+                wide = true;
             } else if (type === 'length') {
-                control = lengthControl(values[property] || '', commit);
+                control = lengthControl(values[property] || '', commit, LENGTH_RANGES[property]);
                 wide = true;
             } else if (type === 'color') {
                 control = colorControl(values[property] || '', commit);
+                wide = true;
+            } else if (type === 'image') {
+                control = imageControl(values[property] || '', commit);
                 wide = true;
             } else {
                 control = el('input');
                 control.type = 'text';
                 control.value = values[property] || '';
-                if (type === 'ratio') control.placeholder = '如 1.6';
-                else if (type === 'image') control.placeholder = '图片地址';
-                else control.placeholder = '值';
-                wide = type === 'image';
+                control.placeholder = type === 'ratio' ? '如 1.6' : '值';
                 control.addEventListener('input', function () { commit(control.value.trim()); });
             }
 
-            var wrap = field(grid, labelOf(property), control, wide);
-            if (values[property] !== undefined && values[property] !== '') {
-                wrap.setAttribute('data-ve-set', '1');
-            }
+            wrap = field(grid, labelOf(property), control, wide);
+            markSet(wrap, values[property]);
         }
+
+        /** 「这一项设过值」的标记：字段标签前那道蓝线由它控制。 */
+        function markSet(wrap, value) {
+            if (!wrap) return;
+            if (value !== undefined && value !== '') wrap.setAttribute('data-ve-set', '1');
+            else wrap.removeAttribute('data-ve-set');
+        }
+
 
         // ================= 结构操作 =================
 
@@ -1685,7 +1985,7 @@
                 if (data.canvas_css && canvasStyle) canvasStyle.textContent = data.canvas_css;
                 setDirty(false);
                 setStatus(data.message || '已保存');
-                toast(data.changed === false ? '内容没有变化' : '已保存到这条内容');
+                toast(data.message || '已保存到这条内容');
             }).catch(function (error) {
                 setStatus(error.message || '保存失败');
                 toast(error.message || '保存失败');
@@ -1794,6 +2094,7 @@
             Array.prototype.forEach.call(stage.querySelectorAll('[data-ve-action]'), function (button) {
                 var action = button.getAttribute('data-ve-action');
                 button.addEventListener('click', function () {
+                    closeMoreMenu();
                     if (action === 'close') {
                         if (dirty && !window.confirm('有未应用的修改，直接关闭会丢掉它们。确定关闭？')) return;
                         if (launcher) launcher.removeAttribute('data-ve-active');
@@ -1829,6 +2130,46 @@
                     if (event.target === viewport || event.target === frame) select(null);
                 });
             }
+        }
+
+        /**
+         * 顶栏的「更多」菜单：不常用的三个动作收在这里。
+         *
+         * 直接把它们摆成三颗一样的按钮，用户第一眼分不清哪个是保存——
+         * 顶栏只留「保存」与「关闭」两个明确的出口。
+         */
+        var moreWrap = null;
+
+        function closeMoreMenu() {
+            if (!moreWrap) return;
+            var menu = moreWrap.querySelector('[data-ve-more-menu]');
+            var toggle = moreWrap.querySelector('[data-ve-more-toggle]');
+            if (menu) menu.hidden = true;
+            if (toggle) toggle.setAttribute('aria-expanded', 'false');
+        }
+
+        function bindMoreMenu() {
+            moreWrap = stage.querySelector('[data-ve-more]');
+            if (!moreWrap) return;
+            var menu = moreWrap.querySelector('[data-ve-more-menu]');
+            var toggle = moreWrap.querySelector('[data-ve-more-toggle]');
+            if (!menu || !toggle) return;
+            toggle.addEventListener('click', function (event) {
+                event.stopPropagation();
+                var open = !menu.hidden;
+                if (open) { closeMoreMenu(); return; }
+                menu.hidden = false;
+                toggle.setAttribute('aria-expanded', 'true');
+                if (gsap && !reduceMotion) {
+                    gsap.fromTo(menu, { y: -6, opacity: 0 }, { y: 0, opacity: 1, duration: .16, ease: 'power2.out' });
+                }
+            });
+            document.addEventListener('click', function (event) {
+                if (!moreWrap.contains(event.target)) closeMoreMenu();
+            });
+            document.addEventListener('keydown', function (event) {
+                if (event.key === 'Escape') closeMoreMenu();
+            });
         }
 
         /** 当前模式是否还是「可视化」。切回富文本 / 代码后我们一个字节都不该写。 */
@@ -1868,6 +2209,7 @@
         bindPalette();
         bindNotch();
         bindStageActions();
+        bindMoreMenu();
         bindContextMenu();
         bindFormSync();
         setBreakpoint('desktop');

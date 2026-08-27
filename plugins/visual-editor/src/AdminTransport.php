@@ -132,17 +132,22 @@ final class VisualEditorAdminTransport
         if (!VisualEditorStore::save($source['key'], $tree, $rendered, $current)) {
             self::json(['ok' => false, 'message' => '插件存储写入失败，请检查 storage 目录权限'], 500);
         }
+        // 产物与字段现值是否真的不同：ContentWorkflow 报「没有变化」时，
+        // 这个标记能区分「本来就一样」和「写入没生效」——差别很大，
+        // 前者是正常的空操作，后者是必须查的 bug。
+        $identical = $current === $block;
+        $written = 0;
 
         try {
             $result = \App\Core\ContentWorkflow::mutate(
                 $source['type'],
                 $source['id'],
-                static function (array $locked) use ($source, $block, $permissions): void {
+                static function (array $locked) use ($source, $block, $permissions, &$written): void {
                     if ((int)($locked['status'] ?? 0) !== \App\Core\ContentWorkflow::DRAFT
                         && !\App\Core\Auth::can($permissions['publish'])) {
                         throw new \DomainException('修改非草稿内容需要 ' . $permissions['publish'] . ' 权限');
                     }
-                    \App\Core\Database::table($source['table'])
+                    $written = \App\Core\Database::table($source['table'])
                         ->where('id', $source['id'])
                         ->update([
                             $source['field'] => $block,
@@ -165,12 +170,25 @@ final class VisualEditorAdminTransport
             self::json(['ok' => false, 'message' => '保存失败：' . mb_substr($error->getMessage(), 0, 120)], 500);
         }
 
+        $changed = !empty($result['changed']);
+        if ($changed) {
+            $message = '已保存到这条内容';
+        } elseif ($identical) {
+            $message = '内容与上次保存完全相同，无需入库';
+        } else {
+            // 产物变了却没入库：只可能是写入没落到这一行上，如实报出来，
+            // 别用一句「内容没有变化」把真正的故障盖过去。
+            $message = '写入没有生效（更新了 ' . $written . ' 行），请把这句话反馈给开发者';
+        }
+
         self::json([
             'ok' => true,
-            'message' => empty($result['changed']) ? '内容没有变化' : '已保存到这条内容',
+            'message' => $message,
             'data' => [
                 'source_key' => $source['key'],
-                'changed' => !empty($result['changed']),
+                'changed' => $changed,
+                'identical' => $identical,
+                'written' => $written,
                 'revision_id' => $result['revision_id'] ?? null,
                 'block' => $block,
                 'canvas_html' => VisualEditorRenderer::render($source['key'], $tree, true),
