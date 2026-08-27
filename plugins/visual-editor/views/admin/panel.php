@@ -40,6 +40,8 @@ if (!defined('CODE_SCHEMA_VERSION')) exit;
 /** @var array $styleProperties */
 /** @var array $styleLabels */
 /** @var array $fieldLabels */
+/** @var array $repeaters */
+/** @var array $repeaterFieldLabels */
 /** @var array $presets */
 /** @var array $breakpoints */
 /** @var int $containerMax */
@@ -70,6 +72,8 @@ $config = [
     'styleProperties' => $styleProperties,
     'styleLabels' => $styleLabels,
     'fieldLabels' => $fieldLabels,
+    'repeaters' => $repeaters,
+    'repeaterFieldLabels' => $repeaterFieldLabels,
     'presets' => $presets,
     'breakpoints' => $breakpoints,
     'containerMax' => $containerMax,

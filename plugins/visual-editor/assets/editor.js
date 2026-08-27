@@ -179,6 +179,44 @@
                 + (color ? 'color:' + esc(color) + ';' : '') + '" aria-hidden="true"></i>';
         }
 
+        /** 按钮标签：按钮控件与价格表 / CTA / 翻转框共用（与 PHP 侧 button() 同源）。 */
+        function buttonHtml(c) {
+            if (!c.text) return '';
+            var variant = ['primary', 'outline', 'ghost'].indexOf(c.variant) >= 0 ? c.variant : 'primary';
+            var size = ['sm', 'md', 'lg'].indexOf(c.size) >= 0 ? c.size : 'md';
+            var classes = 've-button ve-button-' + variant + ' ve-button-' + size;
+            var wrap = '<div class="ve-button-wrap ve-align-' + alignOf(c) + '">';
+            if (c.url && isSafeUrl(c.url)) {
+                var target = c.target === '_blank' ? '_blank' : '_self';
+                return wrap + '<a class="' + classes + '" href="' + esc(c.url) + '" target="' + target + '"'
+                    + (target === '_blank' ? ' rel="noopener noreferrer"' : '') + '>' + esc(c.text) + '</a></div>';
+            }
+            return wrap + '<span class="' + classes + '">' + esc(c.text) + '</span></div>';
+        }
+
+        /** 重复字段的行，永远是数组。 */
+        function rowsOf(c, field) {
+            var list = c[field || 'items'];
+            if (!Array.isArray(list)) return [];
+            return list.filter(function (row) { return row && typeof row === 'object'; });
+        }
+
+        function ratioOf(c, fallback) {
+            var ratio = String(c.ratio == null ? fallback : c.ratio);
+            return ['auto', '16-9', '4-3', '1-1'].indexOf(ratio) >= 0 ? ratio : fallback;
+        }
+
+        /** 行里的图片（可带链接）：画廊 / 轮播 / Logo 墙共用。 */
+        function rowImageHtml(row, className) {
+            var media = (row.src && isMediaUrl(row.src))
+                ? '<img src="' + esc(row.src) + '" alt="' + esc(row.alt || '') + '" loading="lazy">'
+                : '<span class="ve-image-placeholder">未选择图片</span>';
+            if (row.url && isSafeUrl(row.url)) {
+                return '<a class="' + className + '" href="' + esc(row.url) + '">' + media + '</a>';
+            }
+            return '<div class="' + className + '">' + media + '</div>';
+        }
+
         function widgetBodyHtml(widget) {
             var c = widget.content || {};
             switch (widget.type) {
@@ -197,20 +235,8 @@
                     if (c.url && isSafeUrl(c.url)) img = '<a href="' + esc(c.url) + '">' + img + '</a>';
                     return '<figure class="ve-image ve-align-' + alignOf(c) + '">' + img + '</figure>';
                 }
-                case 'button': {
-                    if (!c.text) return '';
-                    var variant = ['primary', 'outline', 'ghost'].indexOf(c.variant) >= 0 ? c.variant : 'primary';
-                    var size = ['sm', 'md', 'lg'].indexOf(c.size) >= 0 ? c.size : 'md';
-                    var classes = 've-button ve-button-' + variant + ' ve-button-' + size;
-                    if (c.url && isSafeUrl(c.url)) {
-                        var target = c.target === '_blank' ? '_blank' : '_self';
-                        return '<div class="ve-button-wrap ve-align-' + alignOf(c) + '">'
-                            + '<a class="' + classes + '" href="' + esc(c.url) + '" target="' + target + '"'
-                            + (target === '_blank' ? ' rel="noopener noreferrer"' : '') + '>' + esc(c.text) + '</a></div>';
-                    }
-                    return '<div class="ve-button-wrap ve-align-' + alignOf(c) + '">'
-                        + '<span class="' + classes + '">' + esc(c.text) + '</span></div>';
-                }
+                case 'button':
+                    return buttonHtml(c);
                 case 'list': {
                     var marker = ['disc', 'decimal', 'check', 'none'].indexOf(c.marker) >= 0 ? c.marker : 'disc';
                     var tag = marker === 'decimal' ? 'ol' : 'ul';
@@ -296,6 +322,211 @@
                         + '<div class="ve-progress-bar" style="width:' + value + '%;'
                         + (barColor ? 'background-color:' + esc(barColor) + ';' : '') + '"></div>'
                         + '</div></div>';
+                }
+                case 'gallery': {
+                    var gCells = rowsOf(c).map(function (row) { return rowImageHtml(row, 've-gallery-cell'); }).join('');
+                    if (!gCells) return '';
+                    return '<div class="ve-gallery ve-ratio-' + ratioOf(c, 'auto') + '" style="'
+                        + esc('--ve-cols:' + clampInt(c.columns, 1, 6, 3) + ';--ve-radius:' + clampInt(c.radius, 0, 40, 8) + 'px')
+                        + '">' + gCells + '</div>';
+                }
+                case 'carousel': {
+                    var cCells = rowsOf(c).map(function (row) { return rowImageHtml(row, 've-carousel-cell'); }).join('');
+                    if (!cCells) return '';
+                    return '<div class="ve-carousel ve-ratio-' + ratioOf(c, 'auto') + '" style="'
+                        + esc('--ve-per:' + clampInt(c.perview, 1, 5, 3) + ';--ve-radius:' + clampInt(c.radius, 0, 40, 8) + 'px')
+                        + '" tabindex="0">' + cCells + '</div>';
+                }
+                case 'logos': {
+                    var lCells = rowsOf(c).map(function (row) { return rowImageHtml(row, 've-logos-cell'); }).join('');
+                    if (!lCells) return '';
+                    return '<div class="ve-logos' + (String(c.grayscale || 'yes') !== 'no' ? ' ve-logos-gray' : '') + '"'
+                        + ' style="' + esc('--ve-cols:' + clampInt(c.columns, 2, 8, 4)) + '">' + lCells + '</div>';
+                }
+                case 'tabs': {
+                    var tRows = rowsOf(c);
+                    if (!tRows.length) return '';
+                    var tGroup = 've-tabs-' + (/^ve[0-9a-f]{10}$/.test(String(widget.id)) ? widget.id : 'x');
+                    var tInputs = '', tLabels = '', tPanels = '';
+                    tRows.forEach(function (row, index) {
+                        var inputId = tGroup + '-' + index;
+                        tInputs += '<input class="ve-tabs-radio" type="radio" name="' + esc(tGroup) + '" id="'
+                            + esc(inputId) + '"' + (index === 0 ? ' checked' : '') + '>';
+                        tLabels += '<label class="ve-tabs-label" for="' + esc(inputId) + '">'
+                            + esc(row.title || ('第 ' + (index + 1) + ' 项')) + '</label>';
+                        tPanels += '<div class="ve-tabs-panel">' + String(row.html || '') + '</div>';
+                    });
+                    return '<div class="ve-tabs">' + tInputs + '<div class="ve-tabs-nav">' + tLabels + '</div>'
+                        + '<div class="ve-tabs-panels">' + tPanels + '</div></div>';
+                }
+                case 'accordion': {
+                    var aRows = rowsOf(c);
+                    if (!aRows.length) return '';
+                    var aGroup = 've-acc-' + (/^ve[0-9a-f]{10}$/.test(String(widget.id)) ? widget.id : 'x');
+                    var single = String(c.single || 'yes') !== 'no';
+                    var openFirst = String(c.openfirst || 'yes') !== 'no';
+                    return '<div class="ve-accordion">' + aRows.map(function (row, index) {
+                        return '<details class="ve-accordion-item"' + (single ? ' name="' + esc(aGroup) + '"' : '')
+                            + (openFirst && index === 0 ? ' open' : '') + '>'
+                            + '<summary class="ve-accordion-head">' + esc(row.title || ('第 ' + (index + 1) + ' 项')) + '</summary>'
+                            + '<div class="ve-accordion-body">' + String(row.html || '') + '</div></details>';
+                    }).join('') + '</div>';
+                }
+                case 'iconlist': {
+                    var ilSize = clampInt(c.size, 12, 48, 18);
+                    var ilItems = rowsOf(c).map(function (row) {
+                        if (!row.text) return '';
+                        var body = esc(row.text);
+                        if (row.url && isSafeUrl(row.url)) body = '<a href="' + esc(row.url) + '">' + body + '</a>';
+                        return '<li class="ve-iconlist-item"><span class="ve-iconlist-icon">'
+                            + iconTagHtml({ name: row.name, color: c.color }, ilSize)
+                            + '</span><span class="ve-iconlist-text">' + body + '</span></li>';
+                    }).join('');
+                    if (!ilItems) return '';
+                    var ilColor = colorOrEmpty(c.color);
+                    return '<ul class="ve-iconlist' + (String(c.divider || 'no') === 'yes' ? ' ve-iconlist-divided' : '') + '"'
+                        + (ilColor ? ' style="' + esc('--ve-icon-color:' + ilColor) + '"' : '') + '>' + ilItems + '</ul>';
+                }
+                case 'counter': {
+                    if (!c.value) return '';
+                    return '<div class="ve-counter ve-align-' + alignOf(c) + '">'
+                        + '<div class="ve-counter-number">'
+                        + '<span class="ve-counter-prefix">' + esc(c.prefix || '') + '</span>'
+                        + '<span class="ve-counter-value">' + esc(c.value) + '</span>'
+                        + '<span class="ve-counter-suffix">' + esc(c.suffix || '') + '</span></div>'
+                        + (c.label ? '<div class="ve-counter-label">' + esc(c.label) + '</div>' : '')
+                        + '</div>';
+                }
+                case 'rating': {
+                    var half = clampInt(c.value, 0, 10, 0);
+                    var rColor = colorOrEmpty(c.color);
+                    var stars = '';
+                    for (var ri = 1; ri <= 5; ri++) {
+                        var starName = half >= ri * 2 ? 'star-fill' : (half >= ri * 2 - 1 ? 'star-half' : 'star');
+                        stars += '<i class="' + esc(iconClass(starName)) + '" aria-hidden="true"></i>';
+                    }
+                    var rText = (half / 2).toFixed(1) + ' / 5';
+                    return '<div class="ve-rating ve-align-' + alignOf(c) + '" role="img" aria-label="'
+                        + esc('评分 ' + rText) + '"><span class="ve-rating-stars" style="'
+                        + esc('font-size:' + clampInt(c.size, 12, 48, 20) + 'px;' + (rColor ? 'color:' + rColor + ';' : ''))
+                        + '">' + stars + '</span>'
+                        + (String(c.showvalue || 'no') === 'yes' ? '<span class="ve-rating-value">' + esc(rText) + '</span>' : '')
+                        + '</div>';
+                }
+                case 'social': {
+                    var sRows = rowsOf(c);
+                    if (!sRows.length) return '';
+                    var shape = ['circle', 'square', 'plain'].indexOf(c.shape) >= 0 ? c.shape : 'circle';
+                    var sItems = sRows.map(function (row) {
+                        var inner = '<i class="' + esc(iconClass(row.name)) + '" aria-hidden="true"></i>'
+                            + (row.text ? '<span class="ve-social-sr">' + esc(row.text) + '</span>' : '');
+                        return (row.url && isSafeUrl(row.url))
+                            ? '<a class="ve-social-item" href="' + esc(row.url) + '"'
+                                + (row.text ? ' title="' + esc(row.text) + '"' : '') + '>' + inner + '</a>'
+                            : '<span class="ve-social-item">' + inner + '</span>';
+                    }).join('');
+                    return '<div class="ve-social ve-social-' + shape + ' ve-align-' + alignOf(c) + '" style="'
+                        + esc('--ve-social-size:' + clampInt(c.size, 12, 48, 18) + 'px') + '">' + sItems + '</div>';
+                }
+                case 'pricing': {
+                    var featured = String(c.featured || 'no') === 'yes';
+                    var pFeatures = String(c.features || '').split('\n').map(function (line) { return line.trim(); })
+                        .filter(Boolean).map(function (line) { return '<li>' + esc(line) + '</li>'; }).join('');
+                    return '<div class="ve-pricing' + (featured ? ' ve-pricing-featured' : '') + '">'
+                        + (c.ribbon ? '<span class="ve-pricing-ribbon">' + esc(c.ribbon) + '</span>' : '')
+                        + '<div class="ve-pricing-plan">' + esc(c.plan || '') + '</div>'
+                        + '<div class="ve-pricing-price">'
+                        + '<span class="ve-pricing-currency">' + esc(c.currency || '') + '</span>'
+                        + '<span class="ve-pricing-amount">' + esc(c.price || '') + '</span>'
+                        + '<span class="ve-pricing-period">' + esc(c.period || '') + '</span></div>'
+                        + (pFeatures ? '<ul class="ve-pricing-features">' + pFeatures + '</ul>' : '')
+                        + buttonHtml({ text: c.btntext, url: c.btnurl, variant: featured ? 'primary' : 'outline', size: 'md', align: 'center' })
+                        + '</div>';
+                }
+                case 'cta': {
+                    var overlay = ['none', 'light', 'dark'].indexOf(c.overlay) >= 0 ? c.overlay : 'dark';
+                    var ctaStyle = 'min-height:' + clampInt(c.height, 120, 800, 320) + 'px;';
+                    if (c.src && isMediaUrl(c.src)) {
+                        ctaStyle += 'background-image:url(' + String(c.src).replace(/[()"']/g, '') + ');';
+                    }
+                    return '<div class="ve-cta ve-cta-' + overlay + ' ve-align-' + alignOf(c) + '" style="'
+                        + esc(ctaStyle) + '"><div class="ve-cta-body">'
+                        + (c.title ? '<h3 class="ve-cta-title">' + esc(c.title) + '</h3>' : '')
+                        + (c.text ? '<p class="ve-cta-text">' + esc(c.text) + '</p>' : '')
+                        + buttonHtml({ text: c.btntext, url: c.btnurl, variant: 'primary', size: 'lg', align: alignOf(c) })
+                        + '</div></div>';
+                }
+                case 'testimonial': {
+                    if (!c.text) return '';
+                    var avatar = (c.src && isMediaUrl(c.src))
+                        ? '<img class="ve-testimonial-avatar" src="' + esc(c.src) + '" alt="" loading="lazy">' : '';
+                    return '<figure class="ve-testimonial ve-align-' + alignOf(c) + '">'
+                        + '<blockquote class="ve-testimonial-text">' + esc(c.text) + '</blockquote>'
+                        + '<figcaption class="ve-testimonial-meta">' + avatar + '<span class="ve-testimonial-who">'
+                        + (c.name ? '<span class="ve-testimonial-name">' + esc(c.name) + '</span>' : '')
+                        + (c.role ? '<span class="ve-testimonial-role">' + esc(c.role) + '</span>' : '')
+                        + '</span></figcaption></figure>';
+                }
+                case 'timeline': {
+                    var tlItems = rowsOf(c).map(function (row) {
+                        if (!row.date && !row.title && !row.text) return '';
+                        return '<li class="ve-timeline-item"><span class="ve-timeline-dot" aria-hidden="true"></span>'
+                            + (row.date ? '<span class="ve-timeline-date">' + esc(row.date) + '</span>' : '')
+                            + (row.title ? '<h4 class="ve-timeline-title">' + esc(row.title) + '</h4>' : '')
+                            + (row.text ? '<p class="ve-timeline-text">' + esc(row.text) + '</p>' : '')
+                            + '</li>';
+                    }).join('');
+                    if (!tlItems) return '';
+                    var lineColor = validateStyleValue('background_color', c.color);
+                    return '<ul class="ve-timeline"' + (lineColor ? ' style="' + esc('--ve-line:' + lineColor) + '"' : '')
+                        + '>' + tlItems + '</ul>';
+                }
+                case 'flipbox': {
+                    return '<div class="ve-flip" style="' + esc('min-height:' + clampInt(c.height, 160, 600, 260) + 'px')
+                        + '" tabindex="0"><div class="ve-flip-inner">'
+                        + '<div class="ve-flip-face ve-flip-front">'
+                        + '<div class="ve-flip-icon">' + iconTagHtml(c, 36) + '</div>'
+                        + '<h3 class="ve-flip-title">' + esc(c.title || '') + '</h3>'
+                        + '<p class="ve-flip-text">' + esc(c.text || '') + '</p></div>'
+                        + '<div class="ve-flip-face ve-flip-back">'
+                        + '<h3 class="ve-flip-title">' + esc(c.backtitle || '') + '</h3>'
+                        + '<p class="ve-flip-text">' + esc(c.backtext || '') + '</p>'
+                        + buttonHtml({ text: c.btntext, url: c.btnurl, variant: 'outline', size: 'sm', align: 'center' })
+                        + '</div></div></div>';
+                }
+                case 'table': {
+                    var header = String(c.header || 'yes') !== 'no';
+                    var tHead = '', tBody = '', tIndex = 0;
+                    String(c.rows || '').split('\n').forEach(function (line) {
+                        line = line.trim();
+                        if (!line) return;
+                        var tag = header && tIndex === 0 ? 'th' : 'td';
+                        var cells = line.split('|').map(function (cell) {
+                            return '<' + tag + '>' + esc(cell.trim()) + '</' + tag + '>';
+                        }).join('');
+                        if (header && tIndex === 0) tHead = '<thead><tr>' + cells + '</tr></thead>';
+                        else tBody += '<tr>' + cells + '</tr>';
+                        tIndex++;
+                    });
+                    if (!tHead && !tBody) return '';
+                    return '<div class="ve-table-wrap"><table class="ve-table'
+                        + (String(c.striped || 'yes') !== 'no' ? ' ve-table-striped' : '')
+                        + (String(c.bordered || 'yes') !== 'no' ? ' ve-table-bordered' : '') + '">'
+                        + tHead + (tBody ? '<tbody>' + tBody + '</tbody>' : '') + '</table></div>';
+                }
+                case 'map': {
+                    var query = String(c.query || '').trim();
+                    if (!query) return '<div class="ve-image-placeholder">未填写地点</div>';
+                    var mapSrc = 'https://www.google.com/maps?q=' + encodeURIComponent(query)
+                        + '&z=' + clampInt(c.zoom, 1, 20, 14) + '&output=embed';
+                    return '<div class="ve-embed ve-embed-' + ratioOf(c, '16-9') + '"><iframe src="' + esc(mapSrc)
+                        + '" title="' + esc(query) + '" loading="lazy"'
+                        + ' referrerpolicy="strict-origin-when-cross-origin" frameborder="0"></iframe></div>';
+                }
+                case 'anchor': {
+                    var anchorName = /^[A-Za-z0-9_-]{1,40}$/.test(String(c.name || '')) ? String(c.name) : '';
+                    return '<span class="ve-anchor"' + (anchorName ? ' id="' + esc(anchorName) + '"' : '')
+                        + ' aria-hidden="true"></span>';
                 }
             }
             return '';
@@ -815,6 +1046,26 @@
                 if (bounds[1]) control.max = bounds[1].trim();
                 control.value = current;
                 control.addEventListener('input', function () { commit(control.value); });
+            } else if (type === 'repeater') {
+                // 重复字段：整块交给 repeaterControl，行内的每个子字段再递归挑控件。
+                var subKey = constraint.split(',')[0].trim();
+                var limits = constraint.split(',');
+                if (!Array.isArray(widget.content[key])) widget.content[key] = [];
+                control = repeaterControl(
+                    widget.content[key],
+                    config.repeaters[subKey] || {},
+                    parseInt(limits[2], 10) || 24,
+                    function () { setDirty(true); refreshCanvas(); }
+                );
+                wide = true;
+            } else if (type === 'raw_html') {
+                // 原样 HTML：服务端不改写它，所以这里也不能替用户「顺手整理」。
+                control = el('textarea');
+                control.rows = 12;
+                control.value = current;
+                control.spellcheck = false;
+                wide = true;
+                control.addEventListener('input', function () { commit(control.value); });
             } else if (type === 'rich' || type === 'html_block' || type === 'lines') {
                 control = el('textarea');
                 control.rows = type === 'lines' ? 4 : 6;
@@ -833,7 +1084,144 @@
             }
 
             var hint = type === 'html_block' ? '会经服务端消毒后再入库：script / style / iframe 一律剥掉。' : '';
+            if (type === 'raw_html') hint = '原样保存，服务端不改写一个字节；前台是否输出 style / script 仍由核心决定。';
             field(grid, labelOf(key), control, wide, hint);
+        }
+
+        /** 重复字段里的子字段标签。 */
+        function subLabelOf(key) {
+            var labels = config.repeaterFieldLabels || {};
+            return labels[key] || key;
+        }
+
+        /**
+         * 重复字段控件：图库、标签页、图标列表这类「若干行、每行几个子字段」的东西。
+         *
+         * 直接在原数组上改（rows 就是 widget.content[key]），改完 onChange 一次——
+         * 不复制一份再回写，是为了避免「界面里加了一行但树里没有」这种两份状态。
+         *
+         * @param rows     Array    行数组（会被就地修改）
+         * @param schema   object   子字段 => 规格
+         * @param maxRows  number   行数上限
+         * @param onChange function 任何变动后的回调
+         */
+        function repeaterControl(rows, schema, maxRows, onChange) {
+            var wrap = el('div', 've-rep');
+            var subKeys = Object.keys(schema);
+
+            var blankRow = function () {
+                var row = {};
+                subKeys.forEach(function (subKey) { row[subKey] = ''; });
+                return row;
+            };
+
+            var draw = function () {
+                wrap.innerHTML = '';
+                rows.forEach(function (row, index) {
+                    if (!row || typeof row !== 'object') { rows[index] = row = blankRow(); }
+                    var item = el('div', 've-rep-item');
+                    var head = el('div', 've-rep-head');
+                    head.appendChild(el('span', 've-rep-index', '第 ' + (index + 1) + ' 项'));
+
+                    var tools = el('div', 've-rep-tools');
+                    var move = function (icon, title, delta) {
+                        var button = el('button', 've-rep-tool');
+                        button.type = 'button';
+                        button.title = title;
+                        button.innerHTML = '<i class="bi ' + icon + '"></i>';
+                        button.disabled = delta < 0 ? index === 0 : index === rows.length - 1;
+                        button.addEventListener('click', function () {
+                            var target = index + delta;
+                            var moved = rows.splice(index, 1)[0];
+                            rows.splice(target, 0, moved);
+                            draw();
+                            onChange();
+                        });
+                        return button;
+                    };
+                    tools.appendChild(move('bi-chevron-up', '上移', -1));
+                    tools.appendChild(move('bi-chevron-down', '下移', 1));
+
+                    var copy = el('button', 've-rep-tool');
+                    copy.type = 'button';
+                    copy.title = '复制这一项';
+                    copy.innerHTML = '<i class="bi bi-copy"></i>';
+                    copy.addEventListener('click', function () {
+                        if (rows.length >= maxRows) return;
+                        rows.splice(index + 1, 0, JSON.parse(JSON.stringify(row)));
+                        draw();
+                        onChange();
+                    });
+                    tools.appendChild(copy);
+
+                    var remove = el('button', 've-rep-tool ve-rep-tool-danger');
+                    remove.type = 'button';
+                    remove.title = '删除这一项';
+                    remove.innerHTML = '<i class="bi bi-trash"></i>';
+                    remove.addEventListener('click', function () {
+                        rows.splice(index, 1);
+                        draw();
+                        onChange();
+                    });
+                    tools.appendChild(remove);
+
+                    head.appendChild(tools);
+                    item.appendChild(head);
+
+                    var body = el('div', 've-rep-body');
+                    subKeys.forEach(function (subKey) {
+                        body.appendChild(repeaterField(row, subKey, schema[subKey], onChange));
+                    });
+                    item.appendChild(body);
+                    wrap.appendChild(item);
+                });
+
+                var add = el('button', 've-btn ve-btn-quiet ve-rep-add',
+                    rows.length >= maxRows ? '已达上限 ' + maxRows + ' 项' : '＋ 添加一项');
+                add.type = 'button';
+                add.disabled = rows.length >= maxRows;
+                add.addEventListener('click', function () {
+                    rows.push(blankRow());
+                    draw();
+                    onChange();
+                });
+                wrap.appendChild(add);
+            };
+
+            draw();
+            return wrap;
+        }
+
+        /** 重复字段里的一个子字段：复用与控件字段同一批控件。 */
+        function repeaterField(row, subKey, spec, onChange) {
+            var parts = String(spec).split(':');
+            var type = parts[0];
+            var current = row[subKey] == null ? '' : row[subKey];
+            var commit = function (value) { row[subKey] = value; onChange(); };
+            var control;
+
+            if (type === 'media') {
+                control = imageControl(current, commit);
+            } else if (type === 'rich') {
+                control = el('textarea');
+                control.rows = 4;
+                control.value = current;
+                control.addEventListener('input', function () { commit(control.value); });
+            } else if (type === 'color') {
+                control = colorControl(current, commit);
+            } else {
+                control = el('input');
+                control.type = 'text';
+                control.value = current;
+                if (type === 'link') control.placeholder = 'https:// 或 /about';
+                if (type === 'token') control.placeholder = '图标名，如 star-fill';
+                control.addEventListener('input', function () { commit(control.value); });
+            }
+
+            var cell = el('div', 've-rep-field');
+            cell.appendChild(el('label', 've-rep-label', subLabelOf(subKey)));
+            cell.appendChild(control);
+            return cell;
         }
 
         /** 样式页：断点条 + 按分组折叠的字段。分组顺序跟着 styleLabels 的声明顺序。 */

@@ -1178,6 +1178,66 @@ body.ve-stage-open {
 
 .ve-media-clear:hover { border-color: #fca5a5; color: #b91c1c; }
 
+/* ---- 重复字段：图库 / 标签页 / 图标列表这类「若干行」的编辑器 ---- */
+
+.ve-rep {
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+}
+
+.ve-rep-item {
+    border: 1px solid #e2e8f0;
+    border-radius: .5rem;
+    background: #fbfcfe;
+    overflow: hidden;
+}
+
+.ve-rep-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .5rem;
+    padding: .35rem .5rem;
+    background: #f1f5f9;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.ve-rep-index { font-size: .75rem; color: #64748b; }
+
+.ve-rep-tools { display: flex; gap: .2rem; }
+
+.ve-rep-tool {
+    width: 1.6rem;
+    height: 1.6rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: .3rem;
+    background: transparent;
+    color: #64748b;
+    cursor: pointer;
+    font-size: .8rem;
+}
+
+.ve-rep-tool:hover:not(:disabled) { background: #e2e8f0; color: #0f172a; }
+.ve-rep-tool:disabled { opacity: .35; cursor: default; }
+.ve-rep-tool-danger:hover:not(:disabled) { background: #fee2e2; color: #b91c1c; }
+
+.ve-rep-body {
+    display: flex;
+    flex-direction: column;
+    gap: .45rem;
+    padding: .5rem;
+}
+
+.ve-rep-field { display: flex; flex-direction: column; gap: .2rem; }
+
+.ve-rep-label { font-size: .7rem; color: #64748b; }
+
+.ve-rep-add { width: 100%; }
+
 /* ---- 顶栏「更多」菜单：不常用的动作收进来 ---- */
 
 .ve-more { position: relative; }

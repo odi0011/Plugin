@@ -62,6 +62,62 @@ final class VisualEditorValue
                 if (strlen($value) > VisualEditorSchema::MAX_RICH_BYTES) return [false, null];
                 return [true, self::sanitizeHtml($value, self::RICH_TAGS + self::BLOCK_TAGS)];
 
+            /*
+             * 原样 HTML：**故意不做任何改写**，只做长度与控制字符的把关。
+             *
+             * 这是接管复杂内容时的无损保底通道。之前它走白名单，class 与 <style>
+             * 被剥掉，一页手写页面进来就散成裸文本——保底反而成了破坏。
+             *
+             * 那安全性靠什么？靠权限，而不是靠改写：
+             *   - 这个控件的 needs_permission 是 visual_editor.code，只有能用
+             *     代码模式的管理员才能新增或修改它——同一个人本来就能在代码
+             *     模式里往字段里写任意 HTML/CSS/JS，插件更严没有意义，只有破坏力；
+             *   - 前台还有核心 ContentSanitizer 兜底：该行 updated_by 不是启用中的
+             *     管理员时，<style> / <script> 一律不落地。
+             *
+             * 所以这里唯一的处理是删掉 NUL 一类控制字符（它们只会让解析器犯病）。
+             */
+            case 'raw_html':
+                if (!is_string($value)) return [false, null];
+                if (strlen($value) > VisualEditorSchema::MAX_RAW_BYTES) return [false, null];
+                return [true, (string)preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', '', $value)];
+
+            /*
+             * 重复字段：'repeater:<子结构>,<最少行>,<最多行>'。
+             *
+             * 每一行的每个子字段都递归走 field()，所以「行里的图片必须是媒体
+             * 地址」「行里的富文本要消毒」这些规则与控件级字段完全同源，
+             * 不存在「重复字段是个后门」的可能。
+             */
+            case 'repeater':
+                [$sub, $min, $max] = array_pad(explode(',', $constraint), 3, '');
+                $schema = VisualEditorSchema::repeater((string)$sub);
+                if ($schema === null || !is_array($value)) return [false, null];
+                $minRows = max(0, (int)$min);
+                $maxRows = min(VisualEditorSchema::MAX_REPEATER_ROWS, (int)$max > 0 ? (int)$max : VisualEditorSchema::MAX_REPEATER_ROWS);
+                $rows = [];
+                foreach ($value as $row) {
+                    if (count($rows) >= $maxRows) break;
+                    if (!is_array($row)) continue;
+                    $clean = [];
+                    foreach ($schema as $subField => $subSpec) {
+                        [$ok, $subValue] = self::field($subSpec, $row[$subField] ?? '');
+                        $clean[$subField] = $ok ? $subValue : '';
+                    }
+                    $rows[] = $clean;
+                }
+                // 行数不足不算错：补空行比整个字段退回默认值更符合直觉
+                // ——用户删到只剩一行时不该看到自己的编辑被整段还原。
+                while (count($rows) < $minRows) {
+                    $blank = [];
+                    foreach ($schema as $subField => $subSpec) {
+                        [, $subValue] = self::field($subSpec, '');
+                        $blank[$subField] = $subValue ?? '';
+                    }
+                    $rows[] = $blank;
+                }
+                return [true, $rows];
+
             case 'enum':
                 $allowed = array_values(array_filter(array_map('trim', explode(',', $constraint))));
                 $candidate = is_scalar($value) ? trim((string)$value) : '';
@@ -99,6 +155,17 @@ final class VisualEditorValue
                 return self::isMediaUrl($media) ? [true, $media] : [false, null];
         }
         return [false, null];
+    }
+
+    /**
+     * 富文本 + 结构标签的白名单。降级路径（无 visual_editor.code 时的原样 HTML 控件）
+     * 需要与 html_block 完全同一张表，所以这里公开一份而不是让调用方各拼一次。
+     *
+     * @return array<string,list<string>>
+     */
+    public static function richBlockTags(): array
+    {
+        return self::RICH_TAGS + self::BLOCK_TAGS;
     }
 
     /**

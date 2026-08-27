@@ -36,6 +36,29 @@ final class VisualEditorStyleCompiler
      */
     public static function baseCss(): string
     {
+        return self::structureCss() . "\n" . self::tabsCss();
+    }
+
+    /**
+     * 标签页的「哪一页可见」没法用一条规则表达：CSS 里没有「第 n 个选中就显示第 n 个」
+     * 的通配写法，只能按序号展开。上限与 Schema 的 panel_item 行数上限（12）对齐——
+     * 多出来的标签点了不切换，比生成一份无界的 CSS 更可控。
+     */
+    private static function tabsCss(): string
+    {
+        $rules = [];
+        for ($index = 1; $index <= 12; $index++) {
+            $checked = '.ve-tabs-radio:nth-of-type(' . $index . '):checked';
+            $rules[] = $checked . ' ~ .ve-tabs-nav .ve-tabs-label:nth-of-type(' . $index . ')'
+                . '{border-bottom-color:var(--ui-primary,#2563eb);color:var(--ui-primary-text,#2563eb)}';
+            $rules[] = $checked . ' ~ .ve-tabs-panels .ve-tabs-panel:nth-of-type(' . $index . ')'
+                . '{display:block}';
+        }
+        return implode("\n", $rules);
+    }
+
+    private static function structureCss(): string
+    {
         return <<<'CSS'
 .ve-doc{--ve-container:1200px;width:100%}
 .ve-doc img{max-width:100%}
@@ -91,6 +114,10 @@ final class VisualEditorStyleCompiler
 .ve-imagebox-text{margin:0}
 .ve-alert{border:1px solid var(--ui-border,#d4d4d8);border-left-width:4px;border-radius:6px;display:flex;flex-wrap:wrap;gap:.5rem;padding:.75rem 1rem}
 .ve-alert-title{flex:0 0 auto}
+.ve-alert-text{flex:1 1 auto;min-width:0}
+.ve-imagebox-body{min-width:0}
+.ve-progress{width:100%}
+.ve-tabs{position:relative;width:100%}
 .ve-alert-info{background:rgba(37,99,235,.06);border-left-color:#2563eb}
 .ve-alert-success{background:rgba(22,163,74,.07);border-left-color:#16a34a}
 .ve-alert-warning{background:rgba(217,119,6,.08);border-left-color:#d97706}
@@ -98,6 +125,109 @@ final class VisualEditorStyleCompiler
 .ve-progress-head{display:flex;font-size:.875rem;justify-content:space-between;margin-bottom:.35rem}
 .ve-progress-track{background:var(--ui-border,#e4e4e7);border-radius:999px;height:.5rem;overflow:hidden;width:100%}
 .ve-progress-bar{background:var(--ui-primary,#2563eb);border-radius:inherit;height:100%}
+.ve-anchor{display:block;height:0;overflow:hidden;scroll-margin-top:5rem}
+.ve-ratio-16-9 img{aspect-ratio:16/9;object-fit:cover}
+.ve-ratio-4-3 img{aspect-ratio:4/3;object-fit:cover}
+.ve-ratio-1-1 img{aspect-ratio:1/1;object-fit:cover}
+.ve-gallery{display:grid;gap:.75rem;grid-template-columns:repeat(var(--ve-cols,3),minmax(0,1fr))}
+.ve-gallery-cell{display:block;overflow:hidden;border-radius:var(--ve-radius,8px)}
+.ve-gallery-cell img{display:block;height:auto;width:100%}
+.ve-carousel{display:flex;gap:.75rem;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:thin;-webkit-overflow-scrolling:touch}
+.ve-carousel-cell{border-radius:var(--ve-radius,8px);flex:0 0 calc((100% - (var(--ve-per,3) - 1) * .75rem) / var(--ve-per,3));overflow:hidden;scroll-snap-align:start}
+.ve-carousel-cell img{display:block;height:auto;width:100%}
+.ve-logos{align-items:center;display:grid;gap:1.25rem;grid-template-columns:repeat(var(--ve-cols,4),minmax(0,1fr))}
+.ve-logos-cell img{display:block;height:auto;margin-inline:auto;max-height:3.5rem;object-fit:contain;width:auto;max-width:100%}
+.ve-logos-gray .ve-logos-cell img{filter:grayscale(1);opacity:.72;transition:filter .2s ease,opacity .2s ease}
+.ve-logos-gray .ve-logos-cell:hover img{filter:none;opacity:1}
+.ve-tabs-radio{position:absolute;opacity:0;pointer-events:none;height:0;width:0}
+.ve-tabs-nav{border-bottom:1px solid var(--ui-border,#e4e4e7);display:flex;flex-wrap:wrap;gap:.25rem}
+.ve-tabs-label{border-bottom:2px solid transparent;cursor:pointer;font-weight:500;margin-bottom:-1px;padding:.5rem .9rem}
+.ve-tabs-panel{display:none;padding-top:1rem}
+.ve-tabs-panel>:first-child{margin-top:0}.ve-tabs-panel>:last-child{margin-bottom:0}
+.ve-accordion{border:1px solid var(--ui-border,#e4e4e7);border-radius:8px;overflow:hidden}
+.ve-accordion-item+.ve-accordion-item{border-top:1px solid var(--ui-border,#e4e4e7)}
+.ve-accordion-head{cursor:pointer;font-weight:500;list-style:none;padding:.75rem 1rem;position:relative}
+.ve-accordion-head::-webkit-details-marker{display:none}
+.ve-accordion-head::after{content:"+";position:absolute;right:1rem;top:.7rem}
+.ve-accordion-item[open]>.ve-accordion-head::after{content:"−"}
+.ve-accordion-body{padding:0 1rem 1rem}
+.ve-accordion-body>:first-child{margin-top:0}.ve-accordion-body>:last-child{margin-bottom:0}
+.ve-iconlist{list-style:none;margin:0;padding:0}
+.ve-iconlist-item{align-items:flex-start;display:flex;gap:.6rem;padding:.35rem 0}
+.ve-iconlist-divided .ve-iconlist-item+.ve-iconlist-item{border-top:1px solid var(--ui-border,#e4e4e7)}
+.ve-iconlist-icon{color:var(--ve-icon-color,var(--ui-primary,#2563eb));flex:0 0 auto;line-height:1.5}
+.ve-iconlist-text a{color:inherit}
+.ve-counter-number{font-size:2.5rem;font-weight:700;line-height:1.1}
+.ve-counter-label{color:var(--ui-text-muted,#71717a);margin-top:.25rem}
+.ve-rating{align-items:center;display:flex;gap:.5rem}
+.ve-rating.ve-align-center{justify-content:center}.ve-rating.ve-align-right{justify-content:flex-end}
+.ve-rating-stars{color:#f59e0b;line-height:1}
+.ve-rating-value{color:var(--ui-text-muted,#71717a);font-size:.875rem}
+.ve-social{display:flex;flex-wrap:wrap;gap:.5rem}
+.ve-social.ve-align-center{justify-content:center}.ve-social.ve-align-right{justify-content:flex-end}
+.ve-social-item{align-items:center;background:var(--ui-primary,#2563eb);color:#fff;display:inline-flex;font-size:var(--ve-social-size,18px);height:calc(var(--ve-social-size,18px) * 2.2);justify-content:center;text-decoration:none;width:calc(var(--ve-social-size,18px) * 2.2)}
+.ve-social-circle .ve-social-item{border-radius:999px}
+.ve-social-square .ve-social-item{border-radius:8px}
+.ve-social-plain .ve-social-item{background:transparent;color:var(--ui-primary-text,#2563eb);height:auto;width:auto}
+.ve-social-sr{clip:rect(0 0 0 0);height:1px;overflow:hidden;position:absolute;width:1px}
+.ve-pricing{border:1px solid var(--ui-border,#e4e4e7);border-radius:12px;padding:1.5rem;position:relative;text-align:center}
+.ve-pricing-featured{border-color:var(--ui-primary,#2563eb);box-shadow:0 12px 32px rgba(37,99,235,.12)}
+.ve-pricing-ribbon{background:var(--ui-primary,#2563eb);border-radius:999px;color:#fff;font-size:.75rem;left:50%;padding:.15rem .7rem;position:absolute;top:-.7rem;transform:translateX(-50%)}
+.ve-pricing-plan{color:var(--ui-text-muted,#71717a);font-weight:500}
+.ve-pricing-price{align-items:baseline;display:flex;gap:.15rem;justify-content:center;margin:.5rem 0 1rem}
+.ve-pricing-currency{font-size:1.1rem}
+.ve-pricing-amount{font-size:2.4rem;font-weight:700;line-height:1}
+.ve-pricing-period{color:var(--ui-text-muted,#71717a);font-size:.875rem}
+.ve-pricing-features{list-style:none;margin:0 0 1.25rem;padding:0;text-align:left}
+.ve-pricing-features>li{border-top:1px solid var(--ui-border,#f1f5f9);padding:.45rem 0}
+.ve-cta{align-items:center;background-position:center;background-size:cover;border-radius:12px;display:flex;overflow:hidden;padding:2.5rem 1.5rem;position:relative}
+.ve-cta.ve-align-center{justify-content:center}.ve-cta.ve-align-right{justify-content:flex-end}
+.ve-cta::before{content:"";inset:0;position:absolute}
+.ve-cta-dark::before{background:rgba(15,23,42,.55)}
+.ve-cta-light::before{background:rgba(255,255,255,.7)}
+.ve-cta-none::before{display:none}
+.ve-cta-body{max-width:44rem;position:relative}
+.ve-cta-dark .ve-cta-title,.ve-cta-dark .ve-cta-text{color:#fff}
+.ve-cta-title{font-size:1.75rem;line-height:1.25;margin:0 0 .5rem}
+.ve-cta-text{margin:0 0 1.25rem}
+.ve-testimonial{margin:0}
+.ve-testimonial-text{border-left:3px solid var(--ui-primary,#2563eb);font-size:1.05rem;margin:0;padding-left:1rem}
+.ve-testimonial-meta{align-items:center;display:flex;gap:.75rem;margin-top:1rem}
+.ve-testimonial.ve-align-center .ve-testimonial-meta{justify-content:center}
+.ve-testimonial.ve-align-right .ve-testimonial-meta{justify-content:flex-end}
+.ve-testimonial-avatar{border-radius:999px;height:2.75rem;object-fit:cover;width:2.75rem}
+.ve-testimonial-who{display:flex;flex-direction:column;text-align:left}
+.ve-testimonial-name{font-weight:600}
+.ve-testimonial-role{color:var(--ui-text-muted,#71717a);font-size:.875rem}
+.ve-timeline{list-style:none;margin:0;padding:0 0 0 1.5rem;position:relative}
+.ve-timeline::before{background:var(--ve-line,var(--ui-border,#e4e4e7));content:"";left:.32rem;position:absolute;top:.4rem;bottom:.4rem;width:2px}
+.ve-timeline-item{padding:0 0 1.25rem;position:relative}
+.ve-timeline-item:last-child{padding-bottom:0}
+.ve-timeline-dot{background:var(--ve-line,var(--ui-primary,#2563eb));border-radius:999px;height:.7rem;left:-1.5rem;position:absolute;top:.35rem;width:.7rem}
+.ve-timeline-date{color:var(--ui-text-muted,#71717a);font-size:.8125rem}
+.ve-timeline-title{font-size:1.05rem;margin:.15rem 0 .25rem}
+.ve-timeline-text{margin:0}
+.ve-flip{perspective:1200px}
+.ve-flip-inner{height:100%;min-height:inherit;position:relative;transform-style:preserve-3d;transition:transform .6s cubic-bezier(.2,.7,.2,1)}
+.ve-flip:hover .ve-flip-inner,.ve-flip:focus-within .ve-flip-inner{transform:rotateY(180deg)}
+.ve-flip-face{align-items:center;backface-visibility:hidden;border:1px solid var(--ui-border,#e4e4e7);border-radius:12px;box-sizing:border-box;display:flex;flex-direction:column;gap:.5rem;justify-content:center;min-height:inherit;padding:1.5rem;text-align:center}
+.ve-flip-back{background:var(--ui-primary,#2563eb);color:#fff;inset:0;position:absolute;transform:rotateY(180deg)}
+.ve-flip-icon{color:var(--ui-primary,#2563eb)}
+.ve-flip-title{font-size:1.15rem;margin:0}
+.ve-flip-text{margin:0}
+.ve-table-wrap{overflow-x:auto;width:100%}
+.ve-table{border-collapse:collapse;width:100%}
+.ve-table th,.ve-table td{padding:.55rem .75rem;text-align:left}
+.ve-table thead th{background:var(--ui-surface-muted,#f8fafc);font-weight:600}
+.ve-table-bordered th,.ve-table-bordered td{border:1px solid var(--ui-border,#e4e4e7)}
+.ve-table-striped tbody tr:nth-child(2n){background:var(--ui-surface-muted,#f8fafc)}
+@media (prefers-reduced-motion:reduce){.ve-flip-inner{transition:none}}
+@media (max-width:640px){
+.ve-gallery,.ve-logos{grid-template-columns:repeat(min(var(--ve-cols,3),2),minmax(0,1fr))}
+.ve-carousel-cell{flex-basis:calc(100% - 2rem)}
+.ve-cta{padding:1.75rem 1.15rem}
+.ve-counter-number{font-size:2rem}
+}
 CSS;
     }
 

@@ -34,6 +34,19 @@ final class VisualEditorSchema
     public const MAX_TEXT_LENGTH = 2000;
 
     /**
+     * 原样 HTML 控件的上限，比富文本大一个量级。
+     *
+     * 这个控件是**接管复杂内容时的无损保底**：整页的结构、class、内联 style、
+     * <style> 与 <script> 全都逐字节留在里面。1.3.x 之前它走富文本白名单，
+     * 结果是 class 被剥光、样式表被删——保底保成了「保了个空」。上限放宽到
+     * 400KB 是因为一整页手写页面轻易就有十几万字节，卡在 20KB 等于拒绝接管。
+     */
+    public const MAX_RAW_BYTES = 400000;
+
+    /** 重复字段（画廊、Tab、图标列表…）的行数上限。 */
+    public const MAX_REPEATER_ROWS = 24;
+
+    /**
      * 控件目录。
      *
      * fields 的值是「字段类型:约束」，由 validateFieldValue() 解释。
@@ -151,7 +164,9 @@ final class VisualEditorSchema
             'html' => [
                 'label' => '自定义 HTML',
                 'icon' => 'bi-code-slash',
-                'fields' => ['html' => 'html_block'],
+                // raw_html 而不是 html_block：见 MAX_RAW_BYTES 的说明。
+                // 这个控件同时承担「原内容无损保底」，一个字节都不能改写。
+                'fields' => ['html' => 'raw_html'],
                 'defaults' => ['html' => ''],
                 'needs_permission' => 'visual_editor.code',
             ],
@@ -229,7 +244,297 @@ final class VisualEditorSchema
                 'defaults' => ['label' => '完成度', 'value' => 70, 'color' => '', 'showvalue' => 'yes'],
                 'needs_permission' => '',
             ],
+            // ---- 1.4.0 新增：对齐 Elementor 的 General / Pro 常用控件 ----
+            // 一条硬约束贯穿这一批：**前台零 JavaScript**。
+            // 插件不给前台注入脚本（停用后页面要照旧），所以交互一律用纯 CSS 或
+            // 原生元素实现：Tab 用 :checked 兄弟选择器、手风琴用 <details>、
+            // 轮播用 scroll-snap、Flip Box 用 :hover + transform。
+            // 计数器一类「动画数字」只渲染静态值——不为一个动效换来一份脚本依赖。
+            'gallery' => [
+                'label' => '画廊',
+                'icon' => 'bi-grid-3x2-gap',
+                'fields' => [
+                    'items' => 'repeater:image_item,1,24',
+                    'columns' => 'number:1,6',
+                    'ratio' => 'enum:auto,16-9,4-3,1-1',
+                    'radius' => 'number:0,40',
+                ],
+                'defaults' => [
+                    'items' => [['src' => '', 'alt' => '', 'url' => '']],
+                    'columns' => 3, 'ratio' => '4-3', 'radius' => 8,
+                ],
+                'needs_permission' => '',
+            ],
+            'carousel' => [
+                'label' => '图片轮播',
+                'icon' => 'bi-images',
+                'fields' => [
+                    'items' => 'repeater:image_item,1,24',
+                    'perview' => 'number:1,5',
+                    'ratio' => 'enum:auto,16-9,4-3,1-1',
+                    'radius' => 'number:0,40',
+                ],
+                'defaults' => [
+                    'items' => [['src' => '', 'alt' => '', 'url' => '']],
+                    'perview' => 3, 'ratio' => '4-3', 'radius' => 8,
+                ],
+                'needs_permission' => '',
+            ],
+            'tabs' => [
+                'label' => '选项卡',
+                'icon' => 'bi-segmented-nav',
+                'fields' => ['items' => 'repeater:panel_item,1,12'],
+                'defaults' => ['items' => [
+                    ['title' => '第一项', 'html' => '<p>第一项的内容。</p>'],
+                    ['title' => '第二项', 'html' => '<p>第二项的内容。</p>'],
+                ]],
+                'needs_permission' => '',
+            ],
+            'accordion' => [
+                'label' => '手风琴',
+                'icon' => 'bi-list-nested',
+                'fields' => [
+                    'items' => 'repeater:panel_item,1,20',
+                    'openfirst' => 'enum:yes,no',
+                    'single' => 'enum:yes,no',
+                ],
+                'defaults' => [
+                    'items' => [
+                        ['title' => '常见问题一', 'html' => '<p>问题一的回答。</p>'],
+                        ['title' => '常见问题二', 'html' => '<p>问题二的回答。</p>'],
+                    ],
+                    'openfirst' => 'yes', 'single' => 'yes',
+                ],
+                'needs_permission' => '',
+            ],
+            'iconlist' => [
+                'label' => '图标列表',
+                'icon' => 'bi-card-checklist',
+                'fields' => [
+                    'items' => 'repeater:icon_item,1,24',
+                    'size' => 'number:12,48',
+                    'color' => 'color',
+                    'divider' => 'enum:yes,no',
+                ],
+                'defaults' => [
+                    'items' => [
+                        ['name' => 'check2', 'text' => '第一条卖点', 'url' => ''],
+                        ['name' => 'check2', 'text' => '第二条卖点', 'url' => ''],
+                    ],
+                    'size' => 18, 'color' => '', 'divider' => 'no',
+                ],
+                'needs_permission' => '',
+            ],
+            'counter' => [
+                'label' => '计数器',
+                'icon' => 'bi-123',
+                'fields' => [
+                    'value' => 'text:20',
+                    'prefix' => 'text:12',
+                    'suffix' => 'text:12',
+                    'label' => 'text:120',
+                    'align' => 'enum:left,center,right',
+                ],
+                'defaults' => [
+                    'value' => '1200', 'prefix' => '', 'suffix' => '+',
+                    'label' => '服务客户', 'align' => 'center',
+                ],
+                'needs_permission' => '',
+            ],
+            'rating' => [
+                'label' => '星级评分',
+                'icon' => 'bi-star-half',
+                'fields' => [
+                    'value' => 'number:0,10',
+                    'color' => 'color',
+                    'size' => 'number:12,48',
+                    'align' => 'enum:left,center,right',
+                    'showvalue' => 'enum:yes,no',
+                ],
+                'defaults' => ['value' => 9, 'color' => '', 'size' => 20, 'align' => 'left', 'showvalue' => 'no'],
+                'needs_permission' => '',
+            ],
+            'social' => [
+                'label' => '社交图标',
+                'icon' => 'bi-share',
+                'fields' => [
+                    'items' => 'repeater:icon_item,1,16',
+                    'size' => 'number:12,48',
+                    'shape' => 'enum:circle,square,plain',
+                    'align' => 'enum:left,center,right',
+                ],
+                'defaults' => [
+                    'items' => [
+                        ['name' => 'wechat', 'text' => '微信', 'url' => ''],
+                        ['name' => 'envelope', 'text' => '邮件', 'url' => ''],
+                    ],
+                    'size' => 18, 'shape' => 'circle', 'align' => 'left',
+                ],
+                'needs_permission' => '',
+            ],
+            'pricing' => [
+                'label' => '价格表',
+                'icon' => 'bi-tags',
+                'fields' => [
+                    'plan' => 'text:80',
+                    'price' => 'text:20',
+                    'currency' => 'text:8',
+                    'period' => 'text:20',
+                    'features' => 'lines:16,160',
+                    'btntext' => 'text:40',
+                    'btnurl' => 'link',
+                    'featured' => 'enum:yes,no',
+                    'ribbon' => 'text:20',
+                ],
+                'defaults' => [
+                    'plan' => '标准版', 'price' => '299', 'currency' => '¥', 'period' => '/ 月',
+                    'features' => "包含全部基础功能\n5 个团队成员\n邮件支持",
+                    'btntext' => '立即开始', 'btnurl' => '', 'featured' => 'no', 'ribbon' => '',
+                ],
+                'needs_permission' => '',
+            ],
+            'cta' => [
+                'label' => '行动号召',
+                'icon' => 'bi-megaphone',
+                'fields' => [
+                    'src' => 'media',
+                    'overlay' => 'enum:none,light,dark',
+                    'title' => 'text:120',
+                    'text' => 'text:600',
+                    'btntext' => 'text:40',
+                    'btnurl' => 'link',
+                    'align' => 'enum:left,center,right',
+                    'height' => 'number:120,800',
+                ],
+                'defaults' => [
+                    'src' => '', 'overlay' => 'dark', 'title' => '准备好开始了吗？',
+                    'text' => '一句话说明现在行动能得到什么。',
+                    'btntext' => '联系我们', 'btnurl' => '', 'align' => 'center', 'height' => 320,
+                ],
+                'needs_permission' => '',
+            ],
+            'testimonial' => [
+                'label' => '客户评价',
+                'icon' => 'bi-chat-quote',
+                'fields' => [
+                    'text' => 'text:600',
+                    'name' => 'text:80',
+                    'role' => 'text:80',
+                    'src' => 'media',
+                    'align' => 'enum:left,center,right',
+                ],
+                'defaults' => [
+                    'text' => '写下客户的一段原话，比任何自我介绍都有说服力。',
+                    'name' => '张三', 'role' => '某公司 产品负责人', 'src' => '', 'align' => 'left',
+                ],
+                'needs_permission' => '',
+            ],
+            'logos' => [
+                'label' => 'Logo 墙',
+                'icon' => 'bi-collection',
+                'fields' => [
+                    'items' => 'repeater:image_item,1,24',
+                    'columns' => 'number:2,8',
+                    'grayscale' => 'enum:yes,no',
+                ],
+                'defaults' => [
+                    'items' => [['src' => '', 'alt' => '', 'url' => '']],
+                    'columns' => 4, 'grayscale' => 'yes',
+                ],
+                'needs_permission' => '',
+            ],
+            'timeline' => [
+                'label' => '时间线',
+                'icon' => 'bi-hourglass-split',
+                'fields' => [
+                    'items' => 'repeater:timeline_item,1,20',
+                    'color' => 'color',
+                ],
+                'defaults' => ['items' => [
+                    ['date' => '2024', 'title' => '第一个里程碑', 'text' => '这一年发生了什么。'],
+                    ['date' => '2025', 'title' => '第二个里程碑', 'text' => '这一年发生了什么。'],
+                ], 'color' => ''],
+                'needs_permission' => '',
+            ],
+            'flipbox' => [
+                'label' => '翻转框',
+                'icon' => 'bi-arrow-repeat',
+                'fields' => [
+                    'name' => 'token:40',
+                    'title' => 'text:120',
+                    'text' => 'text:300',
+                    'backtitle' => 'text:120',
+                    'backtext' => 'text:300',
+                    'btntext' => 'text:40',
+                    'btnurl' => 'link',
+                    'height' => 'number:160,600',
+                ],
+                'defaults' => [
+                    'name' => 'box', 'title' => '正面标题', 'text' => '鼠标移上来看背面。',
+                    'backtitle' => '背面标题', 'backtext' => '背面写详细一点的说明。',
+                    'btntext' => '了解更多', 'btnurl' => '', 'height' => 260,
+                ],
+                'needs_permission' => '',
+            ],
+            'table' => [
+                'label' => '表格',
+                'icon' => 'bi-table',
+                'fields' => [
+                    'rows' => 'lines:40,400',
+                    'header' => 'enum:yes,no',
+                    'striped' => 'enum:yes,no',
+                    'bordered' => 'enum:yes,no',
+                ],
+                'defaults' => [
+                    'rows' => "项目 | 规格 | 价格\n入门 | 1 核 2G | ¥99\n进阶 | 2 核 4G | ¥199",
+                    'header' => 'yes', 'striped' => 'yes', 'bordered' => 'yes',
+                ],
+                'needs_permission' => '',
+            ],
+            'map' => [
+                'label' => '地图',
+                'icon' => 'bi-geo-alt',
+                'fields' => [
+                    'query' => 'text:160',
+                    'zoom' => 'number:1,20',
+                    'ratio' => 'enum:16-9,4-3,1-1',
+                ],
+                'defaults' => ['query' => '', 'zoom' => 14, 'ratio' => '16-9'],
+                'needs_permission' => '',
+            ],
+            'anchor' => [
+                'label' => '锚点',
+                'icon' => 'bi-bookmark',
+                'fields' => ['name' => 'token:40'],
+                'defaults' => ['name' => 'section'],
+                'needs_permission' => '',
+            ],
         ];
+    }
+
+    /**
+     * 重复字段的子结构：键 => 子字段表。
+     *
+     * 为什么单独一张表而不是把子字段内联进 widgets()：画廊、Logo 墙、轮播用的
+     * 是同一种「图片行」，Tab 与手风琴用的是同一种「标题 + 内容行」。共用一份
+     * 定义，检查器里的行编辑器与服务端校验就只有一套代码路径。
+     *
+     * @return array<string,array<string,string>>
+     */
+    public static function repeaters(): array
+    {
+        return [
+            'image_item' => ['src' => 'media', 'alt' => 'text:200', 'url' => 'link'],
+            'panel_item' => ['title' => 'text:120', 'html' => 'rich'],
+            'icon_item' => ['name' => 'token:40', 'text' => 'text:200', 'url' => 'link'],
+            'timeline_item' => ['date' => 'text:40', 'title' => 'text:120', 'text' => 'text:400'],
+        ];
+    }
+
+    /** @return array<string,string>|null */
+    public static function repeater(string $key): ?array
+    {
+        return self::repeaters()[strtolower(trim($key))] ?? null;
     }
 
     /**
@@ -244,8 +549,14 @@ final class VisualEditorSchema
     {
         return [
             '基础' => ['heading', 'text', 'image', 'button', 'list', 'quote'],
-            '布局' => ['divider', 'spacer'],
-            '进阶' => ['icon', 'iconbox', 'imagebox', 'alert', 'progress', 'embed'],
+            '布局' => ['divider', 'spacer', 'anchor'],
+            '媒体' => ['gallery', 'carousel', 'logos', 'embed', 'map'],
+            '交互' => ['tabs', 'accordion', 'flipbox'],
+            '展示' => [
+                'icon', 'iconbox', 'imagebox', 'iconlist', 'alert', 'progress',
+                'counter', 'rating', 'social', 'pricing', 'cta', 'testimonial',
+                'timeline', 'table',
+            ],
             '开发' => ['html'],
         ];
     }
@@ -425,6 +736,58 @@ final class VisualEditorSchema
             'label' => '名称',
             'value' => '数值（%）',
             'showvalue' => '显示数值',
+            // 1.4.0 新增控件的字段
+            'items' => '条目',
+            'columns' => '每行几个',
+            'radius' => '圆角（px）',
+            'perview' => '每屏几张',
+            'openfirst' => '默认展开第一项',
+            'single' => '同时只展开一项',
+            'divider' => '条目间分隔线',
+            'prefix' => '前缀',
+            'suffix' => '后缀',
+            'shape' => '底色形状',
+            'plan' => '套餐名',
+            'price' => '价格',
+            'currency' => '货币符号',
+            'period' => '计费周期',
+            'features' => '包含项（每行一项）',
+            'btntext' => '按钮文字',
+            'btnurl' => '按钮链接',
+            'featured' => '推荐款式',
+            'ribbon' => '角标文字',
+            'overlay' => '遮罩',
+            'grayscale' => '灰度显示',
+            'backtitle' => '背面标题',
+            'backtext' => '背面文字',
+            'rows' => '表格内容（每行一条，用 | 分列）',
+            'header' => '首行为表头',
+            'striped' => '斑马纹',
+            'bordered' => '显示边框',
+            'query' => '地点或地址',
+            'zoom' => '缩放级别',
+            'date' => '时间',
+        ];
+    }
+
+    /**
+     * 重复字段里子字段的中文名。与 fieldLabels() 分开是因为同名子字段的语义
+     * 不一样：控件级的 name 是图标名，行级的 name 在社交图标里也是图标名，
+     * 但 text 在行里是「文字」而不是控件的正文。
+     *
+     * @return array<string,string>
+     */
+    public static function repeaterFieldLabels(): array
+    {
+        return [
+            'src' => '图片',
+            'alt' => '替代文字',
+            'url' => '链接',
+            'title' => '标题',
+            'html' => '内容',
+            'name' => '图标名',
+            'text' => '文字',
+            'date' => '时间',
         ];
     }
 }

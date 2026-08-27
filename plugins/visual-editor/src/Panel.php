@@ -21,7 +21,7 @@ final class VisualEditorPanel
     public const MODE_KEY = 'visual-editor';
 
     /** 资源 URL 的缓存指纹：随插件版本走，升级后浏览器一定重新取 CSS/JS。 */
-    public const VERSION = '1.3.3';
+    public const VERSION = '1.4.0';
 
     /**
      * admin.content_editor.modes 过滤器入口。
@@ -114,6 +114,8 @@ final class VisualEditorPanel
             'styleProperties' => VisualEditorSchema::styleProperties(),
             'styleLabels' => VisualEditorSchema::styleLabels(),
             'fieldLabels' => VisualEditorSchema::fieldLabels(),
+            'repeaters' => VisualEditorSchema::repeaters(),
+            'repeaterFieldLabels' => VisualEditorSchema::repeaterFieldLabels(),
             'presets' => VisualEditorSchema::sectionPresets(),
             'breakpoints' => VisualEditorSettings::breakpoints(),
             'containerMax' => VisualEditorSettings::containerMax(),

@@ -455,6 +455,10 @@ final class VisualEditorContent
      */
     private static function mapForeignElement(\DOMElement $node, string $markup): ?array
     {
+        // 先问一句「转成控件会不会丢东西」。会丢就不转——原样落进 html 兜底控件。
+        // 1.4.0 之前是先转再消毒，于是 class / id / style 与整段 <style> 全被吃掉，
+        // 一篇有主题样式的页面进来就散成裸文本。宁可少一个可视化控件，不可少一个字节。
+        if (self::losesFidelity($node)) return null;
         $tag = strtolower($node->tagName);
         switch ($tag) {
             case 'h1': case 'h2': case 'h3': case 'h4': case 'h5': case 'h6':
@@ -500,6 +504,37 @@ final class VisualEditorContent
             return ['type' => 'text', 'content' => ['html' => $markup]];
         }
         return null;
+    }
+
+    /**
+     * 转成控件会不会丢东西？
+     *
+     * 控件的字段与富文本白名单里没有 class / id / style，也没有 <style> / <script>，
+     * 所以只要节点树上出现了这些，「映射成控件」就一定是有损的。这时返回 true，
+     * 调用方改走原样 HTML 兜底——那条路一个字节都不改写。
+     */
+    private static function losesFidelity(\DOMElement $node): bool
+    {
+        // 这些属性在富文本 / 控件字段里都留得住，出现它们不算丢东西。
+        static $harmless = ['src', 'alt', 'href', 'title', 'target', 'rel', 'width', 'height',
+            'colspan', 'rowspan', 'scope', 'loading', 'cite'];
+        // 这些标签在消毒时整棵删除或解开，一旦出现就必须走原样通道。
+        static $fatal = ['style', 'script', 'svg', 'math', 'form', 'input', 'button', 'select',
+            'textarea', 'video', 'audio', 'canvas', 'template', 'noscript', 'object', 'embed', 'picture', 'source'];
+
+        foreach ($fatal as $tag) {
+            if ($node->getElementsByTagName($tag)->length > 0) return true;
+        }
+        $document = $node->ownerDocument;
+        if ($document === null) return false;
+        $xpath = new \DOMXPath($document);
+        $attributes = $xpath->query('.//@*|./@*', $node);
+        if ($attributes === false) return false;
+        foreach (iterator_to_array($attributes) as $attribute) {
+            $name = strtolower((string)$attribute->nodeName);
+            if (!in_array($name, $harmless, true)) return true;
+        }
+        return false;
     }
 
     /** iframe src 能认出服务商就转 embed 控件，认不出交给 html 兜底。 */
@@ -924,7 +959,33 @@ if (!class_exists('VisualEditorDocumentShape')) {
             // 未知类型直接丢弃：渲染器对它返回空串，留着只是一块看不见的垃圾。
             if ($definition === null) return null;
             $needs = (string)($definition['needs_permission'] ?? '');
-            if ($needs === 'visual_editor.code' && !$allowCode) return null;
+            if ($needs === 'visual_editor.code' && !$allowCode) {
+                /*
+                 * 没有 visual_editor.code 的人不能新增或修改原样 HTML 控件——但
+                 * 「不能编辑」不等于「可以替他删掉」。1.4.0 之前这里直接 return null，
+                 * 结果是：首次接管把整篇原文落进这个兜底控件，随后一个只有
+                 * visual_editor.edit 的账号点一次保存，整篇内容就没了。
+                 *
+                 * 所以现在降级而不是丢弃：内容过一遍标签白名单（script / style
+                 * 会被剥掉，这一步与该账号本来的权限一致），落成一个富文本控件。
+                 * 排版可能变样，但一个字都不会少。
+                 */
+                $raw = '';
+                foreach (['html', 'text'] as $candidate) {
+                    if (is_string($widget['content'][$candidate] ?? null)) {
+                        $raw = (string)$widget['content'][$candidate];
+                        break;
+                    }
+                }
+                $safe = VisualEditorValue::sanitizeHtml($raw, VisualEditorValue::richBlockTags());
+                if (trim($safe) === '') return null;
+                return self::normalizeWidget([
+                    'id' => $widget['id'] ?? '',
+                    'type' => 'text',
+                    'content' => ['html' => $safe],
+                    'style' => $widget['style'] ?? null,
+                ], $allowCode);
+            }
 
             $incoming = is_array($widget['content'] ?? null) ? $widget['content'] : [];
             $defaults = is_array($definition['defaults'] ?? null) ? $definition['defaults'] : [];
