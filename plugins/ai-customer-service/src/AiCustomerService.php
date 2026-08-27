@@ -10,9 +10,19 @@ final class AiCustomerService
     private const MAX_CONVERSATIONS = 12;
     private const CUSTOM_KEY_SETTING = 'plugin.ai-customer-service.custom_api_key';
 
+    /** 后台四个独立子页面：key => 标签，与 plugin.json 的 settings.sections 一一对应。 */
+    public const ADMIN_PAGES = [
+        'conversation' => '会话内容',
+        'trigger' => '显示与触发',
+        'appearance' => '外观与位置',
+        'ai' => 'AI 与知识库',
+    ];
+    private const SAVE_KEYS_FIELD = 'acs_save_keys';
+
     /** @return array<string,mixed> */
-    public static function adminPageData(): array
+    public static function adminPageData(string $page = 'conversation'): array
     {
+        $page = array_key_exists($page, self::ADMIN_PAGES) ? $page : 'conversation';
         $form = \App\Core\PluginSettingsService::form(self::SLUG) ?? [
             'sections' => [],
             'values' => [],
@@ -37,6 +47,9 @@ final class AiCustomerService
 
         return [
             'form' => $form,
+            'page' => $page,
+            'pages' => self::ADMIN_PAGES,
+            'section' => self::sectionFor($form, $page),
             'models' => $models,
             'customKeySet' => self::customApiKeySet(),
             'active' => \App\Core\PluginManager::isActive(self::SLUG),
@@ -44,7 +57,26 @@ final class AiCustomerService
         ];
     }
 
-    /** @return array{ok:bool,message:string} */
+    /** @param array<string,mixed> $form @return array<string,mixed> */
+    private static function sectionFor(array $form, string $page): array
+    {
+        foreach ((array)($form['sections'] ?? []) as $section) {
+            if ((string)($section['key'] ?? '') === $page) {
+                return is_array($section) ? $section : [];
+            }
+        }
+        return ['key' => $page, 'label' => self::ADMIN_PAGES[$page] ?? $page, 'description' => '', 'fields' => []];
+    }
+
+    /**
+     * 校验并保存一次后台提交。
+     *
+     * 每个子页面只提交自己名下的字段；表单携带 acs_save_keys 说明本次归属的键，
+     * 未列出的声明字段以库中现值回填后再整体校验落库——这样布尔项不会被其他
+     * 页面的提交静默重置。密钥仅由“AI 与知识库”页处理。
+     *
+     * @return array{ok:bool,message:string}
+     */
     public static function saveAdminConfiguration(): array
     {
         $declaration = \App\Core\PluginSettingsService::declaration(self::SLUG);
@@ -53,8 +85,23 @@ final class AiCustomerService
             return ['ok' => false, 'message' => 'AI客服设置声明不可用'];
         }
 
+        $requestedRaw = $_POST[self::SAVE_KEYS_FIELD] ?? '';
+        if (!is_string($requestedRaw)) {
+            return ['ok' => false, 'message' => '保存范围标识不合法'];
+        }
+        $requested = array_values(array_intersect(
+            array_map('trim', explode(',', $requestedRaw)),
+            array_keys((array)$declaration['fields'])
+        ));
+
+        $storedValues = \App\Core\PluginSettingsService::values(self::SLUG)['values'];
         $input = [];
         foreach ((array)$declaration['fields'] as $key => $field) {
+            if (!in_array($key, $requested, true)) {
+                // 本次未提交的声明字段：保持库中现值原样通过整体校验。
+                $input[$key] = $storedValues[$key] ?? ($field['default'] ?? '');
+                continue;
+            }
             $name = 'setting_' . $key;
             if (array_key_exists($name, $_POST)) {
                 $input[$key] = $_POST[$name];
@@ -108,6 +155,15 @@ final class AiCustomerService
         return ['ok' => true, 'message' => 'AI客服配置已保存'];
     }
 
+    /** 后台保存后应跳回的子页面。 */
+    public static function adminReturnPage(): string
+    {
+        $raw = isset($_POST['acs_return_page']) && is_string($_POST['acs_return_page'])
+            ? trim($_POST['acs_return_page'])
+            : '';
+        return array_key_exists($raw, self::ADMIN_PAGES) ? $raw : 'conversation';
+    }
+
     /** @return array<string,mixed> */
     public static function config(): array
     {
@@ -123,6 +179,7 @@ final class AiCustomerService
             'team_label' => self::text($raw['team_label'], 120, '智能在线服务'),
             'welcome_message' => self::text($raw['welcome_message'], 1000, '您好，我是您的 AI 客服。有什么可以帮您？'),
             'input_placeholder' => self::text($raw['input_placeholder'], 160, '输入您的问题...'),
+            'quick_replies_title' => self::text($raw['quick_replies_title'], 60, ''),
             'quick_replies' => self::quickReplies((string)$raw['quick_replies']),
             'unavailable_message' => self::text($raw['unavailable_message'], 500, '当前客服暂时不可用，请稍后再试。'),
             'handoff_label' => self::text($raw['handoff_label'], 80, '联系人工客服'),
@@ -135,17 +192,30 @@ final class AiCustomerService
             'delay_seconds' => self::integer($raw['delay_seconds'], 0, 300, 0),
             'scroll_percent' => self::integer($raw['scroll_percent'], 0, 100, 0),
             'exit_intent' => self::bool($raw['exit_intent']),
+            'initial_open' => self::bool($raw['initial_open']),
+            'initial_open_delay' => self::integer($raw['initial_open_delay'], 0, 120, 0),
+            'once_per_session' => self::bool($raw['once_per_session']),
+            'show_launcher' => self::bool($raw['show_launcher']),
+            'tooltip_text' => self::text($raw['tooltip_text'], 80, ''),
+            'teaser_enabled' => self::bool($raw['teaser_enabled']),
+            'teaser_text' => self::text($raw['teaser_text'], 120, '有问题？随时咨询'),
+            'badge_enabled' => self::bool($raw['badge_enabled']),
+            'attention_effect' => self::choice($raw['attention_effect'], ['none', 'wiggle', 'bounce', 'pulse'], 'none'),
             'schedule_enabled' => self::bool($raw['schedule_enabled']),
             'schedule_days' => self::scheduleDays((string)$raw['schedule_days']),
             'schedule_start' => self::timeValue((string)$raw['schedule_start'], '00:00'),
             'schedule_end' => self::timeValue((string)$raw['schedule_end'], '23:59'),
             'launcher_style' => self::choice($raw['launcher_style'], ['bubble', 'pill'], 'bubble'),
-            'launcher_icon' => self::choice($raw['launcher_icon'], ['chat', 'sparkles', 'headset'], 'chat'),
-            'initial_open' => self::bool($raw['initial_open']),
+            'launcher_icon' => self::choice($raw['launcher_icon'], ['chat', 'sparkles', 'headset', 'question'], 'chat'),
+            'launcher_image_url' => self::httpUrl((string)$raw['launcher_image_url']),
+            'launcher_corner' => self::integer($raw['launcher_corner'], 0, 30, 10),
             'position' => self::choice($raw['position'], ['right', 'left'], 'right'),
             'widget_size' => self::integer($raw['widget_size'], 48, 80, 56),
             'panel_width' => self::integer($raw['panel_width'], 320, 520, 388),
             'panel_height' => self::integer($raw['panel_height'], 420, 760, 580),
+            'panel_radius' => self::integer($raw['panel_radius'], 4, 24, 10),
+            'panel_shadow' => self::choice($raw['panel_shadow'], ['none', 'sm', 'md', 'lg'], 'md'),
+            'font_size' => self::integer($raw['font_size'], 12, 18, 14),
             'desktop_offset_x' => self::integer($raw['desktop_offset_x'], 0, 96, 20),
             'desktop_offset_y' => self::integer($raw['desktop_offset_y'], 0, 96, 20),
             'mobile_offset_x' => self::integer($raw['mobile_offset_x'], 8, 32, 16),
@@ -154,6 +224,12 @@ final class AiCustomerService
             'surface_color' => self::color((string)$raw['surface_color'], '#FFFFFF'),
             'text_color' => self::color((string)$raw['text_color'], '#1F2937'),
             'muted_color' => self::color((string)$raw['muted_color'], '#667085'),
+            'header_color' => self::color((string)$raw['header_color'], '#0D6EFD'),
+            'header_text_color' => self::color((string)$raw['header_text_color'], '#FFFFFF'),
+            'bot_bubble_color' => self::color((string)$raw['bot_bubble_color'], '#F2F4F7'),
+            'bot_bubble_text_color' => self::color((string)$raw['bot_bubble_text_color'], '#1F2937'),
+            'visitor_bubble_color' => self::color((string)$raw['visitor_bubble_color'], '#0D6EFD'),
+            'visitor_bubble_text_color' => self::color((string)$raw['visitor_bubble_text_color'], '#FFFFFF'),
             'avatar_url' => self::httpUrl((string)$raw['avatar_url']),
             'show_avatar' => self::bool($raw['show_avatar']),
             'show_powered_by' => self::bool($raw['show_powered_by']),
@@ -229,36 +305,65 @@ final class AiCustomerService
             '--acs-surface:' . $config['surface_color'],
             '--acs-text:' . $config['text_color'],
             '--acs-muted:' . $config['muted_color'],
+            '--acs-font:' . (int)$config['font_size'] . 'px',
+            '--acs-header-bg:' . $config['header_color'],
+            '--acs-header-fg:' . $config['header_text_color'],
+            '--acs-bot-bubble:' . $config['bot_bubble_color'],
+            '--acs-bot-text:' . $config['bot_bubble_text_color'],
+            '--acs-vis-bubble:' . $config['visitor_bubble_color'],
+            '--acs-vis-text:' . $config['visitor_bubble_text_color'],
             '--acs-size:' . (int)$config['widget_size'] . 'px',
             '--acs-panel-width:' . (int)$config['panel_width'] . 'px',
             '--acs-panel-height:' . (int)$config['panel_height'] . 'px',
+            '--acs-panel-radius:' . (int)$config['panel_radius'] . 'px',
+            '--acs-launcher-corner:' . (int)$config['launcher_corner'] . 'px',
             '--acs-desktop-x:' . (int)$config['desktop_offset_x'] . 'px',
             '--acs-desktop-y:' . (int)$config['desktop_offset_y'] . 'px',
             '--acs-mobile-x:' . (int)$config['mobile_offset_x'] . 'px',
             '--acs-mobile-y:' . (int)$config['mobile_offset_y'] . 'px',
         ]);
-        $icon = self::launcherIconClass((string)$config['launcher_icon']);
-        $avatar = self::avatarMarkup($config);
-        $handoff = $config['handoff_url'] !== ''
-            ? '<a class="acs-handoff" href="' . self::escape($config['handoff_url']) . '" target="_blank" rel="noopener">'
-                . '<i class="bi bi-person-workspace" aria-hidden="true"></i><span>' . self::escape($config['handoff_label']) . '</span></a>'
-            : '';
 
+        $bareClass = empty($config['show_launcher']) ? ' acs-widget--bare' : '';
         echo '<div id="ai-customer-service-widget" class="acs-widget acs-widget--'
             . self::escape((string)$config['position']) . ' acs-widget--' . self::escape((string)$config['launcher_style'])
+            . ' acs-shadow--' . self::escape((string)$config['panel_shadow']) . $bareClass
             . '" data-visible="false" style="' . self::escape($style) . '">';
-        echo '<button type="button" class="acs-launcher" aria-expanded="false" aria-controls="acs-panel" aria-label="打开 AI客服">'
-            . '<i class="bi ' . self::escape($icon) . ' acs-launcher-icon" aria-hidden="true"></i>'
-            . '<span class="acs-launcher-label">' . self::escape((string)$config['brand_name']) . '</span>'
-            . '<i class="bi bi-x-lg acs-launcher-close" aria-hidden="true"></i></button>';
+
+        if (!empty($config['show_launcher'])) {
+            $launcherClasses = ['acs-launcher'];
+            if (!empty($config['badge_enabled'])) $launcherClasses[] = 'has-badge';
+            if ($config['attention_effect'] !== 'none') $launcherClasses[] = 'acs-fx--' . $config['attention_effect'];
+            $inner = '';
+            if ((string)$config['launcher_image_url'] !== '') {
+                $inner .= '<img class="acs-launcher-img" src="' . self::escape((string)$config['launcher_image_url']) . '" alt="">';
+            } else {
+                $inner .= '<i class="bi ' . self::escape(self::launcherIconClass((string)$config['launcher_icon'])) . ' acs-launcher-icon" aria-hidden="true"></i>';
+            }
+            $inner .= '<span class="acs-launcher-label">' . self::escape((string)$config['brand_name']) . '</span>';
+            $inner .= '<i class="bi bi-x-lg acs-launcher-close" aria-hidden="true"></i>';
+            echo '<button type="button" class="' . self::escape(implode(' ', $launcherClasses))
+                . '" aria-expanded="false" aria-controls="acs-panel" aria-label="打开 AI客服">' . $inner . '</button>';
+            if ((string)$config['tooltip_text'] !== '') {
+                echo '<span class="acs-tooltip" aria-hidden="true">' . self::escape((string)$config['tooltip_text']) . '</span>';
+            }
+            if (!empty($config['teaser_enabled'])) {
+                echo '<div class="acs-teaser" data-acs-teaser hidden>'
+                    . '<button type="button" class="acs-teaser-close" aria-label="收起引导消息"><i class="bi bi-x-lg" aria-hidden="true"></i></button>'
+                    . '<span class="acs-teaser-text">' . self::escape((string)$config['teaser_text']) . '</span></div>';
+            }
+        }
+
         echo '<section id="acs-panel" class="acs-panel" aria-label="AI客服对话" aria-hidden="true" hidden>';
-        echo '<header class="acs-header"><div class="acs-agent">' . $avatar . '<div class="acs-agent-copy">'
+        echo '<header class="acs-header"><div class="acs-agent">' . self::avatarMarkup($config) . '<div class="acs-agent-copy">'
             . '<strong>' . self::escape((string)$config['brand_name']) . '</strong>'
             . '<span>' . self::escape((string)$config['team_label']) . '</span></div></div>'
             . '<button type="button" class="acs-close" aria-label="关闭对话"><i class="bi bi-x-lg" aria-hidden="true"></i></button></header>';
         echo '<div class="acs-chat" aria-live="polite" aria-relevant="additions text"></div>';
         echo '<div class="acs-quick-replies" aria-label="快捷问题"></div>';
-        echo $handoff;
+        if ($config['handoff_url'] !== '') {
+            echo '<a class="acs-handoff" href="' . self::escape($config['handoff_url']) . '" target="_blank" rel="noopener">'
+                . '<i class="bi bi-person-workspace" aria-hidden="true"></i><span>' . self::escape((string)$config['handoff_label']) . '</span></a>';
+        }
         if (!empty($config['show_powered_by'])) {
             echo '<div class="acs-powered">AI客服</div>';
         }
@@ -279,6 +384,7 @@ final class AiCustomerService
             'conversationId' => self::newConversation(),
             'brandName' => $config['brand_name'],
             'welcomeMessage' => $config['welcome_message'],
+            'quickRepliesTitle' => $config['quick_replies_title'],
             'quickReplies' => $config['quick_replies'],
             'unavailableMessage' => $config['unavailable_message'],
             'deviceMode' => $config['device_mode'],
@@ -286,6 +392,14 @@ final class AiCustomerService
             'scrollPercent' => $config['scroll_percent'],
             'exitIntent' => $config['exit_intent'],
             'initialOpen' => $config['initial_open'],
+            'initialOpenDelay' => $config['initial_open_delay'],
+            'oncePerSession' => $config['once_per_session'],
+            'teaserEnabled' => $config['teaser_enabled']
+                && (string)$config['teaser_text'] !== ''
+                && !empty($config['show_launcher']),
+            'teaserText' => $config['teaser_text'],
+            'badgeEnabled' => $config['badge_enabled'] && !empty($config['show_launcher']),
+            'attentionEffect' => empty($config['show_launcher']) ? 'none' : $config['attention_effect'],
         ];
     }
 
@@ -328,14 +442,24 @@ final class AiCustomerService
         return [
             'enabled' => true, 'brand_name' => 'AI客服', 'team_label' => '智能在线服务',
             'welcome_message' => '您好，我是您的 AI 客服。有什么可以帮您？', 'input_placeholder' => '输入您的问题...',
-            'quick_replies' => "我想了解产品\n如何获取报价\n如何联系人工客服", 'unavailable_message' => '当前客服暂时不可用，请稍后再试。',
+            'quick_replies_title' => '', 'quick_replies' => "我想了解产品\n如何获取报价\n如何联系人工客服",
+            'unavailable_message' => '当前客服暂时不可用，请稍后再试。',
             'handoff_label' => '联系人工客服', 'handoff_url' => '', 'history_limit' => 8, 'rate_limit_per_minute' => 8,
             'device_mode' => 'all', 'url_mode' => 'all', 'url_rules' => '', 'delay_seconds' => 0, 'scroll_percent' => 0,
-            'exit_intent' => false, 'schedule_enabled' => false, 'schedule_days' => '1,2,3,4,5,6,7',
+            'exit_intent' => false, 'initial_open' => false, 'initial_open_delay' => 0, 'once_per_session' => false,
+            'show_launcher' => true, 'tooltip_text' => '', 'teaser_enabled' => false,
+            'teaser_text' => '有问题？随时咨询', 'badge_enabled' => false, 'attention_effect' => 'none',
+            'schedule_enabled' => false, 'schedule_days' => '1,2,3,4,5,6,7',
             'schedule_start' => '00:00', 'schedule_end' => '23:59', 'launcher_style' => 'bubble', 'launcher_icon' => 'chat',
-            'initial_open' => false, 'position' => 'right', 'widget_size' => 56, 'panel_width' => 388, 'panel_height' => 580,
+            'launcher_image_url' => '', 'launcher_corner' => 10,
+            'position' => 'right', 'widget_size' => 56, 'panel_width' => 388, 'panel_height' => 580,
+            'panel_radius' => 10, 'panel_shadow' => 'md', 'font_size' => 14,
             'desktop_offset_x' => 20, 'desktop_offset_y' => 20, 'mobile_offset_x' => 16, 'mobile_offset_y' => 16,
-            'accent_color' => '#0D6EFD', 'surface_color' => '#FFFFFF', 'text_color' => '#1F2937', 'muted_color' => '#667085',
+            'accent_color' => '#0D6EFD', 'surface_color' => '#FFFFFF',
+            'text_color' => '#1F2937', 'muted_color' => '#667085',
+            'header_color' => '#0D6EFD', 'header_text_color' => '#FFFFFF',
+            'bot_bubble_color' => '#F2F4F7', 'bot_bubble_text_color' => '#1F2937',
+            'visitor_bubble_color' => '#0D6EFD', 'visitor_bubble_text_color' => '#FFFFFF',
             'avatar_url' => '', 'show_avatar' => true, 'show_powered_by' => false, 'provider_mode' => 'system',
             'system_model_id' => 0, 'custom_api_endpoint' => 'https://api.openai.com/v1/chat/completions',
             'custom_model' => '', 'system_prompt' => '以专业、友好、简洁的方式回答访客问题。仅在信息明确时给出结论；信息不足时明确说明并引导访客联系人工客服。',
@@ -524,6 +648,7 @@ final class AiCustomerService
         return match ($icon) {
             'sparkles' => 'bi-stars',
             'headset' => 'bi-headset',
+            'question' => 'bi-question-circle-fill',
             default => 'bi-chat-dots-fill',
         };
     }

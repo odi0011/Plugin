@@ -1,17 +1,18 @@
 {
   "slug": "ai-customer-service",
   "name": "AI客服",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "odi0011",
   "author_url": "",
   "homepage": "",
-  "description": "为前台站点提供可配置的悬浮 AI 客服窗口：支持欢迎语、快捷问题、显示触发规则、品牌样式、系统 AI 模型或插件独立的 OpenAI 兼容服务，以及人工客服跳转。",
+  "description": "为前台站点提供可配置的悬浮 AI 客服窗口：欢迎语与快捷问题、设备/页面/滚动/离开意图触发、提醒动画与角标、气泡级配色、字体与圆角细节、系统 AI 模型或插件独立的 OpenAI 兼容服务，以及人工客服跳转。",
   "icon": "icon.svg",
   "screenshots": [],
   "requires": "7i",
   "requires_php": "8.0",
   "license": "MIT",
   "category": "other",
+  "changelog": "后台拆分为四个独立子页面并支持逐页保存；前台窗口默认收起且可正常关闭；新增悬浮提示、引流气泡、未读角标、提醒动画、自定义浮标图片、顶栏/双方气泡独立配色、字号、圆角与投影等细粒度配置；右侧预览随左侧修改实时刷新。",
   "tags": ["AI", "客服", "聊天", "知识库", "前台悬浮窗"],
   "permissions": [
     {
@@ -33,14 +34,14 @@
       "type": "css",
       "area": "frontend",
       "src": "assets/customer-service.css",
-      "version": "1.0.0"
+      "version": "1.1.0"
     },
     {
       "handle": "ai-customer-service-widget-js",
       "type": "js",
       "area": "frontend",
       "src": "assets/customer-service.js",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "defer": true
     },
     {
@@ -48,14 +49,14 @@
       "type": "css",
       "area": "admin",
       "src": "assets/admin.css",
-      "version": "1.0.0"
+      "version": "1.1.0"
     },
     {
       "handle": "ai-customer-service-admin-js",
       "type": "js",
       "area": "admin",
       "src": "assets/admin.js",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "defer": true
     }
   ],
@@ -103,6 +104,15 @@
             "type": "text",
             "default": "输入您的问题...",
             "max_length": 160
+          },
+          {
+            "key": "quick_replies_title",
+            "label": "快捷问题标题",
+            "type": "text",
+            "default": "",
+            "max_length": 60,
+            "placeholder": "例如：猜你想问",
+            "help": "显示在快捷问题上方的分组标题，留空时不显示。"
           },
           {
             "key": "quick_replies",
@@ -155,9 +165,9 @@
         ]
       },
       {
-        "key": "visibility",
+        "key": "trigger",
         "label": "显示与触发",
-        "description": "按设备、页面、时间、滚动深度或离开意图控制挂件何时出现。",
+        "description": "按设备、页面、时间、滚动深度或离开意图控制挂件何时出现，以及浮标端的提醒方式。",
         "fields": [
           {
             "key": "device_mode",
@@ -216,6 +226,79 @@
             "default": false
           },
           {
+            "key": "initial_open",
+            "label": "首次显示时自动打开窗口",
+            "type": "boolean",
+            "default": false
+          },
+          {
+            "key": "initial_open_delay",
+            "label": "自动打开延迟（秒）",
+            "type": "number",
+            "default": 0,
+            "min": 0,
+            "max": 120,
+            "step": 1,
+            "help": "挂件出现后等待多少秒再自动展开窗口；访客先手动打开则跳过。"
+          },
+          {
+            "key": "once_per_session",
+            "label": "自动动作只执行一次",
+            "type": "boolean",
+            "default": false,
+            "help": "同一浏览器会话内，自动展开、提醒动画与角标只出现一次，翻页不再打扰。"
+          },
+          {
+            "key": "show_launcher",
+            "label": "显示浮标按钮",
+            "type": "boolean",
+            "default": true,
+            "help": "关闭后不渲染浮标，仍可通过站点的 window.AiCustomerService API 打开窗口。"
+          },
+          {
+            "key": "tooltip_text",
+            "label": "浮标悬停提示",
+            "type": "text",
+            "default": "",
+            "max_length": 80,
+            "placeholder": "例如：有疑问？点我咨询",
+            "help": "鼠标悬停或聚焦浮标时出现的引导文字，留空不显示。"
+          },
+          {
+            "key": "teaser_enabled",
+            "label": "显示引流气泡",
+            "type": "boolean",
+            "default": false,
+            "help": "在浮标旁常驻一条可关闭的短消息，主动引导访客发起对话。"
+          },
+          {
+            "key": "teaser_text",
+            "label": "引流气泡文字",
+            "type": "text",
+            "default": "有问题？随时咨询",
+            "max_length": 120
+          },
+          {
+            "key": "badge_enabled",
+            "label": "显示未读红点角标",
+            "type": "boolean",
+            "default": false,
+            "help": "在浮标右上角显示一个红点，访客打开窗口后消失。"
+          },
+          {
+            "key": "attention_effect",
+            "label": "浮标提醒动画",
+            "type": "select",
+            "default": "none",
+            "options": [
+              {"value": "none", "label": "无动画"},
+              {"value": "wiggle", "label": "摆动"},
+              {"value": "bounce", "label": "弹跳"},
+              {"value": "pulse", "label": "脉冲光圈"}
+            ],
+            "help": "在访客第一次打开窗口前循环播放的吸引注意动画。"
+          },
+          {
             "key": "schedule_enabled",
             "label": "按服务时段显示",
             "type": "boolean",
@@ -253,7 +336,7 @@
       {
         "key": "appearance",
         "label": "外观与位置",
-        "description": "在此调整浮标、弹窗、颜色、头像和桌面/移动端边距。",
+        "description": "浮标形状图片、窗口尺寸投影、双方气泡配色与桌面/移动端边距。",
         "fields": [
           {
             "key": "launcher_style",
@@ -273,14 +356,27 @@
             "options": [
               {"value": "chat", "label": "对话"},
               {"value": "sparkles", "label": "闪光"},
-              {"value": "headset", "label": "耳机"}
+              {"value": "headset", "label": "耳机"},
+              {"value": "question", "label": "问号"}
             ]
           },
           {
-            "key": "initial_open",
-            "label": "首次显示时自动打开窗口",
-            "type": "boolean",
-            "default": false
+            "key": "launcher_image_url",
+            "label": "自定义浮标图片",
+            "type": "url",
+            "default": "",
+            "max_length": 2048,
+            "help": "填写后将替代图标显示这张图片（建议正方形）。胶囊样式会同时替换文字位置。"
+          },
+          {
+            "key": "launcher_corner",
+            "label": "胶囊圆角（px）",
+            "type": "number",
+            "default": 10,
+            "min": 0,
+            "max": 30,
+            "step": 1,
+            "help": "仅对“带文字胶囊”样式生效；圆形气泡始终为正圆。"
           },
           {
             "key": "position",
@@ -317,6 +413,36 @@
             "default": 580,
             "min": 420,
             "max": 760,
+            "step": 1
+          },
+          {
+            "key": "panel_radius",
+            "label": "弹窗圆角（px）",
+            "type": "number",
+            "default": 10,
+            "min": 4,
+            "max": 24,
+            "step": 1
+          },
+          {
+            "key": "panel_shadow",
+            "label": "弹窗投影强度",
+            "type": "select",
+            "default": "md",
+            "options": [
+              {"value": "none", "label": "无投影"},
+              {"value": "sm", "label": "较浅"},
+              {"value": "md", "label": "适中"},
+              {"value": "lg", "label": "较深"}
+            ]
+          },
+          {
+            "key": "font_size",
+            "label": "界面字号（px）",
+            "type": "number",
+            "default": 14,
+            "min": 12,
+            "max": 18,
             "step": 1
           },
           {
@@ -357,7 +483,7 @@
           },
           {
             "key": "accent_color",
-            "label": "主色",
+            "label": "主色（浮标/发送按钮）",
             "type": "color",
             "default": "#0D6EFD"
           },
@@ -368,16 +494,40 @@
             "default": "#FFFFFF"
           },
           {
-            "key": "text_color",
-            "label": "主要文字色",
+            "key": "header_color",
+            "label": "顶栏背景色",
+            "type": "color",
+            "default": "#0D6EFD"
+          },
+          {
+            "key": "header_text_color",
+            "label": "顶栏文字颜色",
+            "type": "color",
+            "default": "#FFFFFF"
+          },
+          {
+            "key": "bot_bubble_color",
+            "label": "客服消息气泡底色",
+            "type": "color",
+            "default": "#F2F4F7"
+          },
+          {
+            "key": "bot_bubble_text_color",
+            "label": "客服消息文字颜色",
             "type": "color",
             "default": "#1F2937"
           },
           {
-            "key": "muted_color",
-            "label": "辅助文字色",
+            "key": "visitor_bubble_color",
+            "label": "访客消息气泡底色",
             "type": "color",
-            "default": "#667085"
+            "default": "#0D6EFD"
+          },
+          {
+            "key": "visitor_bubble_text_color",
+            "label": "访客消息文字颜色",
+            "type": "color",
+            "default": "#FFFFFF"
           },
           {
             "key": "avatar_url",

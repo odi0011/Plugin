@@ -18,13 +18,32 @@
     var close = root.querySelector('.acs-close');
     var chat = root.querySelector('.acs-chat');
     var quickReplies = root.querySelector('.acs-quick-replies');
+    var teaser = root.querySelector('[data-acs-teaser]');
     var form = root.querySelector('.acs-composer');
     var input = root.querySelector('#acs-message');
     var send = root.querySelector('.acs-send');
     var feedback = root.querySelector('.acs-feedback');
-    if (!launcher || !panel || !chat || !quickReplies || !form || !input || !send || !feedback) return;
+    if (!panel || !chat || !quickReplies || !form || !input || !send || !feedback) return;
 
-    var state = { open: false, visible: false, greeted: false, busy: false };
+    // show_launcher=false 时不渲染浮标，但保留面板供 window.AiCustomerService 使用。
+    var state = { open: false, visible: false, greeted: false, busy: false, userOpened: false };
+    var AUTO_KEY = 'acs_auto_shown';
+    var TEASER_KEY = 'acs_teaser_dismissed';
+    var autoTimer = null;
+
+    function sessionFlag(key) {
+        try {
+            return window.sessionStorage.getItem(key);
+        } catch (error) {
+            return null;
+        }
+    }
+
+    function setSessionFlag(key, value) {
+        try {
+            window.sessionStorage.setItem(key, value);
+        } catch (error) { /* 隐私模式等场景下静默降级为每次会话都执行 */ }
+    }
 
     function isMobile() {
         return window.matchMedia && window.matchMedia('(max-width: 640px)').matches;
@@ -36,11 +55,30 @@
         return true;
     }
 
+    function clearAttention() {
+        if (launcher) launcher.classList.remove('has-badge', 'acs-fx--wiggle', 'acs-fx--bounce', 'acs-fx--pulse');
+    }
+
+    function dismissTeaser(persist) {
+        if (teaser) teaser.hidden = true;
+        if (persist) setSessionFlag(TEASER_KEY, '1');
+    }
+
     function reveal() {
         if (state.visible) return;
         state.visible = true;
         root.dataset.visible = 'true';
-        if (config.initialOpen) setOpen(true);
+        // once_per_session 的语义：自动展开、提醒动画与角标这一组自动动作
+        // 在同一浏览器会话里只出现一次；执行过的会话直接呈现静态浮标。
+        var allowAutoActions = !(config.oncePerSession && Boolean(sessionFlag(AUTO_KEY)));
+        if (allowAutoActions) {
+            setSessionFlag(AUTO_KEY, '1');
+        } else {
+            clearAttention();
+            cancelAutoOpen();
+        }
+        scheduleTeaser();
+        if (allowAutoActions) scheduleAutoOpen();
     }
 
     function setOpen(open) {
@@ -48,12 +86,45 @@
         state.open = Boolean(open);
         panel.hidden = !state.open;
         panel.setAttribute('aria-hidden', state.open ? 'false' : 'true');
-        launcher.setAttribute('aria-expanded', state.open ? 'true' : 'false');
-        launcher.classList.toggle('is-open', state.open);
+        if (launcher) {
+            launcher.setAttribute('aria-expanded', state.open ? 'true' : 'false');
+            launcher.classList.toggle('is-open', state.open);
+        }
         if (state.open) {
+            cancelAutoOpen();
+            clearAttention();
+            dismissTeaser(false);
             ensureGreeting();
             window.setTimeout(function () { input.focus(); }, 0);
+        } else {
+            // 访客主动关闭（含 Esc）时，不再执行排队中的自动展开。
+            cancelAutoOpen();
         }
+    }
+
+    function scheduleAutoOpen() {
+        if (autoTimer !== null || !config.initialOpen) return;
+        var delaySeconds = Math.max(0, Number(config.initialOpenDelay) || 0);
+        autoTimer = window.setTimeout(function () {
+            autoTimer = null;
+            if (!state.userOpened) setOpen(true);
+        }, delaySeconds * 1000);
+    }
+
+    function cancelAutoOpen() {
+        if (autoTimer !== null) {
+            window.clearTimeout(autoTimer);
+            autoTimer = null;
+        }
+    }
+
+    function scheduleTeaser() {
+        if (!teaser || !config.teaserEnabled) return;
+        teaser.hidden = true;
+        if (sessionFlag(TEASER_KEY)) return;
+        window.setTimeout(function () {
+            if (!state.open) teaser.hidden = false;
+        }, 700);
     }
 
     function appendMessage(role, content, typing) {
@@ -76,6 +147,15 @@
         if (state.greeted) return;
         state.greeted = true;
         if (config.welcomeMessage) appendMessage('assistant', config.welcomeMessage, false);
+        if (config.quickRepliesTitle) {
+            var title = document.createElement('span');
+            title.className = 'acs-quick-title';
+            title.textContent = String(config.quickRepliesTitle).slice(0, 60);
+            quickReplies.appendChild(title);
+        }
+        var row = document.createElement('div');
+        row.className = 'acs-quick-row';
+        quickReplies.appendChild(row);
         (Array.isArray(config.quickReplies) ? config.quickReplies : []).forEach(function (question) {
             if (typeof question !== 'string' || question.trim() === '') return;
             var button = document.createElement('button');
@@ -83,7 +163,7 @@
             button.className = 'acs-quick-reply';
             button.textContent = question;
             button.addEventListener('click', function () { submit(question); });
-            quickReplies.appendChild(button);
+            row.appendChild(button);
         });
     }
 
@@ -182,8 +262,26 @@
         if (!hasRule) reveal();
     }
 
-    launcher.addEventListener('click', function () { setOpen(!state.open); });
+    if (launcher) {
+        launcher.addEventListener('click', function () {
+            state.userOpened = true;
+            setOpen(!state.open);
+        });
+    }
     if (close) close.addEventListener('click', function () { setOpen(false); });
+    if (teaser) {
+        var teaserClose = teaser.querySelector('.acs-teaser-close');
+        if (teaserClose) {
+            teaserClose.addEventListener('click', function (event) {
+                event.stopPropagation();
+                dismissTeaser(true);
+            });
+        }
+        teaser.addEventListener('click', function () {
+            state.userOpened = true;
+            setOpen(true);
+        });
+    }
     form.addEventListener('submit', function (event) {
         event.preventDefault();
         submit(input.value);
@@ -204,5 +302,6 @@
         close: function () { setOpen(false); },
         toggle: function () { setOpen(!state.open); }
     };
+
     activateVisibilityRules();
 }());
