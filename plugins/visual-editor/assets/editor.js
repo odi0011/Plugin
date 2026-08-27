@@ -558,9 +558,80 @@
                     }
                     html += (editing ? '<span class="ve-handle">栏</span>' : '') + '</div>';
                 });
-                html += '</div>' + (editing ? '<span class="ve-handle"><i class="bi bi-grip-vertical"></i>区块</span>' : '') + '</section>';
+                html += '</div>' + (editing ? '<span class="ve-handle"><i class="bi bi-grip-vertical"></i>区块</span>'
+                    + '<button type="button" class="ve-section-add" data-ve-add-at="' + (si + 1) + '"'
+                    + ' title="在这里插入区块"><i class="bi bi-plus"></i></button>' : '') + '</section>';
             });
+            // 画布末尾常驻一块虚线占位：Elementor 的做法，「加区块」是画布里的动作，
+            // 不是左侧列表里的按钮——栏数在插入的那一刻就地问，而不是先建再改。
+            if (editing) {
+                html += '<button type="button" class="ve-canvas-add" data-ve-add-at="' + tree.sections.length + '">'
+                    + '<i class="bi bi-plus-lg"></i><span>添加区块</span></button>';
+            }
             return html + '</div>';
+        }
+
+        /** 栏数选择器里的候选列宽。与 Elementor 的容器选择一样：先问排布，再建。 */
+        var COLUMN_LAYOUTS = [
+            { label: '一栏', columns: [100] },
+            { label: '两栏', columns: [50, 50] },
+            { label: '三栏', columns: [34, 33, 33] },
+            { label: '四栏', columns: [25, 25, 25, 25] },
+            { label: '左宽右窄', columns: [66, 34] },
+            { label: '左窄右宽', columns: [34, 66] },
+            { label: '两侧栏', columns: [25, 50, 25] }
+        ];
+
+        var layoutPicker = null;
+
+        function closeLayoutPicker() {
+            if (layoutPicker && layoutPicker.parentNode) layoutPicker.parentNode.removeChild(layoutPicker);
+            layoutPicker = null;
+        }
+
+        /**
+         * 就地问一句「用哪种排布」。锚点是画布里那颗 ＋，所以视线不用离开插入位置。
+         *
+         * @param anchor Element 触发的按钮
+         * @param at     number  插入到 tree.sections 的哪个下标
+         */
+        function openLayoutPicker(anchor, at) {
+            closeLayoutPicker();
+            var picker = el('div', 've-layout-picker');
+            picker.appendChild(el('div', 've-layout-title', '这个区块用几栏？'));
+            var grid = el('div', 've-layout-grid');
+            COLUMN_LAYOUTS.forEach(function (layout) {
+                var button = el('button', 've-layout-option');
+                button.type = 'button';
+                button.title = layout.label;
+                var bars = el('span', 've-layout-bars');
+                layout.columns.forEach(function (percent) {
+                    var bar = el('span');
+                    bar.style.flex = '0 0 ' + percent + '%';
+                    bars.appendChild(bar);
+                });
+                button.appendChild(bars);
+                button.appendChild(el('span', 've-layout-label', layout.label));
+                button.addEventListener('click', function (event) {
+                    event.stopPropagation();
+                    closeLayoutPicker();
+                    addSection(layout.columns, at);
+                });
+                grid.appendChild(button);
+            });
+            picker.appendChild(grid);
+            picker.addEventListener('click', function (event) { event.stopPropagation(); });
+
+            // 挂在 stage 上而不是画布里：画布每次 refreshCanvas 都会重画，
+            // 挂进去的浮层会连带被冲掉。
+            stage.appendChild(picker);
+            layoutPicker = picker;
+            var box = anchor.getBoundingClientRect();
+            var stageBox = stage.getBoundingClientRect();
+            var top = box.bottom - stageBox.top + 6;
+            var left = box.left - stageBox.left + box.width / 2 - picker.offsetWidth / 2;
+            picker.style.top = Math.max(8, top) + 'px';
+            picker.style.left = Math.max(8, Math.min(left, stageBox.width - picker.offsetWidth - 8)) + 'px';
         }
         // ============ 样式编译（镜像 StyleCompiler.php 与 Value::style）============
 
@@ -728,6 +799,13 @@
 
         /** 点选取最内层：事件在命中的节点上停止冒泡，父级不会抢走选中。 */
         function bindCanvas() {
+            // 画布里的每颗 ＋（区块之间与末尾那块占位）都开栏数选择器。
+            Array.prototype.forEach.call(canvas.querySelectorAll('[data-ve-add-at]'), function (button) {
+                button.addEventListener('click', function (event) {
+                    event.stopPropagation();
+                    openLayoutPicker(button, parseInt(button.getAttribute('data-ve-add-at'), 10) || 0);
+                });
+            });
             Array.prototype.forEach.call(canvas.querySelectorAll('[data-ve-path]'), function (node) {
                 node.addEventListener('click', function (event) {
                     event.stopPropagation();
@@ -1826,7 +1904,7 @@
             ];
             if (kind === 'section') {
                 items.splice(3, 0, { icon: 'bi-plus-square', label: '在下方插入区块', run: function () {
-                    addSection('one');
+                    addSection([100], selection.si + 1);
                 } });
             }
             return items;
@@ -1869,8 +1947,12 @@
         function bindContextMenu() {
             document.addEventListener('click', function (event) {
                 if (contextMenu && !contextMenu.contains(event.target)) closeContextMenu();
+                if (layoutPicker && !layoutPicker.contains(event.target)) closeLayoutPicker();
             });
-            document.addEventListener('scroll', closeContextMenu, true);
+            document.addEventListener('scroll', function () {
+                closeContextMenu();
+                closeLayoutPicker();
+            }, true);
             // 画布空白处右键：交回浏览器自己的菜单太突兀，这里只是关掉我们的。
             canvas.addEventListener('contextmenu', function (event) {
                 event.preventDefault();
@@ -1878,6 +1960,7 @@
             });
             document.addEventListener('keydown', function (event) {
                 if (stage.hidden) return;
+                if (event.key === 'Escape' && layoutPicker) { closeLayoutPicker(); return; }
                 if (event.key === 'Escape' && contextMenu) { closeContextMenu(); return; }
                 // 焦点在输入框里时快捷键归输入框——别把用户的复制粘贴抢走。
                 var tag = (event.target && event.target.tagName) || '';
@@ -1930,17 +2013,26 @@
             select({ kind: 'widget', si: slot.si, ci: slot.ci, wi: index });
         }
 
-        function addSection(presetKey) {
+        /**
+         * 新建区块。1.4.0 起栏数由调用方（画布里的栏数选择器）直接给出，
+         * 不再走「预设键 → 查表」——预设列表已经从左侧轨里撤掉了。
+         *
+         * @param columns list<number>|null 各栏百分比，null 表示一栏
+         * @param at      number|null       插入下标，null 表示接在选中区块之后
+         */
+        function addSection(columns, at) {
             if (tree.sections.length >= 60) {
                 setStatus('区块数量已达上限');
                 return;
             }
-            var preset = config.presets[presetKey];
-            var at = selection ? selection.si + 1 : tree.sections.length;
-            tree.sections.splice(at, 0, newSection((preset && preset.columns) || [100]));
+            var index = typeof at === 'number' ? Math.max(0, Math.min(at, tree.sections.length))
+                : (selection ? selection.si + 1 : tree.sections.length);
+            tree.sections.splice(index, 0, newSection(
+                Array.isArray(columns) && columns.length ? columns : [100]
+            ));
             setDirty(true);
             refreshCanvas();
-            select({ kind: 'section', si: at, ci: 0, wi: 0 });
+            select({ kind: 'section', si: index, ci: 0, wi: 0 });
         }
 
         // ---- 拖放：左侧控件轨 → 栏；画布内控件换位；区块换序 ----
@@ -1990,11 +2082,6 @@
                     }
                 });
                 chip.addEventListener('dragend', endDrag);
-            });
-            Array.prototype.forEach.call(stage.querySelectorAll('[data-ve-add-section]'), function (button) {
-                button.addEventListener('click', function () {
-                    addSection(button.getAttribute('data-ve-add-section'));
-                });
             });
         }
 
@@ -2374,6 +2461,10 @@
                 setDirty(false);
                 setStatus(data.message || '已保存');
                 toast(data.message || '已保存到这条内容');
+                // 保存过一次，字段里就装着编译产物了：这时候才轮到锁那两颗按钮。
+                config.managed = true;
+                config.stale = false;
+                applyModeLock();
             }).catch(function (error) {
                 setStatus(error.message || '保存失败');
                 toast(error.message || '保存失败');
@@ -2410,6 +2501,316 @@
             }
         }
 
+        // ================= AI 转换 / AI 重排 =================
+
+        /**
+         * SSE over POST。
+         *
+         * 用 fetch + ReadableStream 而不是 EventSource：EventSource 只会发 GET，
+         * 而这两条端点要带 CSRF、源标识、有时还要带整棵树，只能是 POST。
+         * 解析只认核心 AiController 那一种形状：一行 `data: {json}`，空行分隔。
+         */
+        function streamPost(url, payload, onEvent) {
+            var body = new FormData();
+            body.append('_csrf', config.csrfToken);
+            body.append('csrf_token', config.csrfToken);
+            body.append('source_type', config.sourceType);
+            body.append('source_id', String(config.sourceId));
+            body.append('source_key', config.sourceKey);
+            Object.keys(payload || {}).forEach(function (key) { body.append(key, payload[key]); });
+
+            return fetch(url, {
+                method: 'POST',
+                body: body,
+                credentials: 'same-origin',
+                headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'text/event-stream' }
+            }).then(function (response) {
+                var type = response.headers.get('Content-Type') || '';
+                // 端点在开流之前失败时回的是 JSON（没配模型、权限不足…），如实转成错误。
+                if (type.indexOf('text/event-stream') < 0) {
+                    return response.json().catch(function () {
+                        throw new Error('服务端返回了无法解析的内容（HTTP ' + response.status + '）');
+                    }).then(function (data) {
+                        var error = new Error((data && data.message) || ('请求失败（HTTP ' + response.status + '）'));
+                        error.payload = data;
+                        throw error;
+                    });
+                }
+                if (!response.body || !response.body.getReader) {
+                    throw new Error('这个浏览器不支持流式读取，请换用新版浏览器');
+                }
+                var reader = response.body.getReader();
+                var decoder = new TextDecoder('utf-8');
+                var buffer = '';
+                var terminal = null;
+
+                function pump() {
+                    return reader.read().then(function (chunk) {
+                        if (chunk.value) buffer += decoder.decode(chunk.value, { stream: true });
+                        var parts = buffer.split('\n\n');
+                        buffer = parts.pop();
+                        parts.forEach(function (part) {
+                            part.split('\n').forEach(function (line) {
+                                if (line.indexOf('data:') !== 0) return;
+                                var raw = line.slice(5).trim();
+                                if (raw === '') return;
+                                var event;
+                                try { event = JSON.parse(raw); } catch (e) { return; }
+                                if (event.type === 'done' || event.type === 'error') terminal = event;
+                                onEvent(event);
+                            });
+                        });
+                        if (chunk.done) {
+                            if (!terminal) throw new Error('连接中断，转换没有完成');
+                            if (terminal.type === 'error') throw new Error(terminal.message || 'AI 请求失败');
+                            return terminal;
+                        }
+                        return pump();
+                    });
+                }
+                return pump();
+            });
+        }
+
+        var veilStream = veil.querySelector('[data-ve-stream]');
+        var veilStreamBody = veil.querySelector('[data-ve-stream-body]');
+        var veilStreamTitle = veil.querySelector('[data-ve-stream-title]');
+
+        function streamShow(title) {
+            if (!veilStream) return;
+            veilStream.hidden = false;
+            if (veilStreamTitle) veilStreamTitle.textContent = title;
+            if (veilStreamBody) veilStreamBody.textContent = '';
+        }
+
+        function streamHide() {
+            if (veilStream) veilStream.hidden = true;
+        }
+
+        /**
+         * 追加一段流式文本。
+         *
+         * 只显示模型的思考与状态，不显示它正在吐的 JSON——那是给 normalize()
+         * 看的，滚一屏花括号既没信息量也让人以为出错了。
+         */
+        function streamAppend(text) {
+            if (!veilStreamBody) return;
+            veilStreamBody.textContent += text;
+            // 只留最后一段：整段思考可能上千字，蒙版上放不下也没必要。
+            if (veilStreamBody.textContent.length > 1800) {
+                veilStreamBody.textContent = veilStreamBody.textContent.slice(-1800);
+            }
+            veilStreamBody.scrollTop = veilStreamBody.scrollHeight;
+        }
+
+        var askEl = document.getElementById('ve-ask');
+        if (askEl) document.body.appendChild(askEl);
+
+        /**
+         * 打开前的那一问。
+         *
+         * 预检说不复杂就直接 resolve('raw')——不弹窗。这是刻意的：多数内容规则
+         * 就能无损转完，为它们弹一个「要不要用 AI」只是噪音。
+         *
+         * @return Promise<'raw'|'ai'|'cancel'>
+         */
+        function askBeforeOpen() {
+            if (!askEl || loaded) return Promise.resolve('raw');
+            return post(config.inspectUrl, {}).then(function (data) {
+                var pre = data.precheck || {};
+                var ai = data.ai || {};
+                // 已经托管过（存储里有树）就不再问：那棵树就是用户上次的决定。
+                if (data.managed || !pre.complex) return 'raw';
+
+                var facts = askEl.querySelector('[data-ve-ask-facts]');
+                if (facts) {
+                    facts.innerHTML = '';
+                    (pre.reasons || []).forEach(function (reason) {
+                        var item = el('li');
+                        item.innerHTML = '<i class="bi bi-dot"></i>' + esc(reason);
+                        facts.appendChild(item);
+                    });
+                }
+                var modelLine = askEl.querySelector('[data-ve-ask-model]');
+                var aiButton = askEl.querySelector('[data-ve-ask="ai"]');
+                var configureButton = askEl.querySelector('[data-ve-ask="configure"]');
+                if (ai.available) {
+                    if (modelLine) modelLine.textContent = '将使用站点的默认模型：' + (ai.model || '(未命名)');
+                    if (aiButton) aiButton.hidden = false;
+                    if (configureButton) configureButton.hidden = true;
+                } else {
+                    // 没配 AI 时不摆一颗点了会报错的按钮，只给「去配置」与「跳过」。
+                    if (modelLine) modelLine.textContent = ai.message || '站点还没有配置可用的 AI 模型。';
+                    if (aiButton) aiButton.hidden = true;
+                    if (configureButton) {
+                        configureButton.hidden = !ai.configure_url;
+                        configureButton.setAttribute('data-ve-ask-url', ai.configure_url || '');
+                    }
+                }
+                var rawButton = askEl.querySelector('[data-ve-ask="raw"]');
+                if (rawButton) {
+                    rawButton.innerHTML = ai.available
+                        ? '<i class="bi bi-braces"></i> 保留为 HTML 块直接打开'
+                        : '<i class="bi bi-braces"></i> 跳过，保留为 HTML 块直接打开';
+                }
+
+                askEl.hidden = false;
+                if (gsap && !reduceMotion) {
+                    gsap.fromTo(askEl.querySelector('.ve-ask-card'),
+                        { y: 18, opacity: 0 }, { y: 0, opacity: 1, duration: .3, ease: 'power3.out' });
+                }
+
+                return new Promise(function (resolve) {
+                    var done = function (choice) {
+                        askEl.hidden = true;
+                        askEl.removeEventListener('click', handler);
+                        resolve(choice);
+                    };
+                    var handler = function (event) {
+                        var button = event.target.closest('[data-ve-ask]');
+                        if (!button) return;
+                        var choice = button.getAttribute('data-ve-ask');
+                        if (choice === 'configure') {
+                            var url = button.getAttribute('data-ve-ask-url');
+                            if (url) window.open(url, '_blank');
+                            return;   // 配置在新标签里做，这个对话框留着
+                        }
+                        done(choice === 'ai' ? 'ai' : (choice === 'raw' ? 'raw' : 'cancel'));
+                    };
+                    askEl.addEventListener('click', handler);
+                });
+            }).catch(function () {
+                // 预检本身失败不该拦住编辑：照常按规则导入。
+                return 'raw';
+            });
+        }
+
+        /** AI 转换：蒙版上边播过程边等结果，结果只进画布，不入库。 */
+        function aiConvert() {
+            streamShow('模型正在阅读这篇内容');
+            streamAppend('已提交原文，等待模型响应…\n');
+            return streamPost(config.aiConvertUrl, {}, function (event) {
+                if (event.type === 'status') streamAppend('· ' + event.message + '\n');
+                else if (event.type === 'reasoning') streamAppend(event.text);
+                else if (event.type === 'error') streamAppend('\n[失败] ' + (event.message || '') + '\n');
+            }).then(function (result) {
+                tree = result.tree;
+                loaded = true;
+                selection = null;
+                refreshCanvas();
+                renderInspector();
+                // AI 的结果与存储里的树不同，必须让用户知道「还没入库」。
+                setDirty(true);
+                setStatus(result.message || 'AI 转换完成，确认后点「保存」');
+                streamHide();
+                return result;
+            }).catch(function (error) {
+                streamHide();
+                throw error;
+            });
+        }
+
+        // ---- 编辑台里的「AI 重排」抽屉 ----
+
+        var arrangeEl = stage.querySelector('[data-ve-arrange]');
+        var arrangeBackup = null;
+
+        function openArrange() {
+            if (!arrangeEl) return;
+            arrangeEl.hidden = false;
+            if (gsap && !reduceMotion) {
+                gsap.fromTo(arrangeEl, { x: 24, opacity: 0 }, { x: 0, opacity: 1, duration: .28, ease: 'power3.out' });
+            }
+        }
+
+        function closeArrange() {
+            if (!arrangeEl) return;
+            arrangeEl.hidden = true;
+            arrangeReset();
+        }
+
+        function arrangeReset() {
+            if (!arrangeEl) return;
+            arrangeEl.querySelector('[data-ve-arrange-adopt]').hidden = true;
+            arrangeEl.querySelector('[data-ve-arrange-discard]').hidden = true;
+            arrangeEl.querySelector('[data-ve-arrange-run]').hidden = false;
+            arrangeBackup = null;
+        }
+
+        function bindArrange() {
+            if (!arrangeEl) return;
+            var log = arrangeEl.querySelector('[data-ve-arrange-log]');
+            var input = arrangeEl.querySelector('.ve-arrange-input');
+            var runButton = arrangeEl.querySelector('[data-ve-arrange-run]');
+            var adoptButton = arrangeEl.querySelector('[data-ve-arrange-adopt]');
+            var discardButton = arrangeEl.querySelector('[data-ve-arrange-discard]');
+            var closeButton = arrangeEl.querySelector('[data-ve-arrange-close]');
+
+            function say(text) {
+                if (!log) return;
+                log.hidden = false;
+                log.textContent += text;
+                if (log.textContent.length > 1800) log.textContent = log.textContent.slice(-1800);
+                log.scrollTop = log.scrollHeight;
+            }
+
+            closeButton.addEventListener('click', function () {
+                // 还挂着未采用的预览时先退回去：抽屉一关就把画布留在半成品上是陷阱。
+                if (arrangeBackup) discardButton.click();
+                closeArrange();
+            });
+
+            runButton.addEventListener('click', function () {
+                if (busy || !tree) return;
+                busy = true;
+                runButton.disabled = true;
+                if (log) { log.textContent = ''; log.hidden = false; }
+                say('已提交当前文档，等待模型响应…\n');
+                var payload = treePayload();
+                payload.instruction = input ? input.value : '';
+                streamPost(config.aiArrangeUrl, payload, function (event) {
+                    if (event.type === 'status') say('· ' + event.message + '\n');
+                    else if (event.type === 'reasoning') say(event.text);
+                    else if (event.type === 'error') say('\n[失败] ' + (event.message || '') + '\n');
+                }).then(function (result) {
+                    // 预览：先把原树整棵留一份，「丢弃」就是原样放回去。
+                    arrangeBackup = JSON.parse(JSON.stringify(tree));
+                    tree = result.tree;
+                    selection = null;
+                    refreshCanvas();
+                    renderInspector();
+                    setDirty(true);
+                    say('\n' + (result.message || '重排完成') + '\n画布上现在是预览，点「采用」保留，点「丢弃」退回。\n');
+                    runButton.hidden = true;
+                    adoptButton.hidden = false;
+                    discardButton.hidden = false;
+                }).catch(function (error) {
+                    say('\n[失败] ' + (error.message || '重排失败') + '\n');
+                }).then(function () {
+                    busy = false;
+                    runButton.disabled = false;
+                });
+            });
+
+            adoptButton.addEventListener('click', function () {
+                arrangeBackup = null;
+                arrangeReset();
+                setStatus('已采用 AI 重排结果，点「保存」入库');
+                toast('已采用重排结果（还没入库）');
+            });
+
+            discardButton.addEventListener('click', function () {
+                if (!arrangeBackup) { arrangeReset(); return; }
+                tree = arrangeBackup;
+                arrangeBackup = null;
+                selection = null;
+                refreshCanvas();
+                renderInspector();
+                arrangeReset();
+                setStatus('已退回重排前的文档');
+            });
+        }
+
         function restoreOriginal() {
             if (busy) return;
             if (!window.confirm('用首次接管前的原始内容替换内容字段？画布里的编辑不会丢，但需要重新应用。')) return;
@@ -2419,6 +2820,9 @@
                 var input = contentInput();
                 if (!input) throw new Error('找不到内容字段，无法写回');
                 input.value = data.content;
+                // 字段里已经是原文，不再是编译产物：锁没有理由继续存在。
+                config.managed = false;
+                releaseModeLock(true);
                 setStatus('已写回原文，记得保存这条内容');
             }).catch(function (error) {
                 setStatus(error.message || '取回失败');
@@ -2455,15 +2859,101 @@
 
         var launcher = null;
 
+        /**
+         * 已被可视化托管时把「富文本 / 代码」两颗按钮置灰。
+         *
+         * 核心的 ContentEditorModes 先建好这两个模式、只在后面追加插件模式，
+         * 插件没有办法声明「我独占这个字段」，也不该去改核心（那是另一件事）。
+         * 于是只在 DOM 上拦：字段里现在装着编译产物（一大段 HTML + 作用域
+         * <style>），在富文本里点一下就会被 sanitize 掉整片样式，那是静默毁内容。
+         * 置灰不是装饰——radio 真的 disabled，点不动。
+         *
+         * 逃生口在顶栏「⋯」里的「解除可视化接管」：确认后放开两颗按钮，
+         * 之后这个字段就当普通 HTML 用，插件不再拦。
+         */
+        var modeLocked = false;
+
+        function lockedModeRadios() {
+            var found = [];
+            Array.prototype.forEach.call(
+                document.querySelectorAll('input[name="content_mode"][data-content-mode-key]'),
+                function (radio) {
+                    var key = radio.getAttribute('data-content-mode-key');
+                    if (key === 'richtext' || key === 'code') found.push(radio);
+                }
+            );
+            return found;
+        }
+
+        function labelOf(radio) {
+            return radio.closest('label') || document.querySelector('label[for="' + radio.id + '"]');
+        }
+
+        function applyModeLock() {
+            // 失配（在可视化之外被改过）时不锁：那时候用户本来就在别处编辑这段内容。
+            if (!config.managed || config.stale) return;
+            modeLocked = true;
+            var reason = '这段内容正由可视化编辑器托管：字段里是编译好的 HTML 与作用域样式，'
+                + '在富文本或代码里改会破坏它。要改回普通编辑，请在可视化编辑台的「⋯」里选「解除可视化接管」。';
+            lockedModeRadios().forEach(function (radio) {
+                radio.disabled = true;
+                var label = labelOf(radio);
+                if (label) {
+                    label.classList.add('ve-mode-locked');
+                    label.setAttribute('title', reason);
+                    label.setAttribute('aria-disabled', 'true');
+                }
+            });
+        }
+
+        function releaseModeLock(silent) {
+            if (!modeLocked) {
+                if (!silent) window.alert('这两颗按钮现在没有被锁住。');
+                return;
+            }
+            if (!silent && !window.confirm(
+                '解除接管后「富文本 / 代码」可用，但字段里那段编译产物会由你自己维护：'
+                + '在富文本里保存一次，作用域样式很可能被清掉。确定解除？'
+            )) return;
+            modeLocked = false;
+            lockedModeRadios().forEach(function (radio) {
+                radio.disabled = false;
+                var label = labelOf(radio);
+                if (label) {
+                    label.classList.remove('ve-mode-locked');
+                    label.removeAttribute('title');
+                    label.removeAttribute('aria-disabled');
+                }
+            });
+            var item = stage.querySelector('[data-ve-action="release"]');
+            if (item) item.hidden = true;
+            setStatus('已解除接管：富文本 / 代码可用');
+        }
+
         function launch() {
             if (busy) return;
             busy = true;
+            // 先做服务端预检：复杂内容才问「要不要让 AI 转换」，干净的直接进。
+            // 这一问必须在蒙版之前——加载动画一起，用户就以为已经在转了。
+            askBeforeOpen().then(function (choice) {
+                if (choice === 'cancel') { busy = false; return; }
+                openWithChoice(choice);
+            });
+        }
+
+        function openWithChoice(choice) {
             if (launcher) launcher.setAttribute('data-ve-active', '1');
             // 切到本插件的模式：核心的面板显隐由它自己接管。
             try { window.ContentEditorModes.select(config.modeKey); } catch (e) {}
             showVeil();
 
-            var ready = loaded ? Promise.resolve(null) : loadTree(false);
+            var ready;
+            if (choice === 'ai') {
+                // AI 那条路自己产出树，不再走规则导入。
+                ready = aiConvert();
+            } else {
+                ready = loaded ? Promise.resolve(null) : loadTree(false);
+            }
             ready.then(function () {
                 // 首次转换可能很快，但蒙版太短会像闪一下；给动画一个最小停留。
                 var wait = (gsap && !reduceMotion) ? 900 : 0;
@@ -2493,6 +2983,10 @@
                         applyToField();
                     } else if (action === 'restore') {
                         restoreOriginal();
+                    } else if (action === 'release') {
+                        releaseModeLock(false);
+                    } else if (action === 'arrange') {
+                        openArrange();
                     } else if (action === 'reimport') {
                         if (dirty && !window.confirm('重新导入会用内容字段的当前内容覆盖画布。继续？')) return;
                         setStatus('正在重新解析…');
@@ -2594,10 +3088,12 @@
         }
 
         launcher = installLauncher();
+        applyModeLock();
         bindPalette();
         bindNotch();
         bindStageActions();
         bindMoreMenu();
+        bindArrange();
         bindContextMenu();
         bindFormSync();
         setBreakpoint('desktop');

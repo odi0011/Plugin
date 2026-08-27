@@ -21,7 +21,7 @@ final class VisualEditorPanel
     public const MODE_KEY = 'visual-editor';
 
     /** 资源 URL 的缓存指纹：随插件版本走，升级后浏览器一定重新取 CSS/JS。 */
-    public const VERSION = '1.4.0';
+    public const VERSION = '1.5.0';
 
     /**
      * admin.content_editor.modes 过滤器入口。
@@ -108,6 +108,9 @@ final class VisualEditorPanel
             'saveUrl' => \admin_url('/visual-editor/save'),
             'persistUrl' => \admin_url('/visual-editor/persist'),
             'restoreUrl' => \admin_url('/visual-editor/restore'),
+            'inspectUrl' => \admin_url('/visual-editor/inspect'),
+            'aiConvertUrl' => \admin_url('/visual-editor/ai-convert'),
+            'aiArrangeUrl' => \admin_url('/visual-editor/ai-arrange'),
             'csrfToken' => \App\Core\Csrf::token(),
             'widgets' => VisualEditorSchema::widgets(),
             'widgetGroups' => VisualEditorSchema::widgetGroups(),

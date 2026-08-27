@@ -32,6 +32,7 @@ require_once __DIR__ . '/src/Renderer.php';
 require_once __DIR__ . '/src/Content.php';
 require_once __DIR__ . '/src/Store.php';
 require_once __DIR__ . '/src/Panel.php';
+require_once __DIR__ . '/src/Ai.php';
 require_once __DIR__ . '/src/AdminTransport.php';
 require_once __DIR__ . '/src/Api.php';
 
@@ -59,5 +60,16 @@ add_action('routes.admin.register', static function ($router) {
     });
     $router->post('/admin/visual-editor/restore', static function (): void {
         VisualEditorAdminTransport::restore();
+    });
+    // 打开编辑台之前的自动预检：只有确实会退化成大块原样 HTML 才弹 AI 那一问。
+    $router->post('/admin/visual-editor/inspect', static function (): void {
+        VisualEditorAdminTransport::inspect();
+    });
+    // 两条 AI 路都是 SSE，都只回预览、不入库。
+    $router->post('/admin/visual-editor/ai-convert', static function (): void {
+        VisualEditorAdminTransport::aiConvert();
+    });
+    $router->post('/admin/visual-editor/ai-arrange', static function (): void {
+        VisualEditorAdminTransport::aiArrange();
     });
 });

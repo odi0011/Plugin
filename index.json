@@ -1,10 +1,10 @@
 {
     "schema_version": 1,
-    "generated_at": "2026-08-27T04:18:27Z",
+    "generated_at": "2026-08-27T04:24:23Z",
     "source": {
         "type": "github-static",
         "repo": "odi0011/Plugin",
-        "commit": "8449e22705ea86c23f9e24ad9fa1bed528dd39c6"
+        "commit": "d2c19fef644dff2fe9ee678c426d785cb462810c"
     },
     "core_api": {
         "min": 1,
@@ -24,7 +24,7 @@
                 "资源类型",
                 "委派角色"
             ],
-            "icon": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@57178e224c483debf22fcae829214a779d1bbfcb/plugins/agent-content-integrity/icon.svg",
+            "icon": "icon.svg",
             "author": {
                 "name": "odi0011"
             },
@@ -62,7 +62,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@57178e224c483debf22fcae829214a779d1bbfcb/dist/agent-content-integrity-1.0.1.zip",
+                "url": "",
                 "sha256": "4c8c8bd9b3bcc391aeca1e8381d2545ba6edeff3f88bfdbdeedebe1b84746497",
                 "size_bytes": 3120
             },
@@ -78,7 +78,7 @@
             "description": "演示插件如何向 AI Agent 注册动作、资源类型、委派角色与生命周期事件监听。",
             "category": "other",
             "tags": [],
-            "icon": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@57178e224c483debf22fcae829214a779d1bbfcb/plugins/agent-hello/icon.svg",
+            "icon": "icon.svg",
             "author": {
                 "name": "Project"
             },
@@ -118,7 +118,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@57178e224c483debf22fcae829214a779d1bbfcb/dist/agent-hello-1.0.1.zip",
+                "url": "",
                 "sha256": "cdc1e40772105092b5f3fcdf0ef3247ed6f6c93d301b22758c3d26f4cd6dbfc4",
                 "size_bytes": 4184
             },
@@ -139,7 +139,7 @@
                 "死链",
                 "只读"
             ],
-            "icon": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@57178e224c483debf22fcae829214a779d1bbfcb/plugins/agent-link-auditor/icon.svg",
+            "icon": "icon.svg",
             "author": {
                 "name": "odi0011"
             },
@@ -180,7 +180,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@57178e224c483debf22fcae829214a779d1bbfcb/dist/agent-link-auditor-1.0.0.zip",
+                "url": "",
                 "sha256": "85602c1b62ef50d91b68854cc387de419b37741c922da050e2032eb6802e3650",
                 "size_bytes": 6225
             },
@@ -201,7 +201,7 @@
                 "统计",
                 "后台页面"
             ],
-            "icon": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@57178e224c483debf22fcae829214a779d1bbfcb/plugins/agent-run-digest/icon.svg",
+            "icon": "icon.svg",
             "author": {
                 "name": "odi0011"
             },
@@ -241,7 +241,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@57178e224c483debf22fcae829214a779d1bbfcb/dist/agent-run-digest-1.0.0.zip",
+                "url": "",
                 "sha256": "a913c200cd4ab6005a9b4b3d41f8629c89f807a0db8267d15e7c86c10a2d372c",
                 "size_bytes": 8151
             },
@@ -262,7 +262,7 @@
                 "生命周期",
                 "webhook"
             ],
-            "icon": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@57178e224c483debf22fcae829214a779d1bbfcb/plugins/agent-run-notifier/icon.svg",
+            "icon": "icon.svg",
             "author": {
                 "name": "odi0011"
             },
@@ -300,7 +300,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@57178e224c483debf22fcae829214a779d1bbfcb/dist/agent-run-notifier-1.0.1.zip",
+                "url": "",
                 "sha256": "8238ee5f1b59a4a1cac145dd37046febef39a3248a3e62937eac5a11e04a4d7c",
                 "size_bytes": 3261
             },
@@ -321,7 +321,7 @@
                 "委派角色",
                 "只读"
             ],
-            "icon": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@57178e224c483debf22fcae829214a779d1bbfcb/plugins/agent-seo-snapshot/icon.svg",
+            "icon": "icon.svg",
             "author": {
                 "name": "odi0011"
             },
@@ -362,7 +362,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@57178e224c483debf22fcae829214a779d1bbfcb/dist/agent-seo-snapshot-1.0.0.zip",
+                "url": "",
                 "sha256": "e9cffe081eb75124aa80ec9c1bcba974a5304dd5036f3f6426b6f480b8915005",
                 "size_bytes": 4882
             },
@@ -383,7 +383,7 @@
                 "写动作",
                 "migration"
             ],
-            "icon": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@57178e224c483debf22fcae829214a779d1bbfcb/plugins/agent-task-ledger/icon.svg",
+            "icon": "icon.svg",
             "author": {
                 "name": "odi0011"
             },
@@ -445,7 +445,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@57178e224c483debf22fcae829214a779d1bbfcb/dist/agent-task-ledger-1.0.1.zip",
+                "url": "",
                 "sha256": "1759dca20b5305022a746604d7b4c0db1f3f63d7fa89032a92fa7bdf7007f98e",
                 "size_bytes": 4196
             },
@@ -467,7 +467,7 @@
                 "知识库",
                 "前台悬浮窗"
             ],
-            "icon": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@8449e22705ea86c23f9e24ad9fa1bed528dd39c6/plugins/ai-customer-service/icon.svg",
+            "icon": "icon.svg",
             "author": {
                 "name": "odi0011"
             },
@@ -495,7 +495,7 @@
             "published_at": "2026-08-27T04:18:27Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@8449e22705ea86c23f9e24ad9fa1bed528dd39c6/dist/ai-customer-service-1.0.0.zip",
+                "url": "",
                 "sha256": "589f6c58422f92c509e86c8dd1d78ac098ba33b4a7d6454ecb8e35a64e96aea6",
                 "size_bytes": 29585
             },
@@ -511,7 +511,7 @@
             "description": "在所有前台页面 <head> 注入 Google Analytics 跟踪代码。后台「站点统计」可配置 Tracking ID。",
             "category": "other",
             "tags": [],
-            "icon": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@57178e224c483debf22fcae829214a779d1bbfcb/plugins/analytics-snippet/icon.svg",
+            "icon": "icon.svg",
             "author": {
                 "name": "Project"
             },
@@ -533,7 +533,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@57178e224c483debf22fcae829214a779d1bbfcb/dist/analytics-snippet-1.0.1.zip",
+                "url": "",
                 "sha256": "b17e82e7b65935377af11cac8b15e72c85f75da459ab880de2a5cd1aa64495b4",
                 "size_bytes": 4046
             },
@@ -549,7 +549,7 @@
             "description": "最简插件示例：在文章详情页底部加一行 Hello 横幅。代码仅一行，演示钩子注册。",
             "category": "other",
             "tags": [],
-            "icon": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@57178e224c483debf22fcae829214a779d1bbfcb/plugins/hello-world/icon.svg",
+            "icon": "icon.svg",
             "author": {
                 "name": "Project"
             },
@@ -564,7 +564,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@57178e224c483debf22fcae829214a779d1bbfcb/dist/hello-world-1.0.1.zip",
+                "url": "",
                 "sha256": "09d3956e65867a7c0a812d5b3fcfba112c090ac0c4f335e12e84a41c78265f82",
                 "size_bytes": 1715
             },
@@ -584,7 +584,7 @@
                 "维护模式",
                 "503"
             ],
-            "icon": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@57178e224c483debf22fcae829214a779d1bbfcb/plugins/maintenance-mode/icon.svg",
+            "icon": "icon.svg",
             "author": {
                 "name": "odi0011"
             },
@@ -606,7 +606,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@57178e224c483debf22fcae829214a779d1bbfcb/dist/maintenance-mode-1.0.0.zip",
+                "url": "",
                 "sha256": "0253238ee090f1e91318b36ee8c87b326d158315c18bd8cc2d5badd84ea55d85",
                 "size_bytes": 7991
             },
@@ -622,7 +622,7 @@
             "description": "内置常用前台组件库，可一键启用为系统组件，并应用到页面、文章、产品或系统模板。",
             "category": "other",
             "tags": [],
-            "icon": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@57178e224c483debf22fcae829214a779d1bbfcb/plugins/preset-components/icon.svg",
+            "icon": "icon.svg",
             "author": {
                 "name": "Project"
             },
@@ -644,7 +644,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@57178e224c483debf22fcae829214a779d1bbfcb/dist/preset-components-1.0.1.zip",
+                "url": "",
                 "sha256": "bbd5f0dd481ab5c06852c66058ec39f08bc4106e1b9667f5e68f6244a591ec36",
                 "size_bytes": 27033
             },
@@ -664,7 +664,7 @@
                 "阅读时长",
                 "字数统计"
             ],
-            "icon": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@57178e224c483debf22fcae829214a779d1bbfcb/plugins/reading-time/icon.svg",
+            "icon": "icon.svg",
             "author": {
                 "name": "odi0011"
             },
@@ -686,7 +686,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@57178e224c483debf22fcae829214a779d1bbfcb/dist/reading-time-1.0.0.zip",
+                "url": "",
                 "sha256": "2913a76bb3c0744b6721a4e0f88eaf3983bf145efea9b629b0a497775a25a78b",
                 "size_bytes": 6575
             },
@@ -702,7 +702,7 @@
             "description": "管理 301/302 重定向规则。在请求分发前拦截匹配的 URL 并跳转。演示完整 CRUD 插件能力：自带表、菜单、路由、视图、权限点、卸载清理。",
             "category": "other",
             "tags": [],
-            "icon": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@57178e224c483debf22fcae829214a779d1bbfcb/plugins/redirect-rules/icon.svg",
+            "icon": "icon.svg",
             "author": {
                 "name": "Project"
             },
@@ -724,7 +724,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@57178e224c483debf22fcae829214a779d1bbfcb/dist/redirect-rules-1.0.1.zip",
+                "url": "",
                 "sha256": "2735420998164a146febf64f93cbbd1051bc8bffec902150c694aeaa68ead114",
                 "size_bytes": 6064
             },
@@ -745,7 +745,7 @@
                 "搜索引擎",
                 "外发请求"
             ],
-            "icon": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@57178e224c483debf22fcae829214a779d1bbfcb/plugins/sitemap-ping/icon.svg",
+            "icon": "icon.svg",
             "author": {
                 "name": "odi0011"
             },
@@ -767,7 +767,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@57178e224c483debf22fcae829214a779d1bbfcb/dist/sitemap-ping-1.0.0.zip",
+                "url": "",
                 "sha256": "9a2bf3e56a8ed22cc1caf113a9a59f56678facb8ff901f07565b3be7ef2e916a",
                 "size_bytes": 8383
             },
@@ -779,8 +779,8 @@
             "slug": "visual-editor",
             "namespace": "",
             "name": "可视化编辑器",
-            "version": "1.4.0",
-            "description": "给内容编辑器加一颗独立的「可视化」入口：点开后整页渐隐出蒙版与加载动画，进入全屏拖拽编辑台，用「区块 / 栏 / 控件」搭页面，样式按桌面 / 平板 / 手机三档断点分别设置。控件参考 Elementor：标题、正文、图片、按钮、列表、引用、分隔线、间距、视频、图标、图标框、图文框、提示条、进度条与自定义 HTML。编辑树与首次接管前的原文另存在插件目录，核心内容字段里只写渲染好的 HTML 与作用域 CSS——插件停用或卸载后页面照常渲染，原文随时可一键还原。",
+            "version": "1.5.0",
+            "description": "给内容编辑器加一颗独立的「可视化」入口：点开后整页渐隐出蒙版与加载动画，进入全屏拖拽编辑台，用「区块 / 栏 / 控件」搭页面，样式按桌面 / 平板 / 手机三档断点分别设置。控件参考 Elementor：标题、正文、图片、按钮、列表、引用、分隔线、间距、视频、图标、图标框、图文框、提示条、进度条与自定义 HTML。新增区块时在画布里直接选栏数；托管中会把「富文本 / 代码」置灰，避免一次误保存冲掉编译产物；规则导入无法无损转换的复杂内容可以选择让站点自己配置的 AI 重写成区块（有损，需明确同意，过程实时可见），编辑台里还有「AI 重排」预览。编辑树与首次接管前的原文另存在插件目录，核心内容字段里只写渲染好的 HTML 与作用域 CSS——插件停用或卸载后页面照常渲染，原文随时可一键还原。",
             "category": "content",
             "tags": [
                 "可视化编辑",
@@ -788,7 +788,7 @@
                 "拖拽",
                 "响应式"
             ],
-            "icon": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@57178e224c483debf22fcae829214a779d1bbfcb/plugins/visual-editor/icon.svg",
+            "icon": "icon.svg",
             "author": {
                 "name": "odi0011"
             },
@@ -819,12 +819,12 @@
                 }
             ],
             "agent": [],
-            "published_at": "2026-08-27T03:51:31Z",
+            "published_at": "2026-08-27T04:24:23Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@57178e224c483debf22fcae829214a779d1bbfcb/dist/visual-editor-1.4.0.zip",
-                "sha256": "2bc3353034934dee8131e7c5b86f825310b6d912cea55f5dfb0ca466e27efb0d",
-                "size_bytes": 116686
+                "url": "",
+                "sha256": "0c26b7cb32718db4d2b36bc6087ee302635970d19c93c005090fb5b9f02cd889",
+                "size_bytes": 134383
             },
             "license": {
                 "type": "free"

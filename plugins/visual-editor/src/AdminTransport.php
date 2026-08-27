@@ -198,6 +198,152 @@ final class VisualEditorAdminTransport
     }
 
     /**
+     * POST /admin/visual-editor/inspect
+     *
+     * 打开编辑台之前的自动预检：规则导入这段内容会不会退化成一坨原样 HTML？
+     * 不会就什么都不问，直接照常打开——「复杂才问」的判断在服务端做，
+     * 因为只有服务端跑得起真正的导入器，客户端猜不出结果。
+     */
+    public static function inspect(): void
+    {
+        $source = self::guard('visual_editor.edit');
+        $field = VisualEditorContent::loadField($source);
+        if ($field === null) {
+            self::json(['ok' => false, 'message' => '内容不存在或已被删除'], 404);
+        }
+        $report = VisualEditorAi::inspect($field);
+        self::json([
+            'ok' => true,
+            'message' => $report['complex'] ? '这段内容比较复杂' : '可以直接转换',
+            'data' => [
+                'precheck' => $report,
+                'ai' => VisualEditorAi::availability(),
+                // 已经托管过的内容不需要再问一次：树已经在存储里了。
+                'managed' => VisualEditorStore::tree($source['key']) !== null,
+            ],
+        ], 200);
+    }
+
+    /**
+     * POST /admin/visual-editor/ai-convert （SSE）
+     *
+     * 让模型把原文重写成一棵树，边写边把思考与进度推给蒙版上的加载动画。
+     *
+     * 有损，且用户已经明确同意——界面在点这颗按钮之前必须已经说过「不保证
+     * 1:1 还原」。这里只负责两件事：把过程如实播出去，把结果交给 normalize()。
+     * 结果**不入库、不覆盖存储里的既有树**，编辑器拿它当预览，用户点「保存」才落地。
+     */
+    public static function aiConvert(): void
+    {
+        $source = self::guard('visual_editor.edit');
+        $field = VisualEditorContent::loadField($source);
+        if ($field === null) {
+            self::json(['ok' => false, 'message' => '内容不存在或已被删除'], 404);
+        }
+        $html = VisualEditorContent::stripManagedBlock($field);
+        if (trim($html) === '') {
+            self::json(['ok' => false, 'message' => '这条内容还是空的，没有可转换的原文'], 422);
+        }
+        $allowCode = \App\Core\Auth::can('visual_editor.code');
+        self::streamTree(VisualEditorAi::convertMessages($html, $allowCode), $allowCode, 've:convert');
+    }
+
+    /**
+     * POST /admin/visual-editor/ai-arrange （SSE）
+     *
+     * 编辑台里的「AI 重排」：喂当前这棵树加一句人话要求，回一棵新树。
+     * 同样只是预览——采不采用是用户的事，所以这里连插件存储都不写。
+     */
+    public static function aiArrange(): void
+    {
+        $source = self::guard('visual_editor.edit');
+        $tree = self::readTree();
+        $instruction = mb_substr(trim((string)($_POST['instruction'] ?? '')), 0, 600);
+        $allowCode = \App\Core\Auth::can('visual_editor.code');
+        self::streamTree(VisualEditorAi::rearrangeMessages($tree, $instruction, $allowCode), $allowCode, 've:arrange');
+    }
+
+    /**
+     * 两条 AI 路共用的 SSE 管道。
+     *
+     * 事件形状与核心 AiController 的流一致（`data: {"type":…}`），前端一套解析。
+     * 终态只发一次：done 或 error。
+     *
+     * @param list<array{role:string,content:string}> $messages
+     */
+    private static function streamTree(array $messages, bool $allowCode, string $sceneTag): void
+    {
+        $availability = VisualEditorAi::availability();
+        if (empty($availability['available'])) {
+            self::json(['ok' => false, 'message' => (string)$availability['message'], 'data' => ['ai' => $availability]], 503);
+        }
+
+        @set_time_limit(0);
+        ignore_user_abort(true);
+        while (ob_get_level() > 0) {
+            @ob_end_flush();
+        }
+        if (!headers_sent()) {
+            header('Content-Type: text/event-stream; charset=UTF-8');
+            header('Cache-Control: no-cache, no-store, must-revalidate, no-transform');
+            header('X-Accel-Buffering: no');
+        }
+        // 反向代理常常要攒够一截才肯往下发；先塞一段注释把管道撑开。
+        echo ':' . str_repeat(' ', 8192) . "\n\n";
+        @flush();
+
+        $send = static function (array $event): void {
+            $json = json_encode($event, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            echo 'data: ' . (is_string($json) ? $json : '{"type":"error","message":"encode_failed"}') . "\n\n";
+            if (function_exists('ob_flush')) @ob_flush();
+            @flush();
+        };
+
+        $send(['type' => 'status', 'message' => '已连上模型 ' . (string)$availability['model']]);
+
+        $result = \App\Core\AiService::chat($messages, null, [
+            'scene' => 'chat',
+            'scene_tag' => $sceneTag,
+            'temperature' => 0.2,
+            'stream_callback' => static function ($chunk) use ($send): void {
+                $text = is_string($chunk) ? $chunk : (string)($chunk['content'] ?? '');
+                if ($text !== '') $send(['type' => 'delta', 'text' => $text]);
+            },
+            'reasoning_callback' => static function ($chunk) use ($send): void {
+                $text = is_string($chunk) ? $chunk : (string)($chunk['content'] ?? '');
+                if ($text !== '') $send(['type' => 'reasoning', 'text' => $text]);
+            },
+        ]);
+
+        if (empty($result['ok'])) {
+            $send([
+                'type' => 'error',
+                'message' => (string)($result['error'] ?? 'AI 请求失败'),
+                'error_code' => (string)($result['error_code'] ?? ''),
+            ]);
+            exit;
+        }
+
+        $parsed = VisualEditorAi::parseTree((string)($result['content'] ?? ''), $allowCode);
+        if (!$parsed['ok']) {
+            $send(['type' => 'error', 'message' => $parsed['message'], 'error_code' => 'unusable_output']);
+            exit;
+        }
+
+        // 预览用的渲染同样在服务端做：客户端拿到的 HTML 与保存后落库的逐字节同源。
+        $key = (string)($_POST['source_key'] ?? '');
+        if (!preg_match('~^[a-z0-9_-]{1,64}$~i', $key)) $key = 'preview';
+        $send([
+            'type' => 'done',
+            'message' => $parsed['message'] . '（AI 生成，未入库；确认后点「保存」）',
+            'tree' => $parsed['tree'],
+            'canvas_html' => VisualEditorRenderer::render($key, $parsed['tree'], true),
+            'canvas_css' => VisualEditorStyleCompiler::compile($key, $parsed['tree']),
+        ]);
+        exit;
+    }
+
+    /**
      * 读取并规范化上传的编辑树。
      *
      * 优先认 tree_b64（base64 的 JSON）：树里可能夹着自定义 HTML 控件的原始标签，

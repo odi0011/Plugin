@@ -34,6 +34,9 @@ if (!defined('CODE_SCHEMA_VERSION')) exit;
 /** @var string $saveUrl */
 /** @var string $persistUrl */
 /** @var string $restoreUrl */
+/** @var string $inspectUrl */
+/** @var string $aiConvertUrl */
+/** @var string $aiArrangeUrl */
 /** @var string $csrfToken */
 /** @var array $widgets */
 /** @var array $widgetGroups */
@@ -66,6 +69,9 @@ $config = [
     'saveUrl' => $saveUrl,
     'persistUrl' => $persistUrl,
     'restoreUrl' => $restoreUrl,
+    'inspectUrl' => $inspectUrl,
+    'aiConvertUrl' => $aiConvertUrl,
+    'aiArrangeUrl' => $aiArrangeUrl,
     'csrfToken' => $csrfToken,
     'widgets' => $widgets,
     'widgetGroups' => $widgetGroups,
@@ -159,6 +165,51 @@ $loaderLines = $firstRun
                 : '正在读取上次保存的编辑树。' ?>
         </p>
         <p class="ve-veil-error" data-ve-veil-error hidden></p>
+        <?php /*
+          AI 转换时模型是边想边写的，把这段过程藏起来只会让人以为卡住了。
+          日常（非 AI）加载不显示这块。
+        */ ?>
+        <div class="ve-veil-stream" data-ve-stream hidden>
+            <div class="ve-stream-head">
+                <span class="ve-stream-dot" aria-hidden="true"></span>
+                <span data-ve-stream-title>模型正在阅读这篇内容</span>
+            </div>
+            <pre class="ve-stream-body" data-ve-stream-body aria-live="polite"></pre>
+        </div>
+    </div>
+</div>
+
+<?php /*
+  打开前的那一问。只有服务端预检说「复杂」时才出现——干净的内容直接进编辑台，
+  不该被一个弹窗拦住。三个出口一次说清，包括「AI 不保证 1:1 还原」这句必须
+  写在按钮旁边而不是藏在说明里。
+*/ ?>
+<div id="ve-ask" class="ve-ask" hidden>
+    <div class="ve-ask-card" role="dialog" aria-modal="true" aria-labelledby="ve-ask-title">
+        <h3 class="ve-ask-title" id="ve-ask-title">这篇内容没法直接拆成控件</h3>
+        <ul class="ve-ask-facts" data-ve-ask-facts></ul>
+        <p class="ve-ask-text">
+            按「不丢内容优先」的规则，这些标记已经原样保留成「自定义 HTML」块——
+            一个字节都没少，但在编辑台里它们只能当一整块 HTML 改，拖不动、调不了间距。
+        </p>
+        <div class="ve-ask-warn" data-ve-ask-warn>
+            <i class="bi bi-exclamation-triangle"></i>
+            <span>让 AI 重写成区块与控件是<b>有损</b>的：<b>不保证 1:1 还原</b>。
+            原文会在首次接管前留档，随时可以用「还原原文」退回去；AI 的结果也要你点「保存」才入库。</span>
+        </div>
+        <p class="ve-ask-model" data-ve-ask-model></p>
+        <div class="ve-ask-actions">
+            <button type="button" class="ve-btn ve-btn-primary" data-ve-ask="ai">
+                <i class="bi bi-stars"></i> 让 AI 转换
+            </button>
+            <button type="button" class="ve-btn ve-btn-ghost" data-ve-ask="raw">
+                <i class="bi bi-braces"></i> 保留为 HTML 块直接打开
+            </button>
+            <button type="button" class="ve-btn ve-btn-ghost" data-ve-ask="configure" hidden>
+                <i class="bi bi-gear"></i> 去配置 AI
+            </button>
+            <button type="button" class="ve-btn ve-btn-quiet" data-ve-ask="cancel">取消</button>
+        </div>
     </div>
 </div>
 
@@ -207,6 +258,20 @@ $loaderLines = $firstRun
                         <span class="ve-more-text">
                             <span class="ve-more-label">重新导入</span>
                             <span class="ve-more-desc">丢弃当前编辑，按内容字段现在的样子重新解析一次。</span>
+                        </span>
+                    </button>
+                    <button type="button" class="ve-more-item" data-ve-action="arrange">
+                        <i class="bi bi-stars"></i>
+                        <span class="ve-more-text">
+                            <span class="ve-more-label">AI 重排</span>
+                            <span class="ve-more-desc">用一句话让模型重新组织现有区块；先预览，采不采用你定。</span>
+                        </span>
+                    </button>
+                    <button type="button" class="ve-more-item" data-ve-action="release"<?= $managed && !$stale ? '' : ' hidden' ?>>
+                        <i class="bi bi-unlock"></i>
+                        <span class="ve-more-text">
+                            <span class="ve-more-label">解除可视化接管</span>
+                            <span class="ve-more-desc">放开被置灰的「富文本 / 代码」，之后这段产物由你自己维护。</span>
                         </span>
                     </button>
                     <?php if ($hasOriginal): ?>
@@ -259,20 +324,6 @@ $loaderLines = $firstRun
                     <?php endforeach; ?>
                 </div>
             <?php endforeach; ?>
-
-            <div class="ve-rail-group">区块</div>
-            <div class="ve-rail-list">
-                <?php foreach ($presets as $presetKey => $preset): ?>
-                    <button type="button" class="ve-preset" data-ve-add-section="<?= e((string)$presetKey) ?>">
-                        <span class="ve-preset-bars" aria-hidden="true">
-                            <?php foreach ($preset['columns'] as $percent): ?>
-                                <span style="flex:0 0 <?= (int)$percent ?>%"></span>
-                            <?php endforeach; ?>
-                        </span>
-                        <?= e((string)$preset['label']) ?>
-                    </button>
-                <?php endforeach; ?>
-            </div>
         </aside>
 
         <main class="ve-viewport" data-ve-viewport>
@@ -297,6 +348,36 @@ $loaderLines = $firstRun
             </div>
         </aside>
     </div>
+
+    <?php /*
+      AI 重排抽屉。刻意做成「预览 → 采用 / 丢弃」而不是直接改画布：
+      模型重排是有损的，用户必须先看见结果再决定，而且随时能原样退回。
+    */ ?>
+    <aside class="ve-arrange" data-ve-arrange hidden>
+        <div class="ve-arrange-head">
+            <span><i class="bi bi-stars"></i> AI 重排</span>
+            <button type="button" class="ve-icon-btn" data-ve-arrange-close title="关闭"><i class="bi bi-x-lg"></i></button>
+        </div>
+        <div class="ve-arrange-body">
+            <label class="ve-arrange-label" for="ve-arrange-input">想怎么排？</label>
+            <textarea id="ve-arrange-input" class="ve-arrange-input" rows="3"
+                      placeholder="例如：把三张卡片改成一行三栏；正文段落之间加间距；标题统一成 h2"></textarea>
+            <p class="ve-arrange-note">
+                模型看到的是当前这棵编辑树，文字内容默认不改写。结果是<b>预览</b>——
+                点「采用」才会替换画布，点「丢弃」原样退回。
+            </p>
+            <div class="ve-arrange-actions">
+                <button type="button" class="ve-btn ve-btn-primary" data-ve-arrange-run>
+                    <i class="bi bi-play-fill"></i> 开始重排
+                </button>
+                <button type="button" class="ve-btn ve-btn-primary" data-ve-arrange-adopt hidden>
+                    <i class="bi bi-check2"></i> 采用
+                </button>
+                <button type="button" class="ve-btn ve-btn-quiet" data-ve-arrange-discard hidden>丢弃</button>
+            </div>
+            <pre class="ve-arrange-log" data-ve-arrange-log hidden aria-live="polite"></pre>
+        </div>
+    </aside>
 </div>
 
 <script type="application/json" id="ve-panel-config"><?= json_encode(
