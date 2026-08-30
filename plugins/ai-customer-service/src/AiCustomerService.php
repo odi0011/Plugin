@@ -16,7 +16,7 @@ declare(strict_types=1);
 final class AiCustomerService
 {
     public const SLUG = 'ai-customer-service';
-    public const VERSION = '1.2.1';
+    public const VERSION = '1.2.2';
 
     private const SESSION_KEY = '_ai_customer_service';
     private const CONVERSATION_TTL = 21600;
@@ -146,7 +146,7 @@ final class AiCustomerService
             'panel_width' => self::int($get('panel_width', 396), 300, 560, 396),
             'panel_height' => self::int($get('panel_height', 600), 380, 800, 600),
             'panel_radius' => self::int($get('panel_radius', 16), 0, 32, 16),
-            'panel_shadow' => self::choice($get('panel_shadow', ''), ['none', 'sm', 'md', 'lg'], 'md'),
+            'panel_shadow' => self::choice($get('panel_shadow', ''), ['none', 'sm', 'md', 'lg'], 'none'),
             'font_size' => self::int($get('font_size', 14), 12, 18, 14),
             'desktop_offset_x' => self::int($get('desktop_offset_x', 24), 0, 120, 24),
             'desktop_offset_y' => self::int($get('desktop_offset_y', 24), 0, 120, 24),
@@ -156,8 +156,8 @@ final class AiCustomerService
             'surface_color' => self::color((string)$get('surface_color', ''), '#FFFFFF'),
             'text_color' => self::color((string)$get('text_color', ''), '#111827'),
             'muted_color' => self::color((string)$get('muted_color', ''), '#6B7280'),
-            'header_color' => self::color((string)$get('header_color', ''), '#4F46E5'),
-            'header_text_color' => self::color((string)$get('header_text_color', ''), '#FFFFFF'),
+            'header_color' => self::color((string)$get('header_color', ''), '#FFFFFF'),
+            'header_text_color' => self::color((string)$get('header_text_color', ''), '#111827'),
             'bot_bubble_color' => self::color((string)$get('bot_bubble_color', ''), '#F3F4F6'),
             'bot_bubble_text_color' => self::color((string)$get('bot_bubble_text_color', ''), '#111827'),
             'visitor_bubble_color' => self::color((string)$get('visitor_bubble_color', ''), '#4F46E5'),
@@ -220,57 +220,60 @@ final class AiCustomerService
      * 预设主题。切换预设 = 一次性覆盖一组具体字段值（不是运行时的第二套配置），
      * 所以预设改完之后用户仍然能逐项微调，预览与前台看到的永远是同一份字段。
      *
+     * 六套都是**平色**：不用渐变顶栏、默认不打投影，分层只靠 1px 描边。
+     * 渐变和大面积投影在真实站点上几乎总是显脏，也压不住站点自己的配色。
+     *
      * @return array<string,array{label:string,note:string,values:array<string,mixed>}>
      */
     public static function themePresets(): array
     {
         return [
-            'aurora' => ['label' => '极光 Aurora', 'note' => '靛蓝主色 + 柔和气泡，默认', 'values' => [
-                'accent_color' => '#4F46E5', 'header_color' => '#4F46E5', 'header_text_color' => '#FFFFFF',
+            'plain' => ['label' => '素白 Plain', 'note' => '白底 + 靛蓝重点色，最不抢站点风格', 'values' => [
+                'accent_color' => '#4F46E5', 'header_color' => '#FFFFFF', 'header_text_color' => '#111827',
                 'surface_color' => '#FFFFFF', 'text_color' => '#111827', 'muted_color' => '#6B7280',
-                'bot_bubble_color' => '#F3F4F6', 'bot_bubble_text_color' => '#111827',
+                'bot_bubble_color' => '#F4F4F5', 'bot_bubble_text_color' => '#111827',
                 'visitor_bubble_color' => '#4F46E5', 'visitor_bubble_text_color' => '#FFFFFF',
-                'panel_radius' => 16, 'panel_shadow' => 'md', 'font_family' => 'system',
-                'theme' => ['bubble_style' => 'soft', 'bubble_anim' => 'rise', 'header_style' => 'solid', 'quick_style' => 'capsule', 'density' => 'cozy', 'typing' => 'dots'],
+                'panel_radius' => 14, 'panel_shadow' => 'none', 'font_family' => 'system',
+                'theme' => ['bubble_style' => 'soft', 'bubble_anim' => 'rise', 'header_style' => 'light', 'quick_style' => 'capsule', 'density' => 'cozy', 'typing' => 'dots'],
             ]],
-            'midnight' => ['label' => '午夜 Midnight', 'note' => '深色面板，适合深色站点', 'values' => [
-                'accent_color' => '#6366F1', 'header_color' => '#111827', 'header_text_color' => '#F9FAFB',
-                'surface_color' => '#0F172A', 'text_color' => '#E5E7EB', 'muted_color' => '#94A3B8',
-                'bot_bubble_color' => '#1E293B', 'bot_bubble_text_color' => '#E5E7EB',
+            'ink' => ['label' => '墨黑 Ink', 'note' => '近黑顶栏 + 中性灰气泡，克制', 'values' => [
+                'accent_color' => '#18181B', 'header_color' => '#18181B', 'header_text_color' => '#FAFAFA',
+                'surface_color' => '#FFFFFF', 'text_color' => '#18181B', 'muted_color' => '#71717A',
+                'bot_bubble_color' => '#F4F4F5', 'bot_bubble_text_color' => '#18181B',
+                'visitor_bubble_color' => '#18181B', 'visitor_bubble_text_color' => '#FAFAFA',
+                'panel_radius' => 12, 'panel_shadow' => 'none', 'font_family' => 'inter',
+                'theme' => ['bubble_style' => 'flat', 'bubble_anim' => 'fade', 'header_style' => 'solid', 'quick_style' => 'ghost', 'density' => 'compact', 'typing' => 'dots'],
+            ]],
+            'midnight' => ['label' => '午夜 Midnight', 'note' => '深色面板，配深色站点', 'values' => [
+                'accent_color' => '#6366F1', 'header_color' => '#0F172A', 'header_text_color' => '#F1F5F9',
+                'surface_color' => '#0F172A', 'text_color' => '#E2E8F0', 'muted_color' => '#94A3B8',
+                'bot_bubble_color' => '#1E293B', 'bot_bubble_text_color' => '#E2E8F0',
                 'visitor_bubble_color' => '#6366F1', 'visitor_bubble_text_color' => '#FFFFFF',
-                'panel_radius' => 18, 'panel_shadow' => 'lg', 'font_family' => 'inter',
+                'panel_radius' => 14, 'panel_shadow' => 'none', 'font_family' => 'inter',
                 'theme' => ['bubble_style' => 'flat', 'bubble_anim' => 'fade', 'header_style' => 'solid', 'quick_style' => 'ghost', 'density' => 'cozy', 'typing' => 'wave'],
             ]],
-            'sunrise' => ['label' => '晨曦 Sunrise', 'note' => '暖橙渐变顶栏，零售气质', 'values' => [
-                'accent_color' => '#F97316', 'header_color' => '#F97316', 'header_text_color' => '#FFFFFF',
-                'surface_color' => '#FFFBF5', 'text_color' => '#1F2937', 'muted_color' => '#92765C',
-                'bot_bubble_color' => '#FFF1E2', 'bot_bubble_text_color' => '#432B12',
-                'visitor_bubble_color' => '#F97316', 'visitor_bubble_text_color' => '#FFFFFF',
-                'panel_radius' => 20, 'panel_shadow' => 'md', 'font_family' => 'rounded',
-                'theme' => ['bubble_style' => 'soft', 'bubble_anim' => 'pop', 'header_style' => 'gradient', 'quick_style' => 'capsule', 'density' => 'cozy', 'typing' => 'dots'],
-            ]],
-            'mint' => ['label' => '薄荷 Mint', 'note' => '清淡描边气泡，B2B 常用', 'values' => [
-                'accent_color' => '#0EA5A5', 'header_color' => '#FFFFFF', 'header_text_color' => '#0F172A',
+            'mint' => ['label' => '薄荷 Mint', 'note' => '浅底描边气泡，B2B 常用', 'values' => [
+                'accent_color' => '#0E9F8F', 'header_color' => '#FFFFFF', 'header_text_color' => '#0F172A',
                 'surface_color' => '#FFFFFF', 'text_color' => '#0F172A', 'muted_color' => '#64748B',
                 'bot_bubble_color' => '#F0FDFA', 'bot_bubble_text_color' => '#0F172A',
-                'visitor_bubble_color' => '#0EA5A5', 'visitor_bubble_text_color' => '#FFFFFF',
-                'panel_radius' => 12, 'panel_shadow' => 'sm', 'font_family' => 'pingfang',
+                'visitor_bubble_color' => '#0E9F8F', 'visitor_bubble_text_color' => '#FFFFFF',
+                'panel_radius' => 10, 'panel_shadow' => 'none', 'font_family' => 'pingfang',
                 'theme' => ['bubble_style' => 'outline', 'bubble_anim' => 'rise', 'header_style' => 'light', 'quick_style' => 'ghost', 'density' => 'compact', 'typing' => 'dots'],
             ]],
-            'glass' => ['label' => '毛玻璃 Glass', 'note' => '半透明磨砂，适合图片背景', 'values' => [
-                'accent_color' => '#2563EB', 'header_color' => '#1E293B', 'header_text_color' => '#F8FAFC',
-                'surface_color' => '#F8FAFC', 'text_color' => '#0F172A', 'muted_color' => '#64748B',
-                'bot_bubble_color' => '#FFFFFF', 'bot_bubble_text_color' => '#0F172A',
-                'visitor_bubble_color' => '#2563EB', 'visitor_bubble_text_color' => '#FFFFFF',
-                'panel_radius' => 22, 'panel_shadow' => 'lg', 'font_family' => 'inter',
-                'theme' => ['bubble_style' => 'glass', 'bubble_anim' => 'rise', 'header_style' => 'gradient', 'quick_style' => 'capsule', 'density' => 'cozy', 'typing' => 'wave'],
+            'clay' => ['label' => '陶土 Clay', 'note' => '暖米底 + 砖红重点色，零售气质', 'values' => [
+                'accent_color' => '#C2410C', 'header_color' => '#FFFBF7', 'header_text_color' => '#431407',
+                'surface_color' => '#FFFBF7', 'text_color' => '#431407', 'muted_color' => '#92766A',
+                'bot_bubble_color' => '#FBF0E8', 'bot_bubble_text_color' => '#431407',
+                'visitor_bubble_color' => '#C2410C', 'visitor_bubble_text_color' => '#FFFFFF',
+                'panel_radius' => 16, 'panel_shadow' => 'none', 'font_family' => 'rounded',
+                'theme' => ['bubble_style' => 'soft', 'bubble_anim' => 'pop', 'header_style' => 'light', 'quick_style' => 'capsule', 'density' => 'cozy', 'typing' => 'dots'],
             ]],
-            'paper' => ['label' => '手账 Paper', 'note' => '手绘描边，配合涂鸦名片', 'values' => [
-                'accent_color' => '#FF8BA7', 'header_color' => '#FDFBF7', 'header_text_color' => '#2C2C2C',
+            'paper' => ['label' => '手账 Paper', 'note' => '手绘描边，配涂鸦名片', 'values' => [
+                'accent_color' => '#E86A8A', 'header_color' => '#FDFBF7', 'header_text_color' => '#2C2C2C',
                 'surface_color' => '#FDFBF7', 'text_color' => '#2C2C2C', 'muted_color' => '#8A8378',
                 'bot_bubble_color' => '#FFFFFF', 'bot_bubble_text_color' => '#2C2C2C',
                 'visitor_bubble_color' => '#C0BBFE', 'visitor_bubble_text_color' => '#20203A',
-                'panel_radius' => 14, 'panel_shadow' => 'md', 'font_family' => 'rounded',
+                'panel_radius' => 12, 'panel_shadow' => 'none', 'font_family' => 'rounded',
                 'theme' => ['bubble_style' => 'sketch', 'bubble_anim' => 'pop', 'header_style' => 'light', 'quick_style' => 'sketch', 'density' => 'cozy', 'typing' => 'text'],
             ]],
         ];
@@ -282,8 +285,8 @@ final class AiCustomerService
 
     public static function defaultTheme(): array
     {
-        return ['preset' => 'aurora', 'bubble_style' => 'soft', 'bubble_anim' => 'rise',
-            'typing' => 'dots', 'density' => 'cozy', 'header_style' => 'solid', 'quick_style' => 'capsule'];
+        return ['preset' => 'plain', 'bubble_style' => 'soft', 'bubble_anim' => 'rise',
+            'typing' => 'dots', 'density' => 'cozy', 'header_style' => 'light', 'quick_style' => 'capsule'];
     }
 
     public static function defaultLayout(): array
@@ -395,12 +398,12 @@ final class AiCustomerService
     {
         $presets = self::themePresets();
         return [
-            'preset' => isset($presets[(string)($theme['preset'] ?? '')]) ? (string)$theme['preset'] : 'aurora',
+            'preset' => isset($presets[(string)($theme['preset'] ?? '')]) ? (string)$theme['preset'] : 'plain',
             'bubble_style' => self::choice($theme['bubble_style'] ?? '', ['soft', 'flat', 'outline', 'glass', 'sketch'], 'soft'),
             'bubble_anim' => self::choice($theme['bubble_anim'] ?? '', ['none', 'rise', 'pop', 'fade'], 'rise'),
             'typing' => self::choice($theme['typing'] ?? '', ['dots', 'wave', 'text'], 'dots'),
             'density' => self::choice($theme['density'] ?? '', ['cozy', 'compact'], 'cozy'),
-            'header_style' => self::choice($theme['header_style'] ?? '', ['solid', 'gradient', 'light'], 'solid'),
+            'header_style' => self::choice($theme['header_style'] ?? '', ['solid', 'light'], 'light'),
             'quick_style' => self::choice($theme['quick_style'] ?? '', ['capsule', 'ghost', 'sketch'], 'capsule'),
         ];
     }
@@ -1164,13 +1167,18 @@ final class AiCustomerService
         return $html;
     }
 
-    private static function panelMarkup(array $config): string
+    /**
+     * 面板标记。$chat / $quick 只有后台预览会传（服务端先把示例内容填进去）；
+     * 前台留空，由 customer-service.js 填。$open=true 时不输出 hidden——预览要一上来就展开。
+     */
+    private static function panelMarkup(array $config, string $chat = '', string $quick = '', bool $open = false): string
     {
         $brand = self::escape((string)$config['brand_name']);
-        $html = '<section id="acs-panel" class="acs-panel" aria-label="' . $brand . '对话" aria-hidden="true" hidden>';
+        $html = '<section ' . ($open ? '' : 'id="acs-panel" ') . 'class="acs-panel" aria-label="' . $brand . '对话"'
+            . ($open ? '>' : ' aria-hidden="true" hidden>');
 
         if (!empty($config['ribbon_enabled']) && (string)$config['ribbon_text'] !== '') {
-            $html .= '<div class="acs-ribbon" data-acs-ribbon hidden><span class="acs-ribbon-track">'
+            $html .= '<div class="acs-ribbon" data-acs-ribbon' . ($open ? '' : ' hidden') . '><span class="acs-ribbon-track">'
                 . self::escape((string)$config['ribbon_text']) . '</span>'
                 . '<button type="button" class="acs-ribbon-close" aria-label="收起横幅"><i class="bi bi-x" aria-hidden="true"></i></button></div>';
         }
@@ -1184,8 +1192,8 @@ final class AiCustomerService
             . '<button type="button" class="acs-icon-btn acs-close" aria-label="关闭对话" title="关闭"><i class="bi bi-x-lg" aria-hidden="true"></i></button>'
             . '</div></header>';
 
-        $html .= '<div class="acs-chat" role="log" aria-live="polite" aria-relevant="additions text"></div>';
-        $html .= '<div class="acs-quick-replies" aria-label="快捷问题"></div>';
+        $html .= '<div class="acs-chat" role="log" aria-live="polite" aria-relevant="additions text">' . $chat . '</div>';
+        $html .= '<div class="acs-quick-replies" aria-label="快捷问题">' . $quick . '</div>';
 
         if ($config['handoff_url'] !== '') {
             $html .= '<a class="acs-handoff" href="' . self::escape((string)$config['handoff_url']) . '" target="_blank" rel="noopener">'
@@ -1248,6 +1256,111 @@ final class AiCustomerService
     }
 
     // ACS_MARKER_PUBLIC
+
+    /**
+     * 后台实时预览的标记。
+     *
+     * 刻意复用 rootClasses / styleVars / launcherMarkup / panelMarkup —— 也就是
+     * **前台那一套**，只多塞一段示例对话。之前预览是另写的一套 acs-pv-* 仿制品，
+     * 结果两边各自演进、越看越不像，用户看到的预览根本不是他将来看到的东西。
+     */
+    public static function previewMarkup(array $config): string
+    {
+        $classes = self::rootClasses($config);
+        $classes[] = 'acs-widget--preview';
+        // 预览里浮标一定要画出来（要能拖），用一个类标记"实际前台不显示"
+        if (empty($config['show_launcher'])) $classes[] = 'acs-preview-nolauncher';
+
+        $html = '<div class="' . self::escape(implode(' ', $classes)) . '" data-acs-preview'
+            . ' data-visible="true" data-acs-open="true" style="' . self::escape(self::styleVars($config)) . '">';
+        $html .= self::launcherMarkup($config);
+        $html .= self::panelMarkup($config, self::sampleConversation($config), self::sampleQuickReplies($config), true);
+        return $html . '</div>';
+    }
+
+    /** 预览里的快捷问题：前台由 JS 渲染，这里服务端先摆出来。 */
+    private static function sampleQuickReplies(array $config): string
+    {
+        $replies = array_slice((array)$config['quick_replies'], 0, 6);
+        if ($replies === []) return '';
+        $html = '<div class="acs-quick-row">';
+        foreach ($replies as $reply) {
+            $html .= '<button type="button" class="acs-quick-reply" tabindex="-1">' . self::escape((string)$reply) . '</button>';
+        }
+        return $html . '</div>';
+    }
+
+    /** 预览用的示例对话。类名与前台 JS 渲染出来的完全一致。 */
+    private static function sampleConversation(array $config): string
+    {
+        $avatar = !empty($config['show_avatar'])
+            ? '<span class="acs-message-avatar" aria-hidden="true">' . ((string)$config['avatar_url'] !== ''
+                ? '<img src="' . self::escape((string)$config['avatar_url']) . '" alt="">'
+                : '<i class="bi bi-stars"></i>') . '</span>'
+            : '';
+
+        $html = '<div class="acs-message acs-message--assistant">' . $avatar
+            . '<div class="acs-message-stack"><div class="acs-message-bubble">'
+            . self::escape((string)$config['welcome_message']) . '</div></div></div>';
+
+        $html .= '<div class="acs-message acs-message--visitor"><div class="acs-message-stack">'
+            . '<div class="acs-message-bubble">有没有防水的型号？大概什么价位</div></div></div>';
+
+        $chips = '<div class="acs-toolchip"><i class="bi bi-lightning-charge-fill" aria-hidden="true"></i>已查站内产品 · 3 条</div>';
+        if (!empty($config['events']['inquiry']['enabled'])) {
+            $chips .= '<div class="acs-toolchip"><i class="bi bi-lightning-charge-fill" aria-hidden="true"></i>识别到采购意图 · 已备询盘表单</div>';
+        }
+
+        $html .= '<div class="acs-message acs-message--assistant">' . $avatar
+            . '<div class="acs-message-stack">' . $chips
+            . '<div class="acs-message-bubble">这三款都是 IP68 全密封，价格区间如下，点卡片可以直接看详情。</div>'
+            . self::sampleProductCard($config)
+            . '</div></div>';
+
+        return $html;
+    }
+
+    /** 示例产品卡：叠卡预设走照搬的设计稿结构，其余走行式推荐卡。 */
+    private static function sampleProductCard(array $config): string
+    {
+        $settings = $config['cards']['product'];
+        $cta = self::escape((string)$settings['cta']);
+        $items = [
+            ['IP68 防水传感器 M12', 'USD 128.00', '现货'],
+            ['工业级防水连接器套件', 'USD 76.50', '可预订'],
+            ['户外一体机 Pro', 'USD 310.00', '现货'],
+        ];
+        $items = array_slice($items, 0, max(1, (int)$settings['max']));
+
+        if ((string)$settings['preset'] === 'stack') {
+            $slots = ['acs-one', 'acs-two', 'acs-three'];
+            $html = '<div class="acs-stack-stage"><div class="acs-cards">';
+            foreach ($items as $index => [$title, $price, $stock]) {
+                $html .= '<div class="acs-card-stack ' . $slots[$index] . '"><div class="acs-cardDetails">'
+                    . '<div class="acs-cardDetailsHaeder">' . self::escape($title);
+                if (!empty($settings['show_price'])) {
+                    $html .= '<div class="acs-stack-price">' . self::escape($price) . '</div>';
+                }
+                $html .= '</div><div class="acs-cardDetailsButton">' . $cta . '</div></div></div>';
+            }
+            return $html . '</div></div>';
+        }
+
+        $html = '<div class="acs-card"><div class="acs-card-items is-' . self::escape((string)$settings['preset']) . '">';
+        foreach ($items as [$title, $price, $stock]) {
+            $html .= '<div class="acs-item"><span class="acs-item-thumb"><i class="bi bi-box-seam" aria-hidden="true"></i></span>'
+                . '<span class="acs-item-main"><span class="acs-item-title">' . self::escape($title) . '</span>';
+            if (!empty($settings['show_summary'])) {
+                $html .= '<span class="acs-item-summary">全密封结构，-40~85℃，支持 Modbus。</span>';
+            }
+            $html .= '<span class="acs-item-foot">';
+            if (!empty($settings['show_price'])) $html .= '<span class="acs-item-price">' . self::escape($price) . '</span>';
+            $html .= '<span class="acs-item-badge">' . self::escape($stock) . '</span>'
+                . '<span class="acs-item-cta">' . $cta . ' ›</span></span></span></div>';
+        }
+        return $html . '</div></div>';
+    }
+
 
     /**
      * 注入前台的公开配置。

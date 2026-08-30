@@ -86,7 +86,6 @@ $withPreview = in_array($page, ['conversation', 'trigger', 'appearance', 'compos
             <div class="acs-a-savebar">
                 <button type="submit" class="acs-a-btn acs-a-btn--primary"><i class="bi bi-check2" aria-hidden="true"></i> 保存本页</button>
                 <a class="acs-a-btn" href="<?= admin_url('/plugins') ?>">返回插件列表</a>
-                <span class="acs-a-savebar-note">只保存「<?= e((string)($section['label'] ?? '')) ?>」这一页的字段，其他页面的配置不受影响。</span>
             </div>
         </div>
 

@@ -1,7 +1,7 @@
 {
     "slug": "ai-customer-service",
     "name": "AI客服",
-    "version": "1.2.1",
+    "version": "1.2.2",
     "author": "odi0011",
     "author_url": "",
     "homepage": "",
@@ -12,7 +12,7 @@
     "requires_php": "8.0",
     "license": "MIT",
     "category": "other",
-    "changelog": "把前台对话区按 beautifului.dev 的形态整套重写（turn 容器、状态点工具 chip、Prompt Bar、行式推荐卡）；叠卡、涂鸦名片、后台资料柜文件夹卡改为按提供的设计稿原样照搬（新增 assets/preset-cards.css）；修复面板用 grid 定位行导致聊天区被压塌卡片被腰斩、聊天区横轴溢出裁掉旋转卡片、飘带默认负偏移被顶边裁半行、胶囊浮标展开退化成方块、打开面板后引流气泡仍叠在浮标上、必填框未输入即标红、后台分段选择器逐字折行；移动端宽度改为按配置边距自适应；契约测试新增类名与样式交叉核对、面板 flex 布局与照搬设计稿签名值的回归断言。",
+    "changelog": "实时预览改为直接渲染前台标记 + 前台样式（AiCustomerService::previewMarkup 复用 panelMarkup/launcherMarkup，plugin.php 只在本插件页面注入 customer-service.css / preset-cards.css），删掉 admin.css/admin.js 里约 340 行 acs-pv-* 仿制实现，预览与线上不可能再走样；预览列加宽到 468px 并按舞台等比缩放；所有图片类字段（客服头像、浮标图片、站长头像、表情包）接入核心媒体选择框 MediaPicker，不再让人手抄 URL；六套预设主题全部改成平色：去掉渐变顶栏与默认投影，默认改为素白 Plain；删掉自我描述型说明文案；同步 plugin.json 声明默认值与 config() 兜底值（此前两处不一致，新装站点顶栏还是旧配色）。",
     "tags": [
         "AI",
         "客服",
@@ -42,14 +42,14 @@
             "type": "css",
             "area": "frontend",
             "src": "assets/customer-service.css",
-            "version": "1.2.1"
+            "version": "1.2.2"
         },
         {
             "handle": "ai-customer-service-preset-cards",
             "type": "css",
             "area": "frontend",
             "src": "assets/preset-cards.css",
-            "version": "1.2.1",
+            "version": "1.2.2",
             "deps": [
                 "ai-customer-service-widget-css"
             ]
@@ -59,7 +59,7 @@
             "type": "js",
             "area": "frontend",
             "src": "assets/customer-service.js",
-            "version": "1.2.1",
+            "version": "1.2.2",
             "defer": true
         },
         {
@@ -67,14 +67,14 @@
             "type": "css",
             "area": "admin",
             "src": "assets/admin.css",
-            "version": "1.2.1"
+            "version": "1.2.2"
         },
         {
             "handle": "ai-customer-service-admin-js",
             "type": "js",
             "area": "admin",
             "src": "assets/admin.js",
-            "version": "1.2.1",
+            "version": "1.2.2",
             "defer": true
         }
     ],
@@ -412,7 +412,7 @@
                         "key": "theme_json",
                         "label": "主题与气泡样式",
                         "type": "textarea",
-                        "default": "{\"preset\":\"aurora\",\"bubble_style\":\"soft\",\"bubble_anim\":\"rise\",\"typing\":\"dots\",\"density\":\"cozy\",\"header_style\":\"solid\",\"quick_style\":\"capsule\"}",
+                        "default": "{\"preset\":\"plain\",\"bubble_style\":\"soft\",\"bubble_anim\":\"rise\",\"typing\":\"dots\",\"density\":\"cozy\",\"header_style\":\"light\",\"quick_style\":\"capsule\"}",
                         "max_length": 3000,
                         "help": "预设主题、气泡形态与动效、打字指示器等，由上方样式面板写入。"
                     },
@@ -570,7 +570,7 @@
                         "key": "panel_shadow",
                         "label": "弹窗投影强度",
                         "type": "select",
-                        "default": "md",
+                        "default": "none",
                         "options": [
                             {
                                 "value": "none",
@@ -663,19 +663,19 @@
                         "key": "header_color",
                         "label": "顶栏背景色",
                         "type": "color",
-                        "default": "#4F46E5"
+                        "default": "#FFFFFF"
                     },
                     {
                         "key": "header_text_color",
                         "label": "顶栏文字颜色",
                         "type": "color",
-                        "default": "#FFFFFF"
+                        "default": "#111827"
                     },
                     {
                         "key": "bot_bubble_color",
                         "label": "客服消息气泡底色",
                         "type": "color",
-                        "default": "#F3F4F6"
+                        "default": "#F4F4F5"
                     },
                     {
                         "key": "bot_bubble_text_color",

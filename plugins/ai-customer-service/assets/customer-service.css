@@ -14,14 +14,17 @@
    用定位行会随它们出现或消失整体错位，把聊天区压成内容高度、卡片被腰斩。
    ========================================================================== */
 
-#ai-customer-service-widget.acs-widget {
+/* 变量与排版是**类选择器**，这样后台实时预览可以直接复用同一份样式渲染真实标记
+ * （预览不再维护一套 acs-pv-* 的仿制品，也就不可能和前台走样）。
+ * 只有"固定定位 / 显形"这类纯前台行为才挂在 id 上。 */
+.acs-widget {
     /* 以下变量由服务端按后台字段内联覆盖，这里只做兜底 */
     --acs-accent: #4F46E5;
     --acs-surface: #FFFFFF;
     --acs-text: #111827;
     --acs-muted: #6B7280;
-    --acs-header-bg: #4F46E5;
-    --acs-header-fg: #FFFFFF;
+    --acs-header-bg: #FFFFFF;
+    --acs-header-fg: #111827;
     --acs-bot-bubble: #F3F4F6;
     --acs-bot-text: #111827;
     --acs-vis-bubble: #4F46E5;
@@ -41,7 +44,7 @@
     --acs-teaser-dx: -12px;
     --acs-teaser-dy: 0px;
     --acs-ribbon-dx: 0px;
-    --acs-ribbon-dy: -10px;
+    --acs-ribbon-dy: 0px;
     --acs-badge-dx: 2px;
     --acs-badge-dy: 2px;
     --acs-launcher-dx: 0px;
@@ -55,16 +58,20 @@
     --acs-sunken: color-mix(in srgb, var(--acs-text) 4%, transparent);
     --acs-gap: 4px;
     --acs-pad: 14px;
-    --acs-shadow: 0 20px 56px rgba(15, 23, 42, .25);
+    /* 默认不打阴影：靠 1px 描边分层。需要投影的站点在"弹窗投影强度"里自己开。 */
+    --acs-shadow: none;
 
-    position: fixed;
-    z-index: var(--acs-z);
-    bottom: var(--acs-desktop-y);
     color: var(--acs-text);
     font-family: var(--acs-font-family);
     font-size: var(--acs-font);
     line-height: 1.55;
     letter-spacing: 0;
+}
+
+#ai-customer-service-widget.acs-widget {
+    position: fixed;
+    z-index: var(--acs-z);
+    bottom: var(--acs-desktop-y);
     opacity: 0;
     pointer-events: none;
     transform: translateY(8px);
@@ -95,11 +102,11 @@
     border: 0 !important;
 }
 
-/* 投影档位 */
+/* 投影档位。默认 none —— 分层靠 1px 描边，不靠糊在下面的一大团阴影。 */
 .acs-shadow--none { --acs-shadow: none; }
-.acs-shadow--sm { --acs-shadow: 0 10px 24px rgba(15, 23, 42, .16); }
-.acs-shadow--md { --acs-shadow: 0 20px 56px rgba(15, 23, 42, .25); }
-.acs-shadow--lg { --acs-shadow: 0 28px 68px rgba(15, 23, 42, .34); }
+.acs-shadow--sm { --acs-shadow: 0 1px 2px rgba(15, 23, 42, .06); }
+.acs-shadow--md { --acs-shadow: 0 4px 12px rgba(15, 23, 42, .1); }
+.acs-shadow--lg { --acs-shadow: 0 10px 28px rgba(15, 23, 42, .14); }
 
 /* ACS_MARKER_W1 */
 
@@ -120,9 +127,8 @@
     color: #fff;
     font: inherit;
     cursor: pointer;
-    box-shadow: 0 10px 24px color-mix(in srgb, var(--acs-accent) 34%, transparent);
     translate: var(--acs-launcher-dx) var(--acs-launcher-dy);
-    transition: transform .16s ease, box-shadow .16s ease, background .16s ease;
+    transition: transform .16s ease, background .16s ease;
 }
 .acs-launcher:hover { transform: translateY(-2px) scale(1.03); }
 .acs-launcher:active { transform: translateY(0) scale(.97); }
@@ -193,9 +199,9 @@
     94% { transform: translateY(-4px); }
 }
 @keyframes acs-pulse {
-    0% { box-shadow: 0 10px 24px color-mix(in srgb, var(--acs-accent) 34%, transparent), 0 0 0 0 color-mix(in srgb, var(--acs-accent) 45%, transparent); }
-    70% { box-shadow: 0 10px 24px color-mix(in srgb, var(--acs-accent) 34%, transparent), 0 0 0 16px transparent; }
-    100% { box-shadow: 0 10px 24px color-mix(in srgb, var(--acs-accent) 34%, transparent), 0 0 0 0 transparent; }
+    0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--acs-accent) 42%, transparent); }
+    70% { box-shadow: 0 0 0 14px transparent; }
+    100% { box-shadow: 0 0 0 0 transparent; }
 }
 .acs-launcher.acs-fx--wiggle { animation: acs-wiggle 4s infinite ease-in-out; }
 .acs-launcher.acs-fx--bounce { animation: acs-bounce 3.4s infinite ease-in-out; }
@@ -242,7 +248,7 @@
     color: var(--acs-text);
     font-size: calc(var(--acs-font) * .9);
     line-height: 1.45;
-    box-shadow: 0 10px 26px rgba(15, 23, 42, .16);
+    box-shadow: var(--acs-shadow);
     translate: var(--acs-teaser-dx) var(--acs-teaser-dy);
     animation: acs-teaser-in .22s ease-out;
     cursor: pointer;
@@ -300,7 +306,8 @@
 .acs-widget--left .acs-panel { left: 0; }
 
 /* 关键修复：.acs-panel 是 display:flex，会盖掉 hidden 属性的 UA 样式，
- * 导致窗口加载即展开且点关闭无反应。必须显式压回去。 */
+ * 导致窗口加载即展开且点关闭无反应。必须显式压回去（类选择器写法让预览也受同一条约束）。 */
+.acs-widget .acs-panel[hidden],
 #ai-customer-service-widget .acs-panel[hidden] { display: none !important; }
 .acs-panel:not([hidden]) { animation: acs-panel-in .2s ease-out; }
 @keyframes acs-panel-in { from { opacity: .4; translate: 0 10px; } to { opacity: 1; translate: 0 0; } }
@@ -314,7 +321,7 @@
     align-items: center;
     gap: 8px;
     padding: 6px 10px 6px 12px;
-    background: linear-gradient(90deg, var(--acs-accent), color-mix(in srgb, var(--acs-accent) 45%, #fff));
+    background: var(--acs-accent);
     color: #fff;
     font-size: calc(var(--acs-font) * .82);
     translate: var(--acs-ribbon-dx) var(--acs-ribbon-dy);
@@ -359,10 +366,10 @@
     background: var(--acs-header-bg);
     color: var(--acs-header-fg);
 }
+/* 顶栏两档：solid（跟随 header 底色）与 light（直接用面板底色，只留一条分隔线）。
+ * 刻意不提供渐变——渐变顶栏在真实站点里几乎总是显脏。 */
+.acs-head--light .acs-header,
 .acs-head--gradient .acs-header {
-    background: linear-gradient(135deg, var(--acs-header-bg), color-mix(in srgb, var(--acs-header-bg) 45%, var(--acs-accent)));
-}
-.acs-head--light .acs-header {
     background: var(--acs-surface);
     color: var(--acs-text);
     border-bottom-color: var(--acs-line);
@@ -642,8 +649,8 @@
     height: 44px;
     overflow: hidden;
     border-radius: 9px;
-    background: linear-gradient(135deg, var(--acs-accent), color-mix(in srgb, var(--acs-accent) 42%, #fff));
-    color: #fff;
+    background: color-mix(in srgb, var(--acs-accent) 12%, transparent);
+    color: var(--acs-accent);
     font-size: 17px;
 }
 .acs-item-thumb img { width: 100%; height: 100%; object-fit: cover; }
@@ -985,7 +992,7 @@
     border: 1px solid var(--acs-line);
     border-radius: 14px;
     background: var(--acs-surface);
-    box-shadow: 0 -10px 30px rgba(15, 23, 42, .18);
+    box-shadow: var(--acs-shadow);
     animation: acs-rise .16s ease-out;
 }
 .acs-picker[hidden] { display: none !important; }

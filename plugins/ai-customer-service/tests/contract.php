@@ -24,7 +24,7 @@ $assert(is_array($manifest), 'plugin.json 必须是合法 JSON');
 $manifest = is_array($manifest) ? $manifest : [];
 $assert((string)($manifest['slug'] ?? '') === 'ai-customer-service', 'slug 必须与插件目录一致');
 $assert((string)($manifest['name'] ?? '') === 'AI客服', '市场名称必须是 AI客服');
-$assert((string)($manifest['version'] ?? '') === '1.2.1', '版本号应为 1.2.1');
+$assert((string)($manifest['version'] ?? '') === '1.2.2', '版本号应为 1.2.2');
 
 // ------------------------------------------------------------------ 声明式设置
 $sections = is_array($manifest['settings']['sections'] ?? null) ? $manifest['settings']['sections'] : [];
@@ -129,6 +129,7 @@ $adminCss = $read('assets/admin.css');
 $widgetCss = $read('assets/customer-service.css');
 $widgetJs = $read('assets/customer-service.js');
 $presetCss = $read('assets/preset-cards.css');
+$preview = $read('views/_partials/preview.php');
 $readme = $read('README.md');
 
 foreach ($expectedPages as $page) {
@@ -293,7 +294,66 @@ $assert(str_contains($adminCss, '.acs-folder-card') && str_contains($adminJs, 'a
 $assert(str_contains($adminJs, 'PANELS.knowledge') && str_contains($adminJs, 'content-search'),
     '资料柜必须能上传文件并检索站内内容');
 $assert(str_contains($adminJs, 'PANELS.presets') && str_contains($adminJs, 'PANELS.palette'), '缺少预设主题与配色面板');
-$assert(str_contains($adminJs, 'initDrag') && str_contains($adminJs, 'data-acs-pv-drag-target'), '外观页必须支持拖拽定位');
+$assert(str_contains($adminJs, 'initDrag') && str_contains($adminJs, 'data-acs-drag'), '外观页必须支持拖拽定位');
+
+/* 预览必须复用前台的标记与样式，不能再养一套 acs-pv-* 仿制品——那是"预览与实际不符"的根源。 */
+$assert(str_contains($service, 'function previewMarkup(')
+    && str_contains($service, 'self::panelMarkup($config, self::sampleConversation($config)'),
+    '预览必须走 previewMarkup() 复用 panelMarkup/launcherMarkup，而不是另写一套标记');
+$assert(str_contains($preview, 'AiCustomerService::previewMarkup'), '预览视图必须渲染 previewMarkup()');
+$assert(!preg_match('/\.acs-pv-[a-z]/', $adminCss), 'admin.css 里不该再有 acs-pv-* 仿制样式');
+// 只禁"仿制组件"的类名；--acs-pv-k 与 data-acs-pv-state 这类预览控件命名是正常的
+foreach (['acs-pv-widget', 'acs-pv-panel', 'acs-pv-bubble', 'acs-pv-header', 'acs-pv-launcher', 'acs-pv-card'] as $imitation) {
+    $assert(!str_contains($adminJs, $imitation), 'admin.js 里不该再引用仿制节点：' . $imitation);
+    $assert(!str_contains($adminCss, $imitation), 'admin.css 里不该再有仿制样式：' . $imitation);
+}
+$assert(str_contains($plugin, "add_action('admin.head'") && str_contains($plugin, 'assets/customer-service.css'),
+    '后台页必须注入前台样式，否则预览拿不到真实观感');
+$assert(preg_match('/\.acs-widget\s*\{[^}]*--acs-accent/s', $widgetCss) === 1,
+    '前台变量必须挂在类选择器上，否则后台预览（没有那个 id）拿不到默认值');
+
+/* 图片类字段必须能开系统媒体库，不能只让人手抄 URL。 */
+$assert(str_contains($adminJs, 'MediaPicker.open'), '图片字段必须能调起核心媒体选择框');
+foreach (['avatar_url', 'launcher_image_url'] as $mediaField) {
+    $assert(str_contains($adminJs, "'" . $mediaField . "'"), '缺少媒体选择接线：' . $mediaField);
+}
+$assert(str_contains($adminJs, 'function mediaField('), '面板里的图片字段（如站长头像）也要走媒体库');
+
+/* 预设不再用渐变与大投影。契约测试不加载核心，所以只能断源码文本。 */
+$assert(!str_contains($widgetCss, 'linear-gradient(135deg, var(--acs-header-bg)'), '顶栏不应再有渐变');
+$assert(str_contains($service, "['none', 'sm', 'md', 'lg'], 'none')"), '默认不打投影');
+$presetBlock = '';
+if (preg_match('/function themePresets\(\): array\s*\{(.+?)\n    \}/s', $service, $presetMatch)) {
+    $presetBlock = $presetMatch[1];
+}
+$assert($presetBlock !== '', '找不到 themePresets() 的定义');
+$assert(!preg_match("/'panel_shadow' => '(sm|md|lg)'/", $presetBlock), '预设不该默认打投影');
+$assert(!str_contains($presetBlock, "'header_style' => 'gradient'"), '预设不该用渐变顶栏');
+$assert(substr_count($presetBlock, "'panel_shadow' => 'none'") >= 6, '六套预设都要显式写 panel_shadow = none');
+
+/* plugin.json 的声明默认值与 config() 的兜底必须一致。
+ * 两处各写一份是必然的（核心用前者渲染表单、插件用后者兜底），但不一致时
+ * 「新装站点」和「读兜底的代码路径」会看到两套观感——这次就踩了：改了 config()
+ * 没改 plugin.json，预览里顶栏还是紫的。 */
+foreach ([
+    'header_color' => '#FFFFFF',
+    'header_text_color' => '#111827',
+    'accent_color' => '#4F46E5',
+    'surface_color' => '#FFFFFF',
+    'text_color' => '#111827',
+    'muted_color' => '#6B7280',
+] as $colorKey => $expected) {
+    $assert(($fields[$colorKey]['field']['default'] ?? '') === $expected,
+        $colorKey . ' 的声明默认值应为 ' . $expected . '，当前 ' . (string)($fields[$colorKey]['field']['default'] ?? ''));
+    $assert(str_contains($service, "'" . $colorKey . "' => self::color((string)\$get('" . $colorKey . "', ''), '" . $expected . "')"),
+        $colorKey . ' 在 config() 里的兜底值必须与声明默认值一致');
+}
+$assert(($fields['panel_shadow']['field']['default'] ?? '') === 'none', '声明的默认投影应为 none');
+$themeDefault = json_decode((string)($fields['theme_json']['field']['default'] ?? ''), true);
+$assert(is_array($themeDefault), 'theme_json 默认必须是合法 JSON');
+$assert(($themeDefault['header_style'] ?? '') !== 'gradient', 'theme_json 默认不该是渐变顶栏');
+$assert(str_contains($presetBlock, "'" . (string)($themeDefault['preset'] ?? '') . "' => ["),
+    'theme_json 默认引用的预设必须真的存在：' . (string)($themeDefault['preset'] ?? ''));
 $assert(str_contains($adminJs, 'PANELS.customtools') && str_contains($adminJs, 'PANELS.cards')
     && str_contains($adminJs, 'PANELS.owner') && str_contains($adminJs, 'PANELS.guardrails')
     && str_contains($adminJs, 'PANELS.events') && str_contains($adminJs, 'PANELS.stickers')

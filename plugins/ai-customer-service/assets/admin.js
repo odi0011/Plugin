@@ -351,7 +351,6 @@
             gallery.appendChild(card);
         });
         host.appendChild(gallery);
-        host.appendChild(el('p', 'acs-a-help', '套用预设只是把一组值写进下面的控件，还没保存；不满意可以直接改，或者换一个预设。'));
     };
 
     function applyPreset(id, values) {
@@ -495,7 +494,7 @@
             grid.appendChild(box);
         });
         host.appendChild(grid);
-        host.appendChild(el('p', 'acs-a-help', '打开右侧预览的「拖拽定位」后可以直接拖：浮标会写回桌面/移动端边距，其余三个写回这里的偏移。'));
+        host.appendChild(el('p', 'acs-a-help', '右侧预览打开「拖拽定位」即可直接拖动。'));
     };
 
     /* ACS_MARKER_JS_5 */
@@ -1218,6 +1217,62 @@
         return wrap;
     }
 
+    /** 图片字段：输入框 + 媒体库选图 + 缩略图。面板里的 JSON 字段用这个，不要让人抄 URL。 */
+    function mediaField(label, value, onChange, type) {
+        var input = el('input', 'acs-a-input');
+        input.value = value == null ? '' : String(value);
+        input.maxLength = 2048;
+        input.placeholder = '从媒体库选，或粘贴地址';
+        var bar = el('div', 'acs-a-media-row');
+        bar.appendChild(input);
+
+        var thumb = el('span', 'acs-a-media-thumb');
+        var paint = function () {
+            var url = String(input.value || '').trim();
+            thumb.innerHTML = '';
+            thumb.hidden = url === '';
+            if (url === '') return;
+            var img = el('img');
+            img.src = url;
+            img.alt = '';
+            thumb.appendChild(img);
+        };
+        var commit = function (url) {
+            input.value = url;
+            onChange(url);
+            paint();
+        };
+
+        var pick = el('button', 'acs-a-btn acs-a-btn--sm');
+        pick.type = 'button';
+        pick.appendChild(icon('bi-images'));
+        pick.appendChild(el('span', '', '选图'));
+        pick.addEventListener('click', function () {
+            if (!window.MediaPicker || typeof window.MediaPicker.open !== 'function') {
+                toast('媒体选择框没加载出来，可以先手动填地址', true);
+                return;
+            }
+            window.MediaPicker.open({
+                type: type || 'image',
+                onSelect: function (file) { if (file && file.url) commit(file.url); }
+            });
+        });
+        bar.appendChild(pick);
+
+        var clear = el('button', 'acs-a-icon-btn');
+        clear.type = 'button';
+        clear.title = '清空';
+        clear.setAttribute('aria-label', '清空' + label);
+        clear.appendChild(icon('bi-x-lg'));
+        clear.addEventListener('click', function () { commit(''); });
+        bar.appendChild(clear);
+        bar.appendChild(thumb);
+
+        input.addEventListener('input', function () { onChange(input.value); paint(); });
+        paint();
+        return labelled(label, bar);
+    }
+
     /* ---- 卡片样式 ---- */
     PANELS.cards = function (host) {
         var cards = readJson('cards_json', {});
@@ -1282,7 +1337,7 @@
         var grid = el('div', 'acs-a-tool-grid');
         grid.appendChild(textField('姓名', owner.name, 60, function (v) { owner.name = v; save(); }, '例如：李工'));
         grid.appendChild(textField('头衔', owner.title, 80, function (v) { owner.title = v; save(); }, '例如：外贸负责人 / 技术支持'));
-        grid.appendChild(textField('头像地址', owner.avatar, 2048, function (v) { owner.avatar = v; save(); }, 'https://…'));
+        grid.appendChild(mediaField('头像', owner.avatar, function (v) { owner.avatar = v; save(); }));
         host.appendChild(grid);
         host.appendChild(textareaField('一句话简介', owner.bio, 300, function (v) { owner.bio = v; save(); },
             '例如：负责工业阀门线的选型与报价，工作日 30 分钟内回复。'));
@@ -1521,6 +1576,39 @@
         packRow.appendChild(packName);
         packRow.appendChild(packButton);
         packRow.appendChild(packFile);
+
+        // 表情图片通常已经在媒体库里了，多给一个"从媒体库选"的入口
+        var fromLibrary = el('button', 'acs-a-btn acs-a-btn--sm', '从媒体库选');
+        fromLibrary.type = 'button';
+        fromLibrary.prepend(icon('bi-images'));
+        fromLibrary.addEventListener('click', function () {
+            if (!window.MediaPicker || typeof window.MediaPicker.open !== 'function') {
+                toast('媒体选择框没加载出来', true);
+                return;
+            }
+            window.MediaPicker.open({
+                type: 'image',
+                onSelect: function (file) {
+                    if (!file || !file.url) return;
+                    var name = packName.value.trim() || '表情包';
+                    var index = null;
+                    stickers.packs.forEach(function (pack, position) {
+                        if (pack.name === name) index = position;
+                    });
+                    var item = { url: file.url, label: String(file.title || file.alt || '').slice(0, 40) };
+                    if (index === null) {
+                        if (stickers.packs.length >= 8) { toast('最多 8 个表情包分组', true); return; }
+                        stickers.packs.push({ name: name, items: [item] });
+                    } else {
+                        stickers.packs[index].items = stickers.packs[index].items.concat([item]).slice(0, 48);
+                    }
+                    save();
+                    host.innerHTML = '';
+                    PANELS.stickers(host);
+                }
+            });
+        });
+        packRow.appendChild(fromLibrary);
         packBox.appendChild(packRow);
 
         stickers.packs.forEach(function (pack) {
@@ -1557,260 +1645,272 @@
 
     /* ACS_MARKER_JS_12 */
 
-    /* ---------------------------------------------------------------- 实时预览 */
+    /* ---------------------------------------------------------------- 实时预览
+     * 预览节点是 AiCustomerService::previewMarkup() 输出的**前台真实标记**，样式也是
+     * 前台那两份 CSS。所以这里不"画"任何东西，只做三件事：
+     *   1. 把表单值写成根节点上的 --acs-* 变量（与 renderWidget 的内联变量同名）；
+     *   2. 切换真实的修饰类（acs-bubble--/acs-head--/acs-quick--/acs-density--/acs-shadow--）；
+     *   3. 更新真实节点里的文案，并按舞台尺寸算一个整体缩放比例。
+     */
 
     var pv = {
         stage: root.querySelector('[data-acs-preview-stage]'),
-        widget: root.querySelector('[data-acs-pv-widget]'),
-        panel: root.querySelector('[data-acs-pv-panel]'),
-        launcher: root.querySelector('.acs-pv-launcher'),
+        widget: root.querySelector('[data-acs-preview]'),
         device: 'desktop',
         state: 'open',
-        showCards: true,
         drag: false
     };
 
-    function sync() {
-        if (!pv.widget) return;
-        var w = pv.widget;
-        var mobile = pv.device === 'mobile';
-
-        var pairs = {
-            '--pv-accent': val('accent_color', '#4F46E5'),
-            '--pv-surface': val('surface_color', '#FFFFFF'),
-            '--pv-text': val('text_color', '#111827'),
-            '--pv-muted': val('muted_color', '#6B7280'),
-            '--pv-header-bg': val('header_color', '#4F46E5'),
-            '--pv-header-fg': val('header_text_color', '#FFFFFF'),
-            '--pv-bot': val('bot_bubble_color', '#F3F4F6'),
-            '--pv-bot-text': val('bot_bubble_text_color', '#111827'),
-            '--pv-vis': val('visitor_bubble_color', '#4F46E5'),
-            '--pv-vis-text': val('visitor_bubble_text_color', '#FFFFFF'),
-            '--pv-radius': Math.round(num('panel_radius', 16) * 0.8) + 'px',
-            '--pv-size': Math.round(num('widget_size', 56) * 0.72) + 'px',
-            '--pv-corner': Math.round(num('launcher_corner', 10) * 0.8) + 'px',
-            '--pv-font': (BOOT.fonts && BOOT.fonts[val('font_family', 'system')]) || 'inherit'
-        };
-        Object.keys(pairs).forEach(function (name) { w.style.setProperty(name, pairs[name]); });
-
-        var layout = readJson('layout_json', {});
-        [['teaser', 'teaser'], ['ribbon', 'ribbon'], ['badge', 'badge'], ['launcher_nudge', 'launcher']].forEach(function (pair) {
-            var value = layout[pair[0]] || { dx: 0, dy: 0 };
-            w.style.setProperty('--pv-' + pair[1] + '-dx', (value.dx || 0) + 'px');
-            w.style.setProperty('--pv-' + pair[1] + '-dy', (value.dy || 0) + 'px');
-        });
-
-        var left = val('position', 'right') === 'left';
-        w.classList.toggle('acs-pv--left', left);
-        w.classList.toggle('acs-pv--right', !left);
-        w.style[left ? 'left' : 'right'] = Math.max(6, Math.round(num(mobile ? 'mobile_offset_x' : 'desktop_offset_x', 24) * 0.7)) + 'px';
-        w.style[left ? 'right' : 'left'] = '';
-        w.style.bottom = Math.max(8, Math.round(num(mobile ? 'mobile_offset_y' : 'desktop_offset_y', 24) * 0.7)) + 'px';
-
-        // 面板尺寸按舞台等比缩，比例同时作用于字号，所以缩完的观感和真机一致
-        var stageW = pv.stage ? pv.stage.clientWidth : 320;
-        var stageH = pv.stage ? pv.stage.clientHeight : 460;
-        var panelW = num('panel_width', 396);
-        var panelH = num('panel_height', 600);
-        var k = Math.max(0.34, Math.min(1, (stageW - 60) / panelW, (stageH - 110) / panelH));
-        w.style.setProperty('--pv-k', String(k));
-        if (pv.panel) {
-            pv.panel.style.width = Math.round(panelW * k) + 'px';
-            pv.panel.style.height = Math.round(panelH * k) + 'px';
-        }
-        w.style.fontSize = (num('font_size', 14) * k).toFixed(1) + 'px';
-
-        var theme = readJson('theme_json', {});
-        ['soft', 'flat', 'outline', 'glass', 'sketch'].forEach(function (style) {
-            w.classList.toggle('is-' + style, theme.bubble_style === style);
-        });
-        w.classList.toggle('is-gradient', theme.header_style === 'gradient');
-        ['capsule', 'ghost', 'sketch'].forEach(function (style) {
-            w.classList.toggle('is-quick-' + style, theme.quick_style === style);
-        });
-        var body = root.querySelector('[data-acs-pv-body]');
-        if (body) body.parentNode.classList.toggle('acs-density--compact', theme.density === 'compact');
-
-        // 文案
-        setText('[data-acs-pv="brand_name"]', val('brand_name', 'AI客服'));
-        setText('[data-acs-pv="team_label"]', val('team_label', '智能在线服务'));
-        setText('[data-acs-pv="welcome_message"]', val('welcome_message', '您好，我是您的 AI 客服。有什么可以帮您？'));
-        setText('[data-acs-pv="input_placeholder"]', val('input_placeholder', '输入您的问题...'));
-        setText('[data-acs-pv-ribbon-text]', val('ribbon_text', '新客首单立减 5%'));
-        setText('[data-acs-pv-teaser-text]', val('teaser_text', '有问题？随时咨询'));
-        var counter = root.querySelector('.acs-pv-counter');
-        if (counter) counter.textContent = '0/' + Math.round(num('message_max_chars', 2000));
-
-        // 显隐
-        show('[data-acs-pv-ribbon]', on('ribbon_enabled') && val('ribbon_text', '') !== '');
-        show('[data-acs-pv-teaser]', on('teaser_enabled') && val('teaser_text', '') !== '' && on('show_launcher'));
-        show('[data-acs-pv-tooltip]', val('tooltip_text', '') !== '' && on('show_launcher'));
-        show('[data-acs-pv-handoff]', val('handoff_url', '') !== '');
-        show('[data-acs-pv-powered]', on('show_powered_by'));
-        show('.acs-pv-badge', on('badge_enabled') && on('show_launcher'));
-        show('[data-acs-pv-avatar]', on('show_avatar'));
-        root.querySelectorAll('[data-acs-pv-mini-avatar]').forEach(function (node) { node.hidden = !on('show_avatar'); });
-        if (pv.launcher) pv.launcher.hidden = !on('show_launcher');
-
-        // 浮标形态
-        if (pv.launcher) {
-            var pill = val('launcher_style', 'bubble') === 'pill';
-            pv.launcher.classList.toggle('is-pill', pill);
-            var label = pv.launcher.querySelector('.acs-pv-launcher-label');
-            if (label) { label.hidden = !pill; label.textContent = val('brand_name', 'AI客服'); }
-            var img = pv.launcher.querySelector('.acs-pv-launcher-img');
-            var ico = pv.launcher.querySelector('.acs-pv-launcher-icon');
-            var url = val('launcher_image_url', '');
-            if (img) { if (url) img.src = url; else img.removeAttribute('src'); img.hidden = !url; }
-            if (ico) {
-                var map = { chat: 'bi-chat-dots-fill', sparkles: 'bi-stars', headset: 'bi-headset', question: 'bi-question-circle-fill' };
-                ico.className = 'bi ' + (map[val('launcher_icon', 'chat')] || map.chat) + ' acs-pv-launcher-icon';
-                ico.hidden = !!url;
-            }
-        }
-        var avatar = root.querySelector('[data-acs-pv-avatar]');
-        if (avatar) {
-            var avatarUrl = val('avatar_url', '');
-            var avatarImg = avatar.querySelector('img');
-            var avatarIcon = avatar.querySelector('i');
-            if (avatarImg) { if (avatarUrl) avatarImg.src = avatarUrl; else avatarImg.removeAttribute('src'); avatarImg.hidden = !avatarUrl; }
-            if (avatarIcon) avatarIcon.hidden = !!avatarUrl;
-        }
-
-        renderQuick();
-        renderPreviewCards();
-        w.classList.toggle('is-closed', pv.state === 'closed');
-        if (pv.stage) pv.stage.classList.toggle('is-mobile', mobile);
-        renderComposerTools();
-    }
-
-    function setText(selector, text) {
-        var node = root.querySelector(selector);
-        if (node) node.textContent = text;
-    }
-    function show(selector, visible) {
-        var node = root.querySelector(selector);
-        if (node) node.hidden = !visible;
-    }
-
-    /* ACS_MARKER_JS_13 */
-
-    function renderQuick() {
-        var row = root.querySelector('.acs-pv-quick-row');
-        var title = root.querySelector('[data-acs-pv-quick-title]');
-        if (!row) return;
-        row.innerHTML = '';
-        lines('quick_replies').slice(0, 3).forEach(function (line) {
-            row.appendChild(el('span', 'acs-pv-chip', line));
-        });
-        if (title) {
-            var text = val('quick_replies_title', '');
-            title.textContent = text || '猜你想问';
-            title.hidden = text === '';
-        }
-    }
-
-    function renderComposerTools() {
-        var host = root.querySelector('[data-acs-pv-tools]');
-        if (!host) return;
-        host.innerHTML = '';
-        if (on('emoji_enabled')) host.appendChild(icon('bi-emoji-smile'));
-        if (on('sticker_enabled')) host.appendChild(icon('bi-sticky'));
-    }
-
-    var SAMPLE = {
-        product: [
-            { title: 'IP68 防水传感器 M12', meta: 'USD 128.00 · 现货' },
-            { title: '工业级防水连接器套件', meta: 'USD 76.50 · 可预订' },
-            { title: '户外一体机 Pro（防水）', meta: 'USD 310.00 · 现货' }
-        ],
-        article: [
-            { title: '防水等级怎么选：IP65 / IP67 / IP68', meta: '选型指南' },
-            { title: '海运包装与防潮处理清单', meta: '常见问答' },
-            { title: '客户案例：沿海项目三年零返修', meta: '案例' }
-        ]
+    /* 表单字段 → CSS 变量。键名与 AiCustomerService::styleVars() 一一对应，
+     * 少一个就会出现"改了没反应"，所以这张表是唯一的映射来源。 */
+    var VAR_MAP = {
+        '--acs-accent': ['accent_color', '#4F46E5'],
+        '--acs-surface': ['surface_color', '#FFFFFF'],
+        '--acs-text': ['text_color', '#111827'],
+        '--acs-muted': ['muted_color', '#6B7280'],
+        '--acs-header-bg': ['header_color', '#FFFFFF'],
+        '--acs-header-fg': ['header_text_color', '#111827'],
+        '--acs-bot-bubble': ['bot_bubble_color', '#F4F4F5'],
+        '--acs-bot-text': ['bot_bubble_text_color', '#111827'],
+        '--acs-vis-bubble': ['visitor_bubble_color', '#4F46E5'],
+        '--acs-vis-text': ['visitor_bubble_text_color', '#FFFFFF']
+    };
+    var PX_MAP = {
+        '--acs-font': ['font_size', 14],
+        '--acs-size': ['widget_size', 56],
+        '--acs-panel-width': ['panel_width', 396],
+        '--acs-panel-height': ['panel_height', 600],
+        '--acs-panel-radius': ['panel_radius', 16],
+        '--acs-launcher-corner': ['launcher_corner', 10]
     };
 
-    function renderPreviewCards() {
-        var host = root.querySelector('[data-acs-pv-cards]');
-        var toolRow = root.querySelector('[data-acs-pv-toolrow]');
-        if (!host) return;
-        if (toolRow) toolRow.hidden = !pv.showCards;
-        host.innerHTML = '';
-        if (!pv.showCards) return;
+    function sync() {
+        var w = pv.widget;
+        if (!w) return;
+        var mobile = pv.device === 'mobile';
 
-        var cards = readJson('cards_json', {});
-        var kind = 'product';
-        var preset = (cards[kind] && cards[kind].preset) || 'stack';
-        host.className = 'acs-pv-cards is-' + preset;
-        var cta = (cards[kind] && cards[kind].cta) || '查看详情';
-        var max = Math.max(1, Math.min(3, (cards[kind] && cards[kind].max) || 3));
+        Object.keys(VAR_MAP).forEach(function (name) {
+            w.style.setProperty(name, val(VAR_MAP[name][0], VAR_MAP[name][1]));
+        });
+        Object.keys(PX_MAP).forEach(function (name) {
+            w.style.setProperty(name, Math.round(num(PX_MAP[name][0], PX_MAP[name][1])) + 'px');
+        });
+        w.style.setProperty('--acs-font-family', (BOOT.fonts && BOOT.fonts[val('font_family', 'system')]) || 'inherit');
+        w.style.setProperty('--acs-desktop-x', Math.round(num(mobile ? 'mobile_offset_x' : 'desktop_offset_x', 24)) + 'px');
+        w.style.setProperty('--acs-desktop-y', Math.round(num(mobile ? 'mobile_offset_y' : 'desktop_offset_y', 24)) + 'px');
 
-        SAMPLE[kind].slice(0, max).forEach(function (sample) {
-            var card = el('div', 'acs-pv-card');
-            var thumb = el('div', 'acs-pv-card-thumb');
-            thumb.appendChild(icon(kind === 'product' ? 'bi-box-seam' : 'bi-journal-text'));
-            card.appendChild(thumb);
-            var main = el('div', 'acs-pv-card-main');
-            main.appendChild(el('div', 'acs-pv-card-title', sample.title));
-            if (cards[kind] && cards[kind].show_price === false) {
-                main.appendChild(el('div', 'acs-pv-card-meta', '现货'));
+        var layout = readJson('layout_json', {});
+        w.style.setProperty('--acs-panel-gap', Math.round(layout.panel_gap == null ? 12 : layout.panel_gap) + 'px');
+        [['teaser', 'teaser'], ['ribbon', 'ribbon'], ['badge', 'badge'], ['launcher_nudge', 'launcher']].forEach(function (pair) {
+            var v = layout[pair[0]] || { dx: 0, dy: 0 };
+            w.style.setProperty('--acs-' + pair[1] + '-dx', (v.dx || 0) + 'px');
+            w.style.setProperty('--acs-' + pair[1] + '-dy', (v.dy || 0) + 'px');
+        });
+
+        var theme = readJson('theme_json', {});
+        swapClass(w, 'acs-bubble--', theme.bubble_style || 'soft');
+        swapClass(w, 'acs-anim--', theme.bubble_anim || 'rise');
+        swapClass(w, 'acs-head--', theme.header_style || 'light');
+        swapClass(w, 'acs-quick--', theme.quick_style || 'capsule');
+        swapClass(w, 'acs-density--', theme.density || 'cozy');
+        swapClass(w, 'acs-theme--', theme.preset || 'plain');
+        swapClass(w, 'acs-shadow--', val('panel_shadow', 'none'));
+        var left = val('position', 'right') === 'left';
+        w.classList.toggle('acs-widget--left', left);
+        w.classList.toggle('acs-widget--right', !left);
+        var pill = val('launcher_style', 'bubble') === 'pill';
+        w.classList.toggle('acs-widget--pill', pill);
+        w.classList.toggle('acs-widget--bubble', !pill);
+        w.classList.toggle('is-closed', pv.state === 'closed');
+        w.classList.toggle('acs-preview-nolauncher', !on('show_launcher'));
+        w.dataset.acsOpen = pv.state === 'open' ? 'true' : 'false';
+
+        syncText(w);
+        syncVisibility(w);
+        fitStage(w);
+    }
+
+    /* ACS_MARKER_PV2 */
+
+    /** 换掉同前缀的修饰类，只留一个。 */
+    function swapClass(node, prefix, value) {
+        Array.prototype.slice.call(node.classList).forEach(function (name) {
+            if (name.indexOf(prefix) === 0) node.classList.remove(name);
+        });
+        if (value) node.classList.add(prefix + value);
+    }
+
+    function setTextIn(node, selector, text) {
+        var target = node.querySelector(selector);
+        if (target) target.textContent = text;
+    }
+
+    function syncText(w) {
+        setTextIn(w, '.acs-agent-copy strong', val('brand_name', 'AI客服'));
+        var status = w.querySelector('.acs-agent-status');
+        if (status) {
+            // 第一个子节点是状态圆点，只替换后面的文字
+            var dot = status.querySelector('.acs-dot');
+            status.textContent = '';
+            if (dot) status.appendChild(dot);
+            status.appendChild(document.createTextNode(val('team_label', '智能在线服务')));
+        }
+        var welcome = w.querySelector('.acs-message--assistant .acs-message-bubble');
+        if (welcome) welcome.textContent = val('welcome_message', '您好，我是您的 AI 客服。有什么可以帮您？');
+        var placeholder = w.querySelector('#acs-message, .acs-composer textarea');
+        if (placeholder) placeholder.placeholder = val('input_placeholder', '输入您的问题...');
+        var counter = w.querySelector('[data-acs-counter]');
+        if (counter) counter.textContent = '0/' + Math.round(num('message_max_chars', 2000));
+        setTextIn(w, '.acs-ribbon-track', val('ribbon_text', ''));
+        setTextIn(w, '.acs-teaser-text', val('teaser_text', ''));
+        setTextIn(w, '.acs-tooltip', val('tooltip_text', ''));
+        setTextIn(w, '.acs-handoff span', val('handoff_label', '联系人工客服'));
+        setTextIn(w, '.acs-powered', val('brand_name', 'AI客服'));
+        var label = w.querySelector('.acs-launcher-label');
+        if (label) label.textContent = val('brand_name', 'AI客服');
+
+        // 快捷问题：整行重建，跟着输入框实时变
+        var quickRow = w.querySelector('.acs-quick-row');
+        if (quickRow) {
+            quickRow.innerHTML = '';
+            lines('quick_replies').slice(0, 6).forEach(function (text) {
+                var chip = el('button', 'acs-quick-reply', text);
+                chip.type = 'button';
+                chip.tabIndex = -1;
+                quickRow.appendChild(chip);
+            });
+        }
+
+        var icons = { chat: 'bi-chat-dots-fill', sparkles: 'bi-stars', headset: 'bi-headset', question: 'bi-question-circle-fill' };
+        var launcherIcon = w.querySelector('.acs-launcher-icon');
+        var launcherImg = w.querySelector('.acs-launcher-img');
+        var imageUrl = val('launcher_image_url', '');
+        if (launcherIcon) launcherIcon.className = 'bi ' + (icons[val('launcher_icon', 'chat')] || icons.chat) + ' acs-launcher-icon';
+        if (launcherImg) {
+            if (imageUrl) launcherImg.src = imageUrl; else launcherImg.removeAttribute('src');
+        }
+        // 前台是"有图就只画图"，预览同构
+        if (launcherIcon) launcherIcon.hidden = !!imageUrl;
+        if (launcherImg) launcherImg.hidden = !imageUrl;
+
+        var avatarUrl = val('avatar_url', '');
+        w.querySelectorAll('.acs-avatar, .acs-message-avatar').forEach(function (slot) {
+            var img = slot.querySelector('img');
+            var glyph = slot.querySelector('i');
+            if (avatarUrl) {
+                if (!img) { img = el('img'); img.alt = ''; slot.appendChild(img); }
+                img.src = avatarUrl;
+                img.hidden = false;
+                if (glyph) glyph.hidden = true;
             } else {
-                main.appendChild(el('div', 'acs-pv-card-meta', sample.meta));
+                if (img) img.hidden = true;
+                if (glyph) glyph.hidden = false;
             }
-            main.appendChild(el('div', 'acs-pv-card-cta', cta + ' ›'));
-            card.appendChild(main);
-            host.appendChild(card);
         });
     }
 
-    /* ---------------------------------------------------------------- 拖拽定位 */
+    function syncVisibility(w) {
+        var show = function (selector, visible) {
+            var node = w.querySelector(selector);
+            if (node) node.hidden = !visible;
+        };
+        show('.acs-ribbon', on('ribbon_enabled') && val('ribbon_text', '') !== '');
+        show('.acs-teaser', on('teaser_enabled') && val('teaser_text', '') !== '' && pv.state === 'closed');
+        show('.acs-handoff', val('handoff_url', '') !== '');
+        show('.acs-powered', on('show_powered_by'));
+        show('.acs-avatar', on('show_avatar'));
+        w.querySelectorAll('.acs-message-avatar').forEach(function (n) { n.hidden = !on('show_avatar'); });
+        var tooltip = w.querySelector('.acs-tooltip');
+        if (tooltip) {
+            tooltip.hidden = val('tooltip_text', '') === '' || pv.state !== 'closed';
+            tooltip.style.opacity = pv.state === 'closed' ? '1' : '';
+        }
+        var launcher = w.querySelector('.acs-launcher');
+        if (launcher) {
+            launcher.classList.toggle('has-badge', on('badge_enabled'));
+            launcher.classList.toggle('is-open', pv.state === 'open');
+            ['wiggle', 'bounce', 'pulse'].forEach(function (fx) { launcher.classList.remove('acs-fx--' + fx); });
+            var fx = val('attention_effect', 'none');
+            if (fx !== 'none' && pv.state === 'closed') launcher.classList.add('acs-fx--' + fx);
+        }
+        var tools = w.querySelectorAll('[data-acs-pick]');
+        if (tools.length) {
+            tools.forEach(function (button) {
+                var kind = button.getAttribute('data-acs-pick');
+                button.hidden = kind === 'emoji' ? !on('emoji_enabled') : !on('sticker_enabled');
+            });
+        }
+    }
+
+    /** 按舞台可用空间整体缩放。几何关系与真机一致，不另调一套尺寸。 */
+    function fitStage(w) {
+        if (!pv.stage) return;
+        var pad = 28;
+        var width = num('panel_width', 396) + num(pv.device === 'mobile' ? 'mobile_offset_x' : 'desktop_offset_x', 24);
+        var height = num('panel_height', 600) + num('widget_size', 56) + 12
+            + num(pv.device === 'mobile' ? 'mobile_offset_y' : 'desktop_offset_y', 24);
+        var k = Math.min(1, (pv.stage.clientWidth - pad) / width, (pv.stage.clientHeight - pad) / height);
+        pv.stage.style.setProperty('--acs-pv-k', String(Math.max(0.3, k)));
+        pv.stage.classList.toggle('is-mobile', pv.device === 'mobile');
+    }
+
+    /* ACS_MARKER_PV3 */
+
+    /* ---------------------------------------------------------------- 拖拽定位
+     * 拖浮标改的是真实的边距字段；拖引流气泡/飘带/角标改 layout_json 的偏移。
+     * 拖完就是保存前的真实值，不存在预览与前台两套坐标。 */
+
+    function markDragTargets() {
+        if (!pv.widget) return;
+        [['.acs-launcher', 'launcher'], ['.acs-teaser', 'teaser'], ['.acs-ribbon', 'ribbon']].forEach(function (pair) {
+            var node = pv.widget.querySelector(pair[0]);
+            if (node) node.setAttribute('data-acs-drag', pair[1]);
+        });
+    }
 
     function initDrag() {
         if (!pv.stage) return;
         var active = null;
-
-        function nudgeKeyFor(target) {
-            return target === 'launcher' ? 'launcher_nudge' : target;
-        }
+        var nudgeKey = function (target) { return target === 'launcher' ? 'launcher_nudge' : target; };
 
         pv.stage.addEventListener('pointerdown', function (event) {
             if (!pv.drag) return;
-            var node = event.target.closest('[data-acs-pv-drag-target]');
+            var node = event.target.closest('[data-acs-drag]');
             if (!node) return;
             event.preventDefault();
-            var target = node.getAttribute('data-acs-pv-drag-target');
-            active = { node: node, target: target, x: event.clientX, y: event.clientY };
-            // 浮标拖动改的是真实边距字段，其余三个改 layout_json 的偏移
+            var target = node.getAttribute('data-acs-drag');
+            // 缩放后 1px 屏幕位移对应 1/k 个配置单位，不换算的话拖起来会"变慢"
+            var k = parseFloat(getComputedStyle(pv.stage).getPropertyValue('--acs-pv-k')) || 1;
+            active = { node: node, target: target, x: event.clientX, y: event.clientY, k: k };
             if (target === 'launcher') {
                 var mobile = pv.device === 'mobile';
-                active.baseX = num(mobile ? 'mobile_offset_x' : 'desktop_offset_x', 24);
-                active.baseY = num(mobile ? 'mobile_offset_y' : 'desktop_offset_y', 24);
                 active.xKey = mobile ? 'mobile_offset_x' : 'desktop_offset_x';
                 active.yKey = mobile ? 'mobile_offset_y' : 'desktop_offset_y';
+                active.baseX = num(active.xKey, 24);
+                active.baseY = num(active.yKey, 24);
             } else {
                 var layout = readJson('layout_json', {});
-                var current = layout[nudgeKeyFor(target)] || { dx: 0, dy: 0 };
+                var current = layout[nudgeKey(target)] || { dx: 0, dy: 0 };
                 active.baseX = current.dx || 0;
                 active.baseY = current.dy || 0;
             }
             node.classList.add('is-grabbing');
             pv.stage.classList.add('is-dragging');
-            node.setPointerCapture(event.pointerId);
+            try { node.setPointerCapture(event.pointerId); } catch (e) { /* 老浏览器忽略 */ }
         });
 
         pv.stage.addEventListener('pointermove', function (event) {
             if (!active) return;
-            var dx = event.clientX - active.x;
-            var dy = event.clientY - active.y;
+            var dx = (event.clientX - active.x) / active.k;
+            var dy = (event.clientY - active.y) / active.k;
             if (active.target === 'launcher') {
-                // 右下角锚点：往左/上拖等于边距变大
+                // 右下角锚点：往左/往上拖等于边距变大
                 var signX = val('position', 'right') === 'left' ? 1 : -1;
                 setCtrl(active.xKey, Math.round(active.baseX + signX * dx));
                 setCtrl(active.yKey, Math.round(active.baseY - dy));
             } else {
                 var layout = readJson('layout_json', {});
-                var key = nudgeKeyFor(active.target);
+                var key = nudgeKey(active.target);
                 layout[key] = { dx: Math.round(active.baseX + dx), dy: Math.round(active.baseY + dy) };
                 jsonCache.layout_json = layout;
                 var dxInput = root.querySelector('[data-acs-nudge="' + key + '.dx"]');
@@ -1857,19 +1957,81 @@
             sync();
         });
     });
-    var cardsToggle = root.querySelector('[data-acs-pv-showcards]');
-    if (cardsToggle) {
-        cardsToggle.addEventListener('change', function () { pv.showCards = cardsToggle.checked; sync(); });
-    }
     var dragToggle = root.querySelector('[data-acs-pv-drag]');
     if (dragToggle) {
         dragToggle.addEventListener('change', function () {
             pv.drag = dragToggle.checked;
             if (pv.stage) pv.stage.classList.toggle('can-drag', pv.drag);
-            var hint = root.querySelector('[data-acs-drag-hint]');
-            if (hint) hint.hidden = !pv.drag;
+            var hint = pv.stage && pv.stage.querySelector('[data-acs-drag-hint]');
+            if (pv.drag && pv.stage && !hint) {
+                hint = el('div', 'acs-a-stage-hint', '拖动浮标 / 引流气泡 / 飘带，松手即写回表单');
+                hint.setAttribute('data-acs-drag-hint', '');
+                pv.stage.appendChild(hint);
+            } else if (hint) {
+                hint.hidden = !pv.drag;
+            }
         });
     }
+
+    /* ---------------------------------------------------------------- 媒体库
+     * 所有"图片地址"字段都挂一个「选图」按钮，直接开核心的媒体选择框。
+     * 让站长手抄 URL 是没道理的——图片本来就在站点媒体库里。 */
+    function attachMediaPicker(fieldKey, type, label) {
+        var input = ctrl(fieldKey);
+        if (!input) return;
+        var wrap = input.parentNode;
+        if (!wrap || wrap.querySelector('[data-acs-media]')) return;
+        var bar = el('div', 'acs-a-media-row');
+        input.parentNode.insertBefore(bar, input);
+        bar.appendChild(input);
+
+        var pick = el('button', 'acs-a-btn acs-a-btn--sm');
+        pick.type = 'button';
+        pick.setAttribute('data-acs-media', fieldKey);
+        pick.appendChild(icon('bi-images'));
+        pick.appendChild(el('span', '', label || '选图'));
+        pick.addEventListener('click', function () {
+            if (!window.MediaPicker || typeof window.MediaPicker.open !== 'function') {
+                toast('媒体选择框没加载出来，可以先手动填地址', true);
+                return;
+            }
+            window.MediaPicker.open({
+                type: type || 'image',
+                onSelect: function (file) {
+                    if (!file || !file.url) return;
+                    setCtrl(fieldKey, file.url);
+                    sync();
+                }
+            });
+        });
+        bar.appendChild(pick);
+
+        var clear = el('button', 'acs-a-icon-btn');
+        clear.type = 'button';
+        clear.title = '清空';
+        clear.setAttribute('aria-label', '清空' + (label || '图片'));
+        clear.appendChild(icon('bi-x-lg'));
+        clear.addEventListener('click', function () { setCtrl(fieldKey, ''); sync(); });
+        bar.appendChild(clear);
+
+        var preview = el('span', 'acs-a-media-thumb');
+        preview.setAttribute('data-acs-media-thumb', fieldKey);
+        bar.appendChild(preview);
+        var paint = function () {
+            var url = String(input.value || '').trim();
+            preview.innerHTML = '';
+            if (!url) { preview.hidden = true; return; }
+            preview.hidden = false;
+            var img = el('img');
+            img.src = url;
+            img.alt = '';
+            preview.appendChild(img);
+        };
+        input.addEventListener('input', paint);
+        paint();
+    }
+
+    ['avatar_url', 'launcher_image_url'].forEach(function (key) { attachMediaPicker(key, 'image', '选图'); });
 
     // 表单里任何变化都重算预览。用事件委托，面板动态插入的控件也能覆盖到。
     root.addEventListener('input', function (event) {
@@ -1900,6 +2062,7 @@
     }
 
     mountAll();
+    markDragTargets();
     initDrag();
     syncProvider();
     sync();

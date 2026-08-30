@@ -35,6 +35,23 @@ add_filter('admin.menu.register', static function (array $items): array {
     return $items;
 });
 
+/**
+ * 后台配置页要用**前台那一份**样式来渲染实时预览——预览不再维护一套仿制品，
+ * 也就不可能和前台走样。只在本插件自己的页面注入，不污染其他后台页面
+ * （所以没有把这两个资源声明成 area: both）。
+ */
+add_action('admin.head', static function (): void {
+    $uri = (string)($_SERVER['REQUEST_URI'] ?? '');
+    if (!str_contains((string)parse_url($uri, PHP_URL_PATH), '/ai-customer-service')) return;
+    foreach (['assets/customer-service.css', 'assets/preset-cards.css'] as $asset) {
+        printf(
+            '<link rel="stylesheet" href="%s?v=%s">' . "\n",
+            htmlspecialchars(plugin_url(AiCustomerService::SLUG, $asset), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
+            htmlspecialchars(AiCustomerService::VERSION, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')
+        );
+    }
+}, 5);
+
 add_action('routes.admin.register', static function ($router): void {
     $render = static function (string $page): void {
         \App\Core\Auth::requirePermission('ai_customer_service.manage');

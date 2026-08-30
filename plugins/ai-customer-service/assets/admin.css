@@ -156,16 +156,21 @@
 
 .acs-a-layout {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 388px;
+    /* 预览列要放得下 396px 的面板 + 边距，再窄就开始挤压内容 */
+    grid-template-columns: minmax(0, 1fr) 468px;
     align-items: start;
     gap: 16px;
 }
 .acs-a-layout.is-wide { grid-template-columns: minmax(0, 1fr); }
 .acs-a-main { display: grid; gap: 16px; min-width: 0; }
 
-@media (max-width: 1280px) {
+@media (max-width: 1560px) {
+    .acs-a-layout { grid-template-columns: minmax(0, 1fr) 412px; }
+}
+@media (max-width: 1360px) {
     .acs-a-layout { grid-template-columns: minmax(0, 1fr); }
     .acs-a-preview { position: static !important; }
+    .acs-a-stage { max-width: 468px; }
 }
 
 /* Card */
@@ -513,6 +518,25 @@
 
 .acs-a-secret { padding: 0 20px 18px; }
 .acs-a-secret-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; max-width: 480px; }
+
+/* 图片字段：输入框 + 媒体库选图 + 缩略图。所有图片类配置都走这个，不让人抄 URL。 */
+.acs-a-media-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto auto;
+    align-items: center;
+    gap: 6px;
+}
+.acs-a-media-thumb {
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    overflow: hidden;
+    border: 1px solid var(--acs-border-soft);
+    border-radius: var(--acs-radius);
+    background: var(--acs-bg-sub);
+}
+.acs-a-media-thumb img { width: 100%; height: 100%; object-fit: cover; }
 
 /* ACS_MARKER_CSS_6 */
 
@@ -1143,7 +1167,13 @@
 
 /* ACS_MARKER_CSS_10 */
 
-/* ------------------------------------------------------------------ 实时预览 */
+/* ------------------------------------------------------------------ 实时预览
+ * 预览渲染的是前台真实标记 + 前台真实样式（customer-service.css / preset-cards.css
+ * 由 plugin.php 只在本页注入）。这里只负责：
+ *   1. 把 .acs-widget 从 fixed 改成 stage 内的 absolute（id 选择器那条只作用于前台）；
+ *   2. 舞台底纹、缩放、拖拽提示这类"仅预览"的外壳。
+ * 刻意不再维护一套 acs-pv-* 的仿制样式——那正是"预览与实际不符"的根源。
+ */
 
 .acs-a-preview {
     position: sticky;
@@ -1154,26 +1184,56 @@
     border: 1px solid var(--acs-border-soft);
     border-radius: var(--acs-radius-lg);
     background: var(--acs-bg);
-    box-shadow: var(--acs-shadow);
 }
-.acs-a-preview-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.acs-a-preview-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .acs-a-preview-title { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; }
 .acs-a-preview-title i { color: var(--acs-text-3); }
 .acs-a-preview-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.acs-a-preview-note { margin: 0; color: var(--acs-text-3); font-size: 12px; }
 
 .acs-a-stage {
     position: relative;
-    height: 470px;
+    /* 高度要放得下 600px 的面板缩放后的样子 + 浮标 */
+    height: 600px;
     border: 1px solid var(--acs-border-soft);
     border-radius: var(--acs-radius);
     background:
-        radial-gradient(circle at 20% 15%, rgba(22, 119, 255, .07), transparent 55%),
-        repeating-linear-gradient(45deg, var(--acs-bg-sub) 0 8px, transparent 8px 16px);
+        linear-gradient(0deg, var(--acs-bg-sub), var(--acs-bg-sub)) padding-box,
+        repeating-linear-gradient(45deg, transparent 0 7px, rgba(127, 127, 127, .06) 7px 14px);
     overflow: hidden;
 }
-.acs-a-stage.is-mobile { max-width: 320px; margin: 0 auto; }
+.acs-a-stage.is-mobile { max-width: 360px; margin: 0 auto; }
 .acs-a-stage.is-dragging { cursor: grabbing; }
+
+/* 关键：把前台挂件放进舞台 */
+.acs-a-stage .acs-widget--preview {
+    position: absolute;
+    right: var(--acs-desktop-x);
+    bottom: var(--acs-desktop-y);
+    /* 按舞台尺寸整体缩放，几何关系与真机完全一致（不是另调一套尺寸） */
+    transform: scale(var(--acs-pv-k, 1));
+    transform-origin: bottom right;
+}
+.acs-a-stage .acs-widget--preview.acs-widget--left {
+    right: auto;
+    left: var(--acs-desktop-x);
+    transform-origin: bottom left;
+}
+/* 预览里浮标永远画出来（要能拖），前台不显示时给个虚线提示 */
+.acs-a-stage .acs-preview-nolauncher .acs-launcher {
+    opacity: .45;
+    outline: 1px dashed var(--acs-text-3);
+    outline-offset: 3px;
+}
+.acs-a-stage .acs-widget--preview.is-closed .acs-panel { display: none !important; }
+
+/* 拖拽态 */
+.acs-a-stage.can-drag [data-acs-drag] {
+    cursor: grab;
+    outline: 1px dashed color-mix(in srgb, var(--acs-primary) 60%, transparent);
+    outline-offset: 2px;
+}
+.acs-a-stage.can-drag [data-acs-drag]:hover { outline-style: solid; }
+.acs-a-stage [data-acs-drag].is-grabbing { cursor: grabbing; outline-style: solid; }
 .acs-a-stage-hint {
     position: absolute;
     top: 8px;
@@ -1189,318 +1249,12 @@
     pointer-events: none;
 }
 
-.acs-pv-widget {
-    --pv-accent: #4f46e5;
-    --pv-surface: #fff;
-    --pv-text: #111827;
-    --pv-muted: #6b7280;
-    --pv-header-bg: #4f46e5;
-    --pv-header-fg: #fff;
-    --pv-bot: #f3f4f6;
-    --pv-bot-text: #111827;
-    --pv-vis: #4f46e5;
-    --pv-vis-text: #fff;
-    --pv-radius: 16px;
-    --pv-k: 1;
-    position: absolute;
-    right: 20px;
-    bottom: 20px;
-    font-family: var(--pv-font, inherit);
-}
-.acs-pv-widget.acs-pv--left { right: auto; left: 20px; }
-
-.acs-pv-panel {
-    position: absolute;
-    right: 0;
-    bottom: calc(var(--pv-size, 56px) * var(--pv-k) + 12px);
-    display: flex;
-    flex-direction: column;
-    width: 300px;
-    height: 380px;
-    border: 1px solid rgba(15, 23, 42, .1);
-    border-radius: var(--pv-radius);
-    background: var(--pv-surface);
-    color: var(--pv-text);
-    overflow: hidden;
-    box-shadow: 0 18px 48px rgba(15, 23, 42, .22);
-}
-/* 与前台同理：可选节点用定位行会整体错位，聊天区必须靠 flex 抢剩余空间 */
-.acs-pv-panel > * { flex: 0 0 auto; }
-.acs-pv-panel > .acs-pv-body { flex: 1 1 auto; min-height: 0; overflow: hidden; }
-.acs-pv--left .acs-pv-panel { right: auto; left: 0; }
-.acs-pv-widget.is-closed .acs-pv-panel { display: none; }
-
-/* ACS_MARKER_CSS_11 */
-
-.acs-pv-ribbon {
-    position: relative;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 6px;
-    padding: 4px 8px;
-    background: linear-gradient(90deg, var(--pv-accent), color-mix(in srgb, var(--pv-accent) 55%, #fff));
-    color: #fff;
-    font-size: 10px;
-    translate: var(--pv-ribbon-dx, 0) var(--pv-ribbon-dy, 0);
-}
-.acs-pv-header {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 8px;
-    padding: 9px 10px;
-    background: var(--pv-header-bg);
-    color: var(--pv-header-fg);
-}
-.acs-head--gradient .acs-pv-header,
-.acs-pv-widget.is-gradient .acs-pv-header {
-    background: linear-gradient(135deg, var(--pv-header-bg), color-mix(in srgb, var(--pv-header-bg) 55%, var(--pv-accent)));
-}
-.acs-pv-avatar {
-    display: grid;
-    place-items: center;
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    background: rgba(255, 255, 255, .24);
-    overflow: hidden;
-    font-size: 13px;
-}
-.acs-pv-avatar img { width: 100%; height: 100%; object-fit: cover; }
-.acs-pv-agent { display: grid; min-width: 0; gap: 1px; }
-.acs-pv-agent strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
-.acs-pv-agent small { display: flex; align-items: center; gap: 4px; font-size: 9px; opacity: .82; }
-.acs-pv-dot { width: 5px; height: 5px; border-radius: 50%; background: #34d399; }
-.acs-pv-header-actions { display: flex; gap: 6px; font-size: 10px; opacity: .8; }
-
-.acs-pv-body {
-    display: grid;
-    align-content: start;
-    gap: 8px;
-    padding: 10px;
-    overflow: hidden;
-}
-.acs-density--compact .acs-pv-body { gap: 6px; padding: 8px; }
-.acs-pv-row { display: flex; align-items: flex-end; gap: 6px; }
-.acs-pv-row--visitor { justify-content: flex-end; }
-.acs-pv-stack { display: grid; gap: 6px; min-width: 0; }
-.acs-pv-mini-avatar {
-    display: grid;
-    flex: 0 0 auto;
-    place-items: center;
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    background: color-mix(in srgb, var(--pv-accent) 16%, transparent);
-    color: var(--pv-accent);
-    font-size: 9px;
-}
-.acs-pv-bubble {
-    max-width: 200px;
-    padding: 7px 10px;
-    border-radius: 12px;
-    font-size: 11px;
-    line-height: 1.5;
-}
-.acs-pv-bubble--bot { border-bottom-left-radius: 4px; background: var(--pv-bot); color: var(--pv-bot-text); }
-.acs-pv-bubble--visitor { border-bottom-right-radius: 4px; background: var(--pv-vis); color: var(--pv-vis-text); }
-.acs-pv-widget.is-outline .acs-pv-bubble--bot { border: 1px solid color-mix(in srgb, var(--pv-accent) 26%, transparent); background: transparent; }
-.acs-pv-widget.is-flat .acs-pv-bubble { border-radius: 6px; }
-.acs-pv-widget.is-glass .acs-pv-bubble--bot { background: color-mix(in srgb, var(--pv-bot) 65%, transparent); backdrop-filter: blur(6px); }
-.acs-pv-widget.is-sketch .acs-pv-bubble--bot {
-    border: 1.5px solid var(--pv-text);
-    border-radius: 255px 14px 225px 14px / 14px 225px 14px 255px;
-    box-shadow: 2px 2px 0 var(--pv-text);
-}
-
-.acs-pv-toolchip {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 2px 8px;
-    border: 1px solid color-mix(in srgb, var(--pv-accent) 26%, transparent);
-    border-radius: 100px;
-    background: color-mix(in srgb, var(--pv-accent) 10%, transparent);
-    color: var(--pv-accent);
-    font-size: 9px;
-    width: fit-content;
-}
-.acs-pv-typing { display: inline-flex; gap: 3px; padding: 9px 11px; }
-.acs-pv-typing i { width: 4px; height: 4px; border-radius: 50%; background: var(--pv-muted); animation: acsPvTyping 1s infinite ease-in-out; }
-.acs-pv-typing i:nth-child(2) { animation-delay: .15s; }
-.acs-pv-typing i:nth-child(3) { animation-delay: .3s; }
-@keyframes acsPvTyping { 0%, 60%, 100% { transform: translateY(0); opacity: .45; } 30% { transform: translateY(-3px); opacity: 1; } }
-
-/* ACS_MARKER_CSS_12 */
-
-/* 预览里的卡片（叠卡 / 网格 / 极简 / 毛玻璃四套预设） */
-.acs-pv-cards { display: grid; gap: 5px; }
-.acs-pv-cards.is-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.acs-pv-card {
-    display: grid;
-    grid-template-columns: 30px minmax(0, 1fr);
-    align-items: center;
-    gap: 7px;
-    padding: 6px;
-    border: 1px solid color-mix(in srgb, var(--pv-text) 12%, transparent);
-    border-radius: 9px;
-    background: color-mix(in srgb, var(--pv-surface) 92%, var(--pv-bot));
-    font-size: 10px;
-}
-.acs-pv-card-thumb {
-    display: grid;
-    place-items: center;
-    width: 30px;
-    height: 30px;
-    border-radius: 6px;
-    background: linear-gradient(135deg, var(--pv-accent), color-mix(in srgb, var(--pv-accent) 45%, #fff));
-    color: #fff;
-    font-size: 11px;
-}
-.acs-pv-card-main { min-width: 0; display: grid; gap: 1px; }
-.acs-pv-card-title { overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
-.acs-pv-card-meta { color: var(--pv-muted); font-size: 9px; }
-.acs-pv-card-cta { color: var(--pv-accent); font-size: 9px; font-weight: 600; }
-.acs-pv-cards.is-stack { position: relative; height: 62px; }
-.acs-pv-cards.is-stack .acs-pv-card {
-    position: absolute;
-    left: 0;
-    width: 82%;
-    transition: transform .35s ease;
-}
-.acs-pv-cards.is-stack .acs-pv-card:nth-child(1) { top: 0; z-index: 3; transform: rotate(-3deg); }
-.acs-pv-cards.is-stack .acs-pv-card:nth-child(2) { top: 10px; left: 9%; z-index: 2; transform: rotate(2deg); }
-.acs-pv-cards.is-stack .acs-pv-card:nth-child(3) { top: 20px; left: 18%; z-index: 1; transform: rotate(-1deg); }
-.acs-pv-cards.is-stack .acs-pv-card:hover { z-index: 9; transform: rotate(0) translateY(-4px); }
-.acs-pv-cards.is-glass .acs-pv-card { background: color-mix(in srgb, var(--pv-surface) 55%, transparent); backdrop-filter: blur(6px); }
-.acs-pv-cards.is-minimal .acs-pv-card { grid-template-columns: minmax(0, 1fr); border: 0; border-left: 2px solid var(--pv-accent); border-radius: 0 6px 6px 0; background: transparent; }
-.acs-pv-cards.is-minimal .acs-pv-card-thumb { display: none; }
-
-.acs-pv-quick { display: grid; gap: 4px; padding: 0 10px 6px; }
-.acs-pv-quick-title { color: var(--pv-muted); font-size: 9px; font-weight: 700; }
-.acs-pv-quick-row { display: flex; flex-wrap: wrap; gap: 4px; }
-.acs-pv-chip {
-    padding: 3px 8px;
-    border: 1px solid color-mix(in srgb, var(--pv-accent) 30%, transparent);
-    border-radius: 100px;
-    background: color-mix(in srgb, var(--pv-accent) 8%, transparent);
-    color: var(--pv-accent);
-    font-size: 9px;
-}
-.acs-quick--ghost .acs-pv-chip,
-.acs-pv-widget.is-quick-ghost .acs-pv-chip { border-color: color-mix(in srgb, var(--pv-text) 16%, transparent); background: transparent; color: var(--pv-text); }
-.acs-pv-widget.is-quick-sketch .acs-pv-chip {
-    border: 1.5px solid var(--pv-text);
-    border-radius: 255px 12px 225px 12px / 12px 225px 12px 255px;
-    background: transparent;
-    color: var(--pv-text);
-}
-
-.acs-pv-handoff {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    padding: 6px 10px;
-    border-top: 1px solid color-mix(in srgb, var(--pv-text) 8%, transparent);
-    color: var(--pv-accent);
-    font-size: 10px;
-}
-.acs-pv-composer { padding: 7px 10px; border-top: 1px solid color-mix(in srgb, var(--pv-text) 8%, transparent); }
-.acs-pv-composer-text { display: block; color: var(--pv-muted); font-size: 10px; }
-.acs-pv-composer-bar { display: flex; align-items: center; justify-content: space-between; margin-top: 5px; }
-.acs-pv-composer-tools { display: flex; gap: 5px; color: var(--pv-muted); font-size: 11px; }
-.acs-pv-composer-right { display: flex; align-items: center; gap: 6px; }
-.acs-pv-counter { color: var(--pv-muted); font-size: 8px; }
-.acs-pv-send {
-    display: grid;
-    place-items: center;
-    width: 22px;
-    height: 22px;
-    border-radius: 50%;
-    background: var(--pv-accent);
-    color: #fff;
-    font-size: 10px;
-}
-.acs-pv-powered { padding: 0 10px 6px; color: var(--pv-muted); font-size: 8px; text-align: center; }
-
-/* ACS_MARKER_CSS_13 */
-
-/* 预览里的浮标与周边（这几个是可拖的） */
-.acs-pv-launcher {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0;
-    width: calc(var(--pv-size, 56px) * var(--pv-k));
-    height: calc(var(--pv-size, 56px) * var(--pv-k));
-    padding: 0;
-    border: 0;
-    border-radius: 999px;
-    background: var(--pv-accent);
-    color: #fff;
-    cursor: pointer;
-    box-shadow: 0 8px 20px rgba(15, 23, 42, .22);
-    translate: var(--pv-launcher-dx, 0) var(--pv-launcher-dy, 0);
-}
-.acs-pv-launcher.is-pill { width: auto; padding: 0 14px; gap: 8px; border-radius: var(--pv-corner, 10px); }
-.acs-pv-launcher-icon { font-size: calc(var(--pv-size, 56px) * var(--pv-k) * .42); }
-.acs-pv-launcher-img { width: 60%; height: 60%; border-radius: inherit; object-fit: cover; }
-.acs-pv-launcher-label { font-size: 12px; font-weight: 600; white-space: nowrap; }
-.acs-pv-badge {
-    position: absolute;
-    top: 0;
-    right: 0;
-    width: 10px;
-    height: 10px;
-    border: 2px solid var(--pv-surface);
-    border-radius: 50%;
-    background: #ef4444;
-    translate: var(--pv-badge-dx, 2px) var(--pv-badge-dy, 2px);
-}
-
-.acs-pv-tooltip {
-    position: absolute;
-    right: calc(100% + 10px);
-    bottom: 30%;
-    padding: 5px 9px;
-    border-radius: 7px;
-    background: rgba(17, 24, 39, .92);
-    color: #fff;
-    font-size: 10px;
-    white-space: nowrap;
-}
-.acs-pv--left .acs-pv-tooltip { right: auto; left: calc(100% + 10px); }
-
-/* 关键：给引流气泡一个 max-content 宽度。只写 right: calc(100% + N) 的话
-   收缩到合适宽度算出来的可用宽是负数，气泡会塌成一列单字。 */
-.acs-pv-teaser {
-    position: absolute;
-    right: calc(100% + 10px);
-    bottom: 16%;
-    display: flex;
-    align-items: flex-start;
-    gap: 6px;
-    width: max-content;
-    max-width: 190px;
-    padding: 8px 10px;
-    border: 1px solid rgba(15, 23, 42, .12);
-    border-radius: 10px;
-    background: var(--pv-surface);
-    color: var(--pv-text);
-    font-size: 10px;
-    line-height: 1.45;
-    box-shadow: 0 8px 20px rgba(15, 23, 42, .14);
-    translate: var(--pv-teaser-dx, 0) var(--pv-teaser-dy, 0);
-}
-.acs-pv--left .acs-pv-teaser { right: auto; left: calc(100% + 10px); }
-.acs-pv-teaser-close { flex: 0 0 auto; margin-top: 1px; color: var(--pv-muted); font-size: 8px; }
-
-/* 拖拽态 */
-.acs-a-stage.can-drag [data-acs-pv-drag-target] { cursor: grab; outline: 1px dashed color-mix(in srgb, var(--acs-primary) 60%, transparent); outline-offset: 2px; }
-.acs-a-stage.can-drag [data-acs-pv-drag-target]:hover { outline-style: solid; }
-.acs-a-stage [data-acs-pv-drag-target].is-grabbing { cursor: grabbing; outline-style: solid; }
+/* 预览里禁止交互输入，避免误以为能在后台聊天 */
+.acs-a-stage .acs-widget--preview textarea,
+.acs-a-stage .acs-widget--preview input,
+.acs-a-stage .acs-widget--preview button,
+.acs-a-stage .acs-widget--preview a { pointer-events: none; }
+.acs-a-stage.can-drag .acs-widget--preview [data-acs-drag] { pointer-events: auto; }
 
 @media (prefers-reduced-motion: reduce) {
     .acs-a *,
