@@ -123,6 +123,8 @@
         state.open = !!open;
         panel.hidden = !state.open;
         panel.setAttribute('aria-hidden', state.open ? 'false' : 'true');
+        // 供 CSS 用：打开时要收起引流气泡与悬停提示，否则它们和浮标叠在一起
+        root.dataset.acsOpen = state.open ? 'true' : 'false';
         if (launcher) {
             launcher.setAttribute('aria-expanded', state.open ? 'true' : 'false');
             launcher.classList.toggle('is-open', state.open);
@@ -302,6 +304,7 @@
 
     function renderContentCard(card) {
         if (!Array.isArray(card.items) || !card.items.length) return null;
+        if ((card.preset || 'stack') === 'stack') return renderStackCard(card);
         var wrap = el('div', 'acs-card');
         var list = el('div', 'acs-card-items is-' + (card.preset || 'stack'));
         card.items.forEach(function (item) {
@@ -336,6 +339,33 @@
         });
         wrap.appendChild(list);
         return wrap;
+    }
+
+    /* 叠卡预设：结构与站长给的原始设计稿一致（.acs-cards > .acs-card-stack.acs-one|two|three
+     * > .acs-cardDetails > header + button）。原文只定义三个位置，所以最多取三条。 */
+    function renderStackCard(card) {
+        var slots = ['acs-one', 'acs-two', 'acs-three'];
+        var items = card.items.slice(0, 3);
+        var stage = el('div', 'acs-stack-stage');
+        var cards = el('div', 'acs-cards');
+        items.forEach(function (item, index) {
+            var node = item.url ? el('a', '') : el('div', '');
+            node.className = 'acs-card-stack ' + slots[index];
+            if (item.url) {
+                node.href = item.url;
+                node.target = '_blank';
+                node.rel = 'noopener';
+            }
+            var details = el('div', 'acs-cardDetails');
+            var head = el('div', 'acs-cardDetailsHaeder', item.title);
+            if (item.price) head.appendChild(el('div', 'acs-stack-price', item.price));
+            details.appendChild(head);
+            details.appendChild(el('div', 'acs-cardDetailsButton', card.cta || '查看详情'));
+            node.appendChild(details);
+            cards.appendChild(node);
+        });
+        stage.appendChild(cards);
+        return stage;
     }
 
     function renderHandoffCard(card) {
@@ -419,15 +449,87 @@
 
     function renderOwnerCard(card) {
         var preset = card.preset || 'clean';
-        var wrap = el('div', 'acs-owner is-' + preset);
+        return preset === 'doodle' ? renderDoodleCard(card) : renderCleanOwnerCard(card, preset);
+    }
 
-        if (preset === 'doodle') {
-            Object.keys(DOODLES).forEach(function (name) {
-                var svg = svgNode(DOODLES[name][0], DOODLES[name][1], 'acs-owner-doodle acs-owner-doodle--' + name);
-                wrap.appendChild(svg);
-            });
+    /* 手账涂鸦名片：DOM 结构对齐站长给的原始设计稿（doodle 三件套 → 头像 → 标题+头衔
+     * → 简介 → hover 才展开的社媒按钮），类名与 assets/preset-cards.css 里的照搬样式一致。 */
+    function renderDoodleCard(card) {
+        var stage = el('div', 'acs-doodle-stage');
+        var wrap = el('div', 'acs-doodle-card');
+
+        [['star', 'acs-star'], ['spark', 'acs-sparkle'], ['swirl', 'acs-swirl']].forEach(function (pair) {
+            wrap.appendChild(svgNode(DOODLES[pair[0]][0], DOODLES[pair[0]][1], 'acs-doodle ' + pair[1]));
+        });
+
+        var photo = el('div', 'acs-doodle-photo');
+        if (card.avatar) {
+            photo.classList.add('has-image');
+            var img = el('img');
+            img.src = card.avatar;
+            img.alt = '';
+            img.loading = 'lazy';
+            photo.appendChild(img);
         }
+        wrap.appendChild(photo);
 
+        // 原文是 NAME<br><span>ROLE</span>，保持同形以复用那条 .acs-doodle-title span 样式
+        var title = el('div', 'acs-doodle-title', card.name || '');
+        if (card.title) {
+            title.appendChild(document.createElement('br'));
+            title.appendChild(el('span', '', card.title));
+        }
+        wrap.appendChild(title);
+
+        if (card.bio) wrap.appendChild(el('p', 'acs-doodle-bio', card.bio));
+
+        var socials = Array.isArray(card.socials) ? card.socials : [];
+        if (socials.length) {
+            var row = el('div', 'acs-doodle-socials');
+            socials.slice(0, 5).forEach(function (item) { row.appendChild(doodleSocial(item)); });
+            wrap.appendChild(row);
+        }
+        stage.appendChild(wrap);
+        return stage;
+    }
+
+    /** 名片上的社媒按钮：微信/电话仍然是"点一下复制"，其余是链接。 */
+    function doodleSocial(item) {
+        var isCopy = item.mode === 'copy';
+        var node = isCopy ? el('button', '') : el('a', '');
+        node.className = 'acs-doodle-btn acs-net-' + (item.network || 'website');
+        node.title = (item.label || '') + ' ' + item.value;
+        node.setAttribute('aria-label', (item.label || item.network || '联系方式') + '：' + item.value);
+        node.appendChild(icon(item.icon || 'bi-link-45deg'));
+        if (isCopy) {
+            node.type = 'button';
+            node.addEventListener('click', function () { copyValue(item.value, node); });
+        } else {
+            node.href = item.href || item.value;
+            if (item.mode === 'link') { node.target = '_blank'; node.rel = 'noopener'; }
+        }
+        return node;
+    }
+
+    function copyValue(value, node) {
+        var restore = node.getAttribute('title');
+        var done = function () {
+            node.classList.add('acs-social-copied');
+            node.setAttribute('title', '已复制：' + value);
+            window.setTimeout(function () {
+                node.classList.remove('acs-social-copied');
+                node.setAttribute('title', restore);
+            }, 2400);
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(value).then(done, done);
+        } else {
+            done();
+        }
+    }
+
+    function renderCleanOwnerCard(card, preset) {
+        var wrap = el('div', 'acs-owner is-' + preset);
         var top = el('div', 'acs-owner-top');
         var photo = el('span', 'acs-owner-photo');
         if (card.avatar) {
@@ -445,10 +547,9 @@
         if (card.title) copy.appendChild(el('div', 'acs-owner-title', card.title));
         top.appendChild(copy);
         wrap.appendChild(top);
-
         if (card.bio) wrap.appendChild(el('div', 'acs-owner-bio', card.bio));
         if (Array.isArray(card.socials) && card.socials.length) {
-            wrap.appendChild(socialList(card.socials, preset === 'doodle' ? 'chips' : 'chips'));
+            wrap.appendChild(socialList(card.socials, 'chips'));
         }
         return wrap;
     }

@@ -16,7 +16,7 @@ declare(strict_types=1);
 final class AiCustomerService
 {
     public const SLUG = 'ai-customer-service';
-    public const VERSION = '1.2.0';
+    public const VERSION = '1.2.1';
 
     private const SESSION_KEY = '_ai_customer_service';
     private const CONVERSATION_TTL = 21600;
@@ -288,8 +288,10 @@ final class AiCustomerService
 
     public static function defaultLayout(): array
     {
+        // ribbon.dy 默认必须是 0：飘带是面板里的第一个节点，面板又是 overflow:hidden，
+        // 任何负偏移都会被顶边裁掉一截（-10px 时文字直接被切半行）。留给用户微调，不做默认。
         return ['panel_align' => 'right', 'panel_gap' => 12, 'teaser' => ['dx' => -12, 'dy' => 0],
-            'ribbon' => ['dx' => 0, 'dy' => -10], 'badge' => ['dx' => 2, 'dy' => 2],
+            'ribbon' => ['dx' => 0, 'dy' => 0], 'badge' => ['dx' => 2, 'dy' => 2],
             'launcher_nudge' => ['dx' => 0, 'dy' => 0], 'z_index' => 2147480000, 'locked' => false];
     }
 

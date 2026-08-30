@@ -1,7 +1,7 @@
 {
     "slug": "ai-customer-service",
     "name": "AI客服",
-    "version": "1.2.0",
+    "version": "1.2.1",
     "author": "odi0011",
     "author_url": "",
     "homepage": "",
@@ -12,7 +12,7 @@
     "requires_php": "8.0",
     "license": "MIT",
     "category": "other",
-    "changelog": "后台整体按 Ant Design 语言重做（分组导航、表单控件、颜色画板、拖拽定位、预设主题）；知识库拆成「描述词」与「资料」两套，资料可选站内产品/文章/页面/自定义内容或上传文件；新增工具调用与站内卡片（产品/文章/名片/询盘/社媒，多套预设可切换、点击可跳转）；新增话题边界约束与询盘转化、转人工等意图识别；前台改为 Ant Design X 风格的对话布局，新增飘带、定时主动问候、气泡动效、emoji 与自定义表情包；修复引流气泡塌成竖条、正文与次要文字颜色不可配置、逐页保存互相锁死、每次渲染重复解析清单等问题。",
+    "changelog": "把前台对话区按 beautifului.dev 的形态整套重写（turn 容器、状态点工具 chip、Prompt Bar、行式推荐卡）；叠卡、涂鸦名片、后台资料柜文件夹卡改为按提供的设计稿原样照搬（新增 assets/preset-cards.css）；修复面板用 grid 定位行导致聊天区被压塌卡片被腰斩、聊天区横轴溢出裁掉旋转卡片、飘带默认负偏移被顶边裁半行、胶囊浮标展开退化成方块、打开面板后引流气泡仍叠在浮标上、必填框未输入即标红、后台分段选择器逐字折行；移动端宽度改为按配置边距自适应；契约测试新增类名与样式交叉核对、面板 flex 布局与照搬设计稿签名值的回归断言。",
     "tags": [
         "AI",
         "客服",
@@ -42,14 +42,24 @@
             "type": "css",
             "area": "frontend",
             "src": "assets/customer-service.css",
-            "version": "1.2.0"
+            "version": "1.2.1"
+        },
+        {
+            "handle": "ai-customer-service-preset-cards",
+            "type": "css",
+            "area": "frontend",
+            "src": "assets/preset-cards.css",
+            "version": "1.2.1",
+            "deps": [
+                "ai-customer-service-widget-css"
+            ]
         },
         {
             "handle": "ai-customer-service-widget-js",
             "type": "js",
             "area": "frontend",
             "src": "assets/customer-service.js",
-            "version": "1.2.0",
+            "version": "1.2.1",
             "defer": true
         },
         {
@@ -57,14 +67,14 @@
             "type": "css",
             "area": "admin",
             "src": "assets/admin.css",
-            "version": "1.2.0"
+            "version": "1.2.1"
         },
         {
             "handle": "ai-customer-service-admin-js",
             "type": "js",
             "area": "admin",
             "src": "assets/admin.js",
-            "version": "1.2.0",
+            "version": "1.2.1",
             "defer": true
         }
     ],
@@ -410,7 +420,7 @@
                         "key": "layout_json",
                         "label": "拖拽布局",
                         "type": "textarea",
-                        "default": "{\"panel_align\":\"right\",\"panel_gap\":12,\"teaser\":{\"dx\":-12,\"dy\":0},\"ribbon\":{\"dx\":0,\"dy\":-10},\"badge\":{\"dx\":2,\"dy\":2},\"launcher_nudge\":{\"dx\":0,\"dy\":0},\"z_index\":2147480000,\"locked\":false}",
+                        "default": "{\"panel_align\":\"right\",\"panel_gap\":12,\"teaser\":{\"dx\":-12,\"dy\":0},\"ribbon\":{\"dx\":0,\"dy\":0},\"badge\":{\"dx\":2,\"dy\":2},\"launcher_nudge\":{\"dx\":0,\"dy\":0},\"z_index\":2147480000,\"locked\":false}",
                         "max_length": 3000,
                         "help": "浮标、引流气泡、飘带与角标的微调偏移；在右侧预览里拖动元素即可写入。"
                     },

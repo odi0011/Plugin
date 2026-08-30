@@ -673,44 +673,52 @@
         });
     };
 
+    /* 资料柜文件夹卡：DOM 结构对齐站长给的 Uiverse 原文（back → counter → search →
+     * file-1..5 → front-wrapper），类名加 acs- 前缀。展开/收起全靠 :checked，不是 hover。 */
     function folderCard(knowledge) {
         var card = el('label', 'acs-folder-card');
         card.title = '点击展开资料柜';
+
         var toggle = el('input', 'acs-folder-toggle');
         toggle.type = 'checkbox';
         card.appendChild(toggle);
 
-        var hint = el('span', 'acs-folder-hint');
-        hint.appendChild(el('span', 'acs-folder-hint-text', '点我展开'));
-        var arrow = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-        arrow.setAttribute('viewBox', '0 0 24 24');
-        arrow.setAttribute('fill', 'none');
-        arrow.setAttribute('stroke', '#60a5fa');
-        arrow.setAttribute('stroke-width', '2');
-        var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        path.setAttribute('d', 'M5 5c6 1 10 5 12 12M17 17l1-6M17 17l-6 1');
-        arrow.appendChild(path);
-        hint.appendChild(arrow);
+        // hint
+        var hint = el('span', 'acs-hint-wrapper');
+        hint.appendChild(el('span', 'acs-hint-text', '点我展开'));
+        hint.appendChild(svgNode('0 0 24 24', 'acs-hint-arrow', 'M5 5c6 1 10 5 12 12M17 17l1-6M17 17l-6 1', {
+            fill: 'none', stroke: '#60a5fa', 'stroke-width': '2', 'stroke-linecap': 'round'
+        }));
         card.appendChild(hint);
 
         var container = el('span', 'acs-folder-container');
+
+        // 1) 文件夹背板
         var back = el('span', 'acs-folder-back');
-        back.appendChild(folderSvg('#3b3f52'));
+        back.appendChild(folderBackSvg());
         container.appendChild(back);
 
-        var counter = el('span', 'acs-folder-counter');
-        counter.appendChild(el('span', 'acs-folder-status'));
-        counter.appendChild(el('span', 'acs-folder-counter-label', 'files'));
-        counter.appendChild(el('span', 'acs-folder-counter-number', String(knowledge.files.length)));
+        // 2) 计数气泡
+        var counter = el('span', 'acs-counter');
+        counter.title = '资料柜里的文件数';
+        counter.appendChild(el('span', 'acs-status-dot'));
+        counter.appendChild(el('span', 'acs-counter-label', 'files'));
+        counter.appendChild(el('span', 'acs-counter-number', String(knowledge.files.length)));
         container.appendChild(counter);
 
+        // 3) 搜索条
         var search = el('span', 'acs-folder-search');
-        search.appendChild(icon('bi-search'));
-        var searchInput = el('input');
+        var searchIcon = icon('bi-search');
+        searchIcon.classList.add('acs-search-icon');
+        search.appendChild(searchIcon);
+        var searchInput = el('input', 'acs-search-input');
         searchInput.type = 'search';
         searchInput.placeholder = '筛选文件…';
         searchInput.setAttribute('aria-label', '筛选资料柜文件');
-        searchInput.addEventListener('click', function (event) { event.preventDefault(); event.stopPropagation(); });
+        // 点搜索框不该被 label 解释成"开合文件夹"
+        ['click', 'mousedown', 'keydown'].forEach(function (type) {
+            searchInput.addEventListener(type, function (event) { event.stopPropagation(); });
+        });
         searchInput.addEventListener('input', function () {
             var keyword = searchInput.value.trim().toLowerCase();
             root.querySelectorAll('[data-acs-file-row]').forEach(function (node) {
@@ -720,18 +728,29 @@
         search.appendChild(searchInput);
         container.appendChild(search);
 
-        // 五张"纸"是纯装饰，标签取最近上传的文件名
+        // 4) 五张"纸"。原文是纯装饰的五层，这里让它显示最近上传的文件名与类型。
         var recent = knowledge.files.slice(-5).reverse();
+        var EXT_ICON = { md: 'bi-markdown', txt: 'bi-file-text', csv: 'bi-file-spreadsheet', tsv: 'bi-file-spreadsheet',
+            json: 'bi-braces', html: 'bi-code-slash', htm: 'bi-code-slash', xml: 'bi-code-slash',
+            docx: 'bi-file-word', pdf: 'bi-file-pdf' };
         for (var i = 0; i < 5; i++) {
-            var sheet = el('span', 'acs-folder-file');
-            sheet.appendChild(el('span', 'acs-folder-shine'));
-            sheet.appendChild(el('span', 'acs-folder-file-text', recent[i] ? recent[i].name : '空位'));
+            var file = recent[i];
+            var sheet = el('span', 'acs-file acs-file-' + (i + 1));
+            sheet.appendChild(el('span', 'acs-shine'));
+            sheet.appendChild(el('span', 'acs-file-text', file ? file.name : '空位'));
+            var fileIcon = icon(file ? (EXT_ICON[file.ext] || 'bi-file-earmark') : 'bi-plus-lg');
+            fileIcon.classList.add('acs-file-icon');
+            sheet.appendChild(fileIcon);
+            sheet.appendChild(el('span', 'acs-file-tag', file ? ((file.ext || '').toUpperCase() + ' · ' + humanBytes(file.bytes)) : '点击上传'));
             container.appendChild(sheet);
         }
 
-        var front = el('span', 'acs-folder-front');
-        front.appendChild(folderSvg('#5b6cff'));
+        // 5) 前盖（会绕 X 轴翻开）
+        var front = el('span', 'acs-folder-front-wrapper');
+        front.appendChild(folderFrontSvg());
+        front.appendChild(el('span', 'acs-folder-label'));
         container.appendChild(front);
+
         card.appendChild(container);
 
         var input = el('input');
@@ -744,7 +763,8 @@
             input.value = '';
         });
         card.appendChild(input);
-        // 展开后再点文件夹本体才触发选文件，避免第一次点击就弹系统对话框
+
+        // 已展开时再点文件夹本体才选文件；未展开时点击交给 label 去翻开
         container.addEventListener('click', function (event) {
             if (!toggle.checked) return;
             event.preventDefault();
@@ -753,15 +773,69 @@
         return card;
     }
 
-    function folderSvg(color) {
+    /** 通用 svg 生成：一条 path + 若干属性。 */
+    function svgNode(viewBox, cls, path, attrs) {
         var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-        svg.setAttribute('viewBox', '0 0 170 120');
-        svg.setAttribute('width', '170');
-        svg.setAttribute('height', '120');
+        svg.setAttribute('viewBox', viewBox);
         svg.setAttribute('aria-hidden', 'true');
+        if (cls) svg.setAttribute('class', cls);
+        var node = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        node.setAttribute('d', path);
+        Object.keys(attrs || {}).forEach(function (name) { node.setAttribute(name, attrs[name]); });
+        svg.appendChild(node);
+        return svg;
+    }
+
+    /* 背板：带左上角标签页的文件夹轮廓 */
+    function folderBackSvg() {
+        var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('viewBox', '0 0 170 130');
+        svg.setAttribute('width', '170');
+        svg.setAttribute('height', '130');
+        svg.setAttribute('aria-hidden', 'true');
+        var defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+        var grad = document.createElementNS('http://www.w3.org/2000/svg', 'linearGradient');
+        grad.setAttribute('id', 'acsFolderBack');
+        grad.setAttribute('x1', '0'); grad.setAttribute('y1', '0');
+        grad.setAttribute('x2', '0'); grad.setAttribute('y2', '1');
+        [['0%', '#4a5170'], ['100%', '#2b3049']].forEach(function (pair) {
+            var stop = document.createElementNS('http://www.w3.org/2000/svg', 'stop');
+            stop.setAttribute('offset', pair[0]);
+            stop.setAttribute('stop-color', pair[1]);
+            grad.appendChild(stop);
+        });
+        defs.appendChild(grad);
+        svg.appendChild(defs);
         var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        path.setAttribute('d', 'M6 24a10 10 0 0 1 10-10h44l12 12h82a10 10 0 0 1 10 10v70a10 10 0 0 1-10 10H16A10 10 0 0 1 6 106z');
-        path.setAttribute('fill', color);
+        path.setAttribute('d', 'M4 22a9 9 0 0 1 9-9h40a9 9 0 0 1 6.4 2.6L67 22h90a9 9 0 0 1 9 9v86a9 9 0 0 1-9 9H13a9 9 0 0 1-9-9z');
+        path.setAttribute('fill', 'url(#acsFolderBack)');
+        svg.appendChild(path);
+        return svg;
+    }
+
+    /* 前盖：圆角矩形，翻开时露出里面的纸 */
+    function folderFrontSvg() {
+        var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('viewBox', '0 0 170 104');
+        svg.setAttribute('width', '170');
+        svg.setAttribute('height', '104');
+        svg.setAttribute('aria-hidden', 'true');
+        var defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+        var grad = document.createElementNS('http://www.w3.org/2000/svg', 'linearGradient');
+        grad.setAttribute('id', 'acsFolderFront');
+        grad.setAttribute('x1', '0'); grad.setAttribute('y1', '0');
+        grad.setAttribute('x2', '1'); grad.setAttribute('y2', '1');
+        [['0%', '#7b8cff'], ['100%', '#5b6cff']].forEach(function (pair) {
+            var stop = document.createElementNS('http://www.w3.org/2000/svg', 'stop');
+            stop.setAttribute('offset', pair[0]);
+            stop.setAttribute('stop-color', pair[1]);
+            grad.appendChild(stop);
+        });
+        defs.appendChild(grad);
+        svg.appendChild(defs);
+        var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', 'M0 12A12 12 0 0 1 12 0h146a12 12 0 0 1 12 12v80a12 12 0 0 1-12 12H12A12 12 0 0 1 0 92z');
+        path.setAttribute('fill', 'url(#acsFolderFront)');
         svg.appendChild(path);
         return svg;
     }

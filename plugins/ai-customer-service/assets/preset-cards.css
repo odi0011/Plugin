@@ -1,0 +1,502 @@
+/* ==========================================================================
+   AI客服 · 卡片预设（原样照搬站长提供的设计稿）
+   ==========================================================================
+   这个文件里的三段设计是**逐条照搬**用户给的原始 CSS，只做两件事：
+     1. 类名统一加 acs- 前缀，避免和站点主题/其他插件撞车；
+     2. 绝对定位的元素外面补一个有尺寸的舞台容器，防止负偏移逃出聊天气泡。
+   尺寸、3D 变换、动画时序、缓动曲线、配色一律不动——改这些就不叫照搬了。
+   需要换配色时用主题预设覆盖变量，不要在这里改写死值。
+
+   来源：Uiverse.io（叠卡 by unknown / 涂鸦名片 by unknown），站长指定为默认预设。
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   一、叠卡 cards —— 产品/文章卡的 stack 预设
+   原文 .cards / .card.one|two|three / .cardDetails / .cardDetailsHaeder /
+   .cardDetailsButton，逐条照搬。
+   原文用 top:-120px; left:-150px 这类负偏移把三张卡叠在容器左上方，直接放进气泡会
+   跑出可视区，所以外面套一个 .acs-stack-stage 给出 padding 与高度。
+   -------------------------------------------------------------------------- */
+
+/* 原文这三张卡是 254×190、用 -150/-125/-100 的负偏移叠在容器左上方，为的是铺在页面上，
+ * 不是塞进 396px 的对话面板。为了"照搬"又能装下：
+ *   · 舞台给出 padding，把负偏移推回可视区（内容盒 326×262）；
+ *   · 整体用 transform: scale() 缩到面板宽度，一个声明值都不用改；
+ *   · transform 不改布局盒，所以用负 margin 把视觉缩掉的空间收回来。
+ * 旋转 -8deg 会让卡片左下/右上探出内容盒，padding 里已经留了余量。 */
+.acs-stack-stage {
+    --acs-stack-w: 326px;
+    --acs-stack-h: 262px;
+    --acs-stack-k: .84;
+    position: relative;
+    width: var(--acs-stack-w);
+    height: var(--acs-stack-h);
+    padding: 124px 0 0 154px;
+    transform: scale(var(--acs-stack-k));
+    transform-origin: top left;
+    margin:
+        2px
+        calc(var(--acs-stack-w) * var(--acs-stack-k) - var(--acs-stack-w))
+        calc(6px + var(--acs-stack-h) * var(--acs-stack-k) - var(--acs-stack-h))
+        0;
+    overflow: visible;
+}
+
+/* 窄面板再缩一档，320px 屏也不会横向溢出 */
+@media (max-width: 420px) {
+    .acs-stack-stage { --acs-stack-k: .72; }
+}
+
+.acs-cards {
+    position: relative;
+}
+
+.acs-card-stack {
+    z-index: 1;
+    position: absolute;
+    width: 254px;
+    height: 190px;
+    border-radius: 10px;
+    transition: all .5s ease-out;
+    overflow: hidden;
+    transform: translateX(0px) translateY(0px) perspective(905px) rotateX(0deg) rotateY(0deg) rotateZ(-8deg);
+    text-decoration: none;
+}
+
+.acs-card-stack.acs-one {
+    top: -120px;
+    left: -150px;
+    background: linear-gradient(180deg, #FF0055 0%, #000066 100%);
+}
+
+.acs-card-stack.acs-two {
+    top: -95px;
+    left: -125px;
+    background: linear-gradient(180deg, #fa00ff 0%, #01f998 99%);
+}
+
+.acs-card-stack.acs-three {
+    top: -70px;
+    left: -100px;
+    background: linear-gradient(180deg, #c0f901 0%, #fa00ff 100%);
+}
+
+.acs-card-stack:hover,
+.acs-card-stack:focus-visible {
+    z-index: 4;
+    transform: perspective(1000px) rotateX(0deg) rotateY(0deg) rotateZ(0deg) !important;
+    transition: all .5s ease-out;
+}
+
+.acs-cardDetails {
+    width: 55%;
+    height: 100%;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: flex-end;
+    background: rgba(0, 0, 0, 0.8);
+    transition: .5s;
+    transform-origin: left;
+    transform: perspective(2000px) rotateY(-90deg);
+}
+
+.acs-card-stack:hover .acs-cardDetails,
+.acs-card-stack:focus-visible .acs-cardDetails {
+    transform: perspective(2000px) rotateY(0deg);
+}
+
+.acs-cardDetailsHaeder {
+    font-weight: 600;
+    color: #edb899;
+}
+
+.acs-cardDetailsButton {
+    padding: 3px 6px;
+    border-radius: 25px;
+    background-color: #edb899;
+    color: #000;
+    font-weight: 600;
+}
+
+/* 照搬的原文没有考虑长标题与价格，这里只补「不破坏视觉」的最小约束 */
+.acs-cardDetailsHaeder {
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    font-size: 13px;
+    line-height: 1.4;
+    text-align: right;
+}
+
+.acs-stack-price {
+    margin-top: 6px;
+    color: #ffffff;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .02em;
+}
+
+/* ACS_MARKER_PRESET_2 */
+
+/* --------------------------------------------------------------------------
+   二、涂鸦名片 card —— 站长名片的 doodle 预设
+   原文 .card / .doodle / .card-photo / .card-title / .card-socials 及全部
+   @keyframes，逐条照搬。原文 font-size:16px 起算 em，这里保持不动。
+   -------------------------------------------------------------------------- */
+
+.acs-doodle-card {
+    /* Cute Doodle Palette */
+    --bg-color: #fdfbf7;
+    --ink-color: #2c2c2c;
+    --paper-line: #e6e0d4;
+    --tape-color: rgba(255, 221, 161, 0.85);
+    --accent-coral: #ff8ba7;
+    --accent-mint: #c6e377;
+    --accent-lavender: #c0bbfe;
+    --accent-yellow: #ffdf6c;
+
+    font-size: 16px;
+    position: relative;
+    width: 17em;
+    background:
+        linear-gradient(var(--bg-color) 1.5em, transparent 1.5em) 0 0 / 100% 1.6em,
+        linear-gradient(var(--paper-line) 0.08em, transparent 0.08em) 0 1.5em / 100% 1.6em var(--bg-color);
+    border: 0.25em solid var(--ink-color);
+    /* Hand-drawn sketchy border radius */
+    border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
+    box-shadow:
+        0.5em 0.5em 0 var(--ink-color),
+        inset 0 0 1.2em rgba(0, 0, 0, 0.03);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 3em 1.5em 2em;
+    transition:
+        transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275),
+        box-shadow 0.4s ease,
+        border-radius 0.4s ease;
+    animation: acsFloatCard 6s ease-in-out infinite;
+    z-index: 1;
+}
+
+/* Paper Tape Corner */
+.acs-doodle-card::before {
+    content: "";
+    position: absolute;
+    top: -0.7em;
+    left: 50%;
+    transform: translateX(-50%) rotate(-4deg);
+    width: 5em;
+    height: 1.4em;
+    background: var(--tape-color);
+    border: 0.1em solid rgba(0, 0, 0, 0.1);
+    box-shadow: 0.1em 0.1em 0.2em rgba(0, 0, 0, 0.1);
+    border-radius: 2px 4px 2px 5px;
+    z-index: 10;
+    animation: acsTapeFlutter 4s infinite alternate ease-in-out;
+}
+
+/* Hover Dynamics */
+.acs-doodle-card:hover {
+    transform: translateY(-0.8em) rotate(1deg);
+    box-shadow:
+        0.7em 0.9em 0 var(--ink-color),
+        inset 0 0 1.2em rgba(0, 0, 0, 0.03);
+    border-radius: 15px 255px 15px 225px / 255px 15px 225px 15px;
+}
+
+/* --- DOODLE DECORATIONS --- */
+.acs-doodle {
+    position: absolute;
+    fill: none;
+    stroke: var(--ink-color);
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    z-index: 0;
+}
+.acs-doodle.acs-star {
+    width: 1.8em;
+    height: 1.8em;
+    top: 1.5em;
+    right: 1.5em;
+    fill: var(--accent-yellow);
+    animation: acsPulseSparkle 3s infinite alternate ease-in-out;
+}
+.acs-doodle.acs-sparkle {
+    width: 1.5em;
+    height: 1.5em;
+    top: 4em;
+    left: 1.5em;
+    fill: var(--accent-mint);
+    animation: acsPulseSparkle 2.5s infinite alternate-reverse ease-in-out;
+}
+.acs-doodle.acs-swirl {
+    width: 2.5em;
+    height: 2.5em;
+    bottom: 2em;
+    right: 1em;
+    stroke: var(--accent-lavender);
+    stroke-width: 6;
+    opacity: 0.6;
+    animation: acsRotateDoodle 15s linear infinite;
+}
+
+/* ACS_MARKER_PRESET_3 */
+
+/* --- AVATAR / PHOTO --- */
+.acs-doodle-photo {
+    width: 6.5em;
+    height: 6.5em;
+    position: relative;
+    margin-bottom: 1.2em;
+    background:
+        /* Spiky Hair */
+        radial-gradient(circle at 25% 10%, var(--accent-lavender) 15%, transparent 16%),
+        radial-gradient(circle at 50% 5%, var(--accent-lavender) 18%, transparent 19%),
+        radial-gradient(circle at 75% 10%, var(--accent-lavender) 15%, transparent 16%),
+        /* Hair Base */
+        radial-gradient(ellipse at 50% 20%, var(--accent-lavender) 45%, transparent 46%),
+        /* Skin Tone */ #ffdeb3;
+    border: 0.2em solid var(--ink-color);
+    border-radius: 40% 60% 55% 45% / 50% 45% 55% 50%;
+    box-shadow: 0.3em 0.3em 0 var(--accent-coral);
+    animation: acsAvatarBounce 4s ease-in-out infinite;
+    overflow: hidden;
+    z-index: 2;
+}
+
+/* Face Details (Eyes & Blush) */
+.acs-doodle-photo::before {
+    content: "";
+    position: absolute;
+    width: 0.55em;
+    height: 0.55em;
+    background: var(--ink-color);
+    border-radius: 50%;
+    top: 3.2em;
+    left: 1.8em;
+    box-shadow:
+        2.3em 0 0 var(--ink-color),
+        -0.4em 0.9em 0.3em rgba(255, 139, 167, 0.8),
+        2.7em 0.9em 0.3em rgba(255, 139, 167, 0.8);
+    animation: acsAvatarBlink 5s infinite;
+    transform-origin: center;
+}
+
+/* Face Details (Smile) */
+.acs-doodle-photo::after {
+    content: "";
+    position: absolute;
+    width: 1.4em;
+    height: 1.2em;
+    border: 0.2em solid transparent;
+    border-bottom-color: var(--ink-color);
+    border-radius: 50%;
+    top: 2.2em;
+    left: 2.35em;
+    animation: acsSmileMove 3s ease-in-out infinite alternate;
+}
+
+/* 站长上传了真实头像时，用它盖掉涂鸦脸，但保留手绘边框与投影 */
+.acs-doodle-photo.has-image { background: #ffdeb3; }
+.acs-doodle-photo.has-image::before,
+.acs-doodle-photo.has-image::after { content: none; }
+.acs-doodle-photo > img { width: 100%; height: 100%; object-fit: cover; }
+
+/* --- TYPOGRAPHY --- */
+.acs-doodle-title {
+    text-align: center;
+    color: var(--ink-color);
+    font-size: 1.3em;
+    font-weight: 900;
+    font-family: "Comic Sans MS", "Chalkboard SE", "Marker Felt", sans-serif;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.5em;
+    text-shadow: 0.08em 0.08em 0 var(--accent-lavender);
+    z-index: 2;
+}
+
+.acs-doodle-card:hover .acs-doodle-title {
+    animation: acsTitleWobble 0.6s ease-in-out infinite alternate;
+}
+
+/* Role Badge */
+.acs-doodle-title span {
+    display: inline-block;
+    font-size: 0.55em;
+    color: var(--ink-color);
+    background: var(--accent-mint);
+    padding: 0.4em 1em;
+    border: 0.15em solid var(--ink-color);
+    border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
+    margin-top: 0.8em;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    box-shadow: 0.2em 0.2em 0 var(--ink-color);
+    animation: acsBadgeFloat 3s ease-in-out infinite alternate;
+    text-shadow: none;
+}
+
+/* 原文没有简介行，站长名片需要一句话简介，样式跟着手账纸走 */
+.acs-doodle-bio {
+    margin: 0 0 0.2em;
+    color: var(--ink-color);
+    font-size: 0.72em;
+    line-height: 1.6;
+    text-align: center;
+    opacity: .85;
+    z-index: 2;
+}
+
+/* ACS_MARKER_PRESET_4 */
+
+/* --- SOCIAL BUTTONS --- */
+.acs-doodle-socials {
+    display: flex;
+    gap: 1em;
+    height: 0;
+    opacity: 0;
+    margin-top: 0;
+    overflow: hidden;
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    z-index: 2;
+}
+
+.acs-doodle-card:hover .acs-doodle-socials,
+.acs-doodle-card:focus-within .acs-doodle-socials {
+    height: 3em;
+    opacity: 1;
+    margin-top: 1.5em;
+    overflow: visible;
+}
+
+.acs-doodle-btn {
+    width: 2.8em;
+    height: 2.8em;
+    border: 0.15em solid var(--ink-color);
+    background: #fff;
+    border-radius: 50% 40% 60% 40% / 40% 60% 40% 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0.2em 0.2em 0 var(--ink-color);
+    transition: all 0.2s ease;
+    text-decoration: none;
+    padding: 0;
+}
+
+.acs-doodle-btn svg,
+.acs-doodle-btn i {
+    width: 1.4em;
+    height: 1.4em;
+    fill: var(--ink-color);
+    color: var(--ink-color);
+    font-size: 1.1em;
+    line-height: 1;
+    transition: transform 0.2s ease;
+}
+
+/* Interactive Button States —— 原文按平台各给一色，这里按平台名沿用同一套点缀色 */
+.acs-doodle-btn.acs-net-facebook:hover,
+.acs-doodle-btn.acs-net-linkedin:hover,
+.acs-doodle-btn.acs-net-telegram:hover { background: var(--accent-lavender); }
+.acs-doodle-btn.acs-net-github:hover,
+.acs-doodle-btn.acs-net-x:hover,
+.acs-doodle-btn.acs-net-instagram:hover { background: var(--accent-coral); }
+.acs-doodle-btn.acs-net-wechat:hover,
+.acs-doodle-btn.acs-net-whatsapp:hover,
+.acs-doodle-btn.acs-net-phone:hover { background: var(--accent-mint); }
+.acs-doodle-btn.acs-net-email:hover,
+.acs-doodle-btn.acs-net-website:hover,
+.acs-doodle-btn.acs-net-youtube:hover,
+.acs-doodle-btn.acs-net-tiktok:hover { background: var(--accent-yellow); }
+
+.acs-doodle-btn:hover {
+    transform: translateY(-0.3em);
+    animation: acsBtnWiggle 0.6s ease-in-out infinite;
+}
+
+.acs-doodle-btn:focus-visible {
+    outline: 0.2em dashed var(--accent-coral);
+    outline-offset: 0.3em;
+    transform: translateY(-0.3em);
+}
+
+.acs-doodle-btn:active {
+    transform: translate(0.1em, 0.1em);
+    box-shadow: 0.05em 0.05em 0 var(--ink-color);
+    animation: none;
+}
+
+/* --- ANIMATIONS KEYFRAMES --- */
+@keyframes acsFloatCard {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-0.4em); }
+}
+@keyframes acsTapeFlutter {
+    0% { transform: translateX(-50%) rotate(-4deg) scale(1); }
+    100% { transform: translateX(-50%) rotate(-2deg) scale(1.02); }
+}
+@keyframes acsPulseSparkle {
+    0% { transform: scale(0.8); opacity: 0.6; }
+    100% { transform: scale(1.1); opacity: 1; }
+}
+@keyframes acsRotateDoodle {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+@keyframes acsAvatarBounce {
+    0%, 100% { transform: translateY(0) scale(1); border-radius: 40% 60% 55% 45% / 50% 45% 55% 50%; }
+    50% { transform: translateY(-0.3em) scale(1.02); border-radius: 45% 55% 50% 50% / 45% 50% 50% 55%; }
+}
+@keyframes acsAvatarBlink {
+    0%, 4%, 10%, 100% { transform: scaleY(1); }
+    5%, 8% { transform: scaleY(0.1); }
+}
+@keyframes acsSmileMove {
+    0% { transform: translateY(0) scaleX(1); }
+    100% { transform: translateY(-0.1em) scaleX(1.1); }
+}
+@keyframes acsTitleWobble {
+    0% { transform: rotate(-2deg) scale(1.02); }
+    100% { transform: rotate(2deg) scale(1.02); }
+}
+@keyframes acsBadgeFloat {
+    0% { transform: translateY(0) rotate(-1deg); }
+    100% { transform: translateY(-0.2em) rotate(1deg); }
+}
+@keyframes acsBtnWiggle {
+    0%, 100% { transform: translateY(-0.3em) rotate(0deg); }
+    25% { transform: translateY(-0.3em) rotate(-8deg); }
+    75% { transform: translateY(-0.3em) rotate(8deg); }
+}
+
+/* 名片在 388px 宽的窗口里要缩一档才不顶边（原文按 17em 固定宽） */
+.acs-doodle-stage { display: flex; justify-content: center; padding: 4px 0 10px; }
+@media (max-width: 640px) {
+    .acs-doodle-card { font-size: 14px; }
+}
+
+/* 尊重系统的减少动效偏好：这三段设计动画很多，必须能一键关掉 */
+@media (prefers-reduced-motion: reduce) {
+    .acs-doodle-card,
+    .acs-doodle-card::before,
+    .acs-doodle,
+    .acs-doodle-photo,
+    .acs-doodle-photo::before,
+    .acs-doodle-photo::after,
+    .acs-doodle-title,
+    .acs-doodle-title span,
+    .acs-doodle-btn,
+    .acs-card-stack,
+    .acs-cardDetails {
+        animation: none !important;
+        transition-duration: .001ms !important;
+    }
+}

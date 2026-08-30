@@ -24,7 +24,7 @@ $assert(is_array($manifest), 'plugin.json 必须是合法 JSON');
 $manifest = is_array($manifest) ? $manifest : [];
 $assert((string)($manifest['slug'] ?? '') === 'ai-customer-service', 'slug 必须与插件目录一致');
 $assert((string)($manifest['name'] ?? '') === 'AI客服', '市场名称必须是 AI客服');
-$assert((string)($manifest['version'] ?? '') === '1.2.0', '版本号应为 1.2.0');
+$assert((string)($manifest['version'] ?? '') === '1.2.1', '版本号应为 1.2.1');
 
 // ------------------------------------------------------------------ 声明式设置
 $sections = is_array($manifest['settings']['sections'] ?? null) ? $manifest['settings']['sections'] : [];
@@ -128,6 +128,7 @@ $adminJs = $read('assets/admin.js');
 $adminCss = $read('assets/admin.css');
 $widgetCss = $read('assets/customer-service.css');
 $widgetJs = $read('assets/customer-service.js');
+$presetCss = $read('assets/preset-cards.css');
 $readme = $read('README.md');
 
 foreach ($expectedPages as $page) {
@@ -201,11 +202,76 @@ $assert(preg_match('/\.acs-teaser\s*\{[^}]*width:\s*max-content/s', $widgetCss) 
     '.acs-teaser 必须显式给宽度（回归：只写 right: calc(100% + N) 会塌成一列单字）');
 $assert(str_contains($widgetCss, '.acs-panel[hidden]') && str_contains($widgetCss, 'display: none !important'),
     '面板必须有 [hidden] 的 display:none 兜底，否则加载即展开且关不掉');
-$assert(str_contains($widgetCss, '.acs-widget--bare { --acs-size: 0px; }'),
+// 断行为不断字面量：只要 .acs-widget--bare 把浮标尺寸（以及它带来的间距）归零就算过，
+// 不关心声明里还顺手写了什么。之前写死整行字符串，改一处格式就误报。
+$assert(preg_match('/\.acs-widget--bare\s*\{[^}]*--acs-size:\s*0(?:px)?\s*;/', $widgetCss) === 1,
     '没有浮标时必须把浮标高度视作 0，否则面板凭空悬空（1.1.0 的 acs-widget--bare 是个没人用的死类）');
 $assert(str_contains($widgetJs, 'panel.hidden = !state.open'), '开关状态必须落到 hidden 属性');
 $assert(str_contains($widgetCss, 'var(--acs-text)') && str_contains($widgetCss, 'var(--acs-muted)'),
     '正文与次要文字必须走可配置变量');
+
+/* 面板被压塌的回归。
+ * 1.2.0 之前面板用 grid-template-rows 按「位置」分配行，而飘带 / 人工入口 / AI 标识
+ * 都是可选节点：少一个，聊天区就从 1fr 那行掉到 auto 行上，被压成内容高度，
+ * 卡片被腰斩、快捷问题压在产品卡上面。改成 flex 后与子节点数量无关。 */
+$assert(preg_match('/\.acs-panel\s*\{[^}]*display:\s*flex/s', $widgetCss) === 1,
+    '.acs-panel 必须用 flex：grid 的定位行会随可选节点出现/消失整体错位');
+$assert(preg_match('/\.acs-panel\s*>\s*\.acs-chat\s*\{[^}]*min-height:\s*0/s', $widgetCss) === 1,
+    '聊天区必须 flex:1 + min-height:0，否则内容一多就把面板顶破而不是内部滚动');
+$assert(preg_match('/\.acs-chat\s*\{[^}]*overflow-x:\s*hidden/s', $widgetCss) === 1,
+    '聊天区必须显式关掉横轴溢出（只设 overflow-y 时另一轴会计算成 auto，带旋转的叠卡会被裁边）');
+
+/* 「新标记 + 旧样式」的回归：1.2.0 第一版换了整套 DOM 却忘了同步前台 CSS，
+ * 契约测试全绿、页面全花。这里把 JS/PHP 实际输出的类名与 CSS 规则做交叉核对。 */
+$emitted = [];
+foreach ([$widgetJs, $service] as $source) {
+    foreach ([
+        "/el\('[a-z]+',\s*'([^']+)'/",
+        "/className = '([^']+)'/",
+        "/classList\.(?:add|toggle)\('([^']+)'/",
+        '/class="([^"]*acs-[^"]*)"/',
+    ] as $pattern) {
+        if (!preg_match_all($pattern, $source, $matches)) continue;
+        foreach ($matches[count($matches) - 1] as $blob) {
+            foreach (preg_split('/\s+/', $blob) ?: [] as $name) {
+                if (preg_match('/^acs-[a-zA-Z0-9-]+$/', $name)) $emitted[$name] = true;
+            }
+        }
+    }
+}
+$styles = $widgetCss . $presetCss;
+$orphans = [];
+foreach (array_keys($emitted) as $name) {
+    // 纯 JS 钩子类不需要样式，它们靠同节点上的通用类取观感
+    if (in_array($name, ['acs-close', 'acs-restart'], true)) continue;
+    if (!str_contains($styles, '.' . $name)) $orphans[] = $name;
+}
+$assert($emitted !== [], '类名提取失败，检查测试自身的正则');
+$assert($orphans === [], '这些类名前台会输出但没有任何 CSS 规则：' . implode('、', array_slice($orphans, 0, 8)));
+
+/* 站长指定「原样照搬」的三段设计稿：留住签名值，防止后人当成魔法数字优化掉。 */
+foreach ([
+    'perspective(905px)' => '叠卡的 905px 透视',
+    'rotateZ(-8deg)' => '叠卡的 -8deg 倾角',
+    'linear-gradient(180deg, #FF0055 0%, #000066 100%)' => '叠卡第一张的渐变',
+    'perspective(2000px) rotateY(-90deg)' => '叠卡详情面的翻转',
+    '255px 15px 225px 15px / 15px 225px 15px 255px' => '涂鸦名片的手绘圆角',
+    '--accent-lavender: #c0bbfe' => '涂鸦名片的薰衣草点缀色',
+    'acsAvatarBlink' => '涂鸦名片的眨眼动画',
+] as $needle => $what) {
+    $assert(str_contains($presetCss, $needle), '照搬的设计稿被改动了：缺少' . $what);
+}
+$assert(str_contains($widgetJs, 'renderStackCard') && str_contains($widgetJs, 'renderDoodleCard'),
+    '叠卡与涂鸦名片必须各有独立渲染器，输出与照搬样式同形的 DOM');
+foreach (['acs-file-1', 'acs-folder-front-wrapper', 'acs-folder-label', 'acs-file-tag', 'acs-counter-number'] as $folderClass)
+{
+    $assert(str_contains($adminCss, '.' . $folderClass), '后台资料柜缺少照搬的文件夹卡类：' . $folderClass);
+}
+// 五张纸的类名是拼出来的（'acs-file-' + i），所以只核对前缀与其余静态类名
+$assert(str_contains($adminJs, "'acs-file acs-file-'"), '资料柜的五张纸必须输出 acs-file-1..5');
+foreach (['acs-folder-front-wrapper', 'acs-folder-label', 'acs-file-tag', 'acs-counter-number', 'acs-status-dot', 'acs-search-input'] as $folderClass) {
+    $assert(str_contains($adminJs, $folderClass), '资料柜 DOM 没有输出：' . $folderClass);
+}
 
 // 约束与事件
 $assert(str_contains($guards, 'function promptSection(') && str_contains($guards, 'function screenReply('),
