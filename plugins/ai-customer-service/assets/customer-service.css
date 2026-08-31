@@ -58,6 +58,8 @@
     --acs-sunken: color-mix(in srgb, var(--acs-text) 4%, transparent);
     --acs-gap: 4px;
     --acs-pad: 14px;
+    /* 多渠道展开里那颗圆形图标的直径：跟着浮标尺寸缩放，但不小于可点面积下限 */
+    --acs-chip: max(32px, calc(var(--acs-size) * .62));
     /* 默认不打阴影：靠 1px 描边分层。需要投影的站点在"弹窗投影强度"里自己开。 */
     --acs-shadow: none;
 
@@ -278,6 +280,120 @@
 
 /* 不渲染浮标时（show_launcher=false），面板不该再为浮标留高度 */
 .acs-widget--bare { --acs-size: 0px; --acs-panel-gap: 0px; }
+
+/* ------------------------------------------------------------------ 浮标多渠道展开
+ * Chaty 那类插件的核心形态：浮标旁边直接摊开微信 / WhatsApp / 电话，
+ * 想直接联系的访客不必先跟机器人说一句话。条目来自"资料 → 负责人社媒"，
+ * 只维护一处。与面板互斥（打开面板即收起），所以可以共用浮标上方那片空间。 */
+
+.acs-channels-toggle {
+    position: absolute;
+    bottom: calc(var(--acs-size) + 8px);
+    display: grid;
+    place-items: center;
+    width: var(--acs-chip);
+    height: var(--acs-chip);
+    padding: 0;
+    border: 1px solid var(--acs-line);
+    border-radius: 999px;
+    background: var(--acs-surface);
+    color: var(--acs-text);
+    font: inherit;
+    box-shadow: var(--acs-shadow);
+    cursor: pointer;
+    translate: var(--acs-launcher-dx) var(--acs-launcher-dy);
+    transition: transform .16s ease, background .16s ease;
+}
+.acs-widget--right .acs-channels-toggle { right: 0; }
+.acs-widget--left .acs-channels-toggle { left: 0; }
+.acs-channels-toggle:hover { background: var(--acs-hover); transform: scale(1.06); }
+.acs-channels-toggle:focus-visible { outline: 2px solid var(--acs-accent); outline-offset: 2px; }
+.acs-channels-toggle.is-open { transform: rotate(90deg); }
+.acs-channels-icon { font-size: calc(var(--acs-chip) * .42); line-height: 1; }
+
+.acs-channels {
+    position: absolute;
+    bottom: calc(var(--acs-size) + var(--acs-chip) + 16px);
+    display: flex;
+    gap: 8px;
+    translate: var(--acs-launcher-dx) var(--acs-launcher-dy);
+    animation: acs-channels-in .18s ease-out;
+}
+/* 面板同款兜底：display:flex 会盖掉 hidden 属性的 UA 样式，不压回去就是加载即展开 */
+.acs-widget .acs-channels[hidden],
+#ai-customer-service-widget .acs-channels[hidden] { display: none !important; }
+@keyframes acs-channels-in { from { opacity: 0; translate: var(--acs-launcher-dx) calc(var(--acs-launcher-dy) + 8px); } }
+.acs-widget--right .acs-channels { right: 0; }
+.acs-widget--left .acs-channels { left: 0; }
+.acs-widget[data-acs-open="true"] .acs-channels,
+.acs-widget[data-acs-open="true"] .acs-channels-toggle { display: none !important; }
+
+/* fan：一列圆形图标，从按钮往上长。column-reverse 让第一个渠道贴着按钮。 */
+.acs-channels--fan {
+    flex-direction: column-reverse;
+    align-items: flex-end;
+}
+.acs-widget--left .acs-channels--fan { align-items: flex-start; }
+.acs-channels--fan .acs-channel {
+    width: var(--acs-chip);
+    height: var(--acs-chip);
+    border-radius: 999px;
+    padding: 0;
+}
+.acs-channels--fan .acs-channel-name { display: none; }
+
+/* list：一块带标题的卡片，图标配文字。渠道多、名字需要写清楚时用这套。 */
+.acs-channels--list {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+    width: max-content;
+    max-width: min(240px, calc(100vw - 88px));
+    padding: 8px;
+    border: 1px solid var(--acs-line);
+    border-radius: 12px;
+    background: var(--acs-surface);
+    box-shadow: var(--acs-shadow);
+}
+.acs-channels-title {
+    padding: 2px 8px 6px;
+    color: var(--acs-muted);
+    font-size: calc(var(--acs-font) * .78);
+}
+.acs-channels--list .acs-channel {
+    justify-content: flex-start;
+    gap: 9px;
+    padding: 7px 8px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    box-shadow: none;
+}
+.acs-channels--list .acs-channel:hover { background: var(--acs-hover); }
+
+.acs-channel {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    border: 1px solid var(--acs-line);
+    background: var(--acs-surface);
+    color: var(--acs-text);
+    font: inherit;
+    font-size: calc(var(--acs-font) * .9);
+    text-decoration: none;
+    box-shadow: var(--acs-shadow);
+    cursor: pointer;
+    transition: transform .16s ease, background .16s ease;
+}
+.acs-channel:hover { transform: translateY(-1px); background: var(--acs-hover); }
+.acs-channel:focus-visible { outline: 2px solid var(--acs-accent); outline-offset: 2px; }
+.acs-channel-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.acs-channel.acs-social-copied { color: var(--acs-accent); }
 
 /* ACS_MARKER_W3 */
 
@@ -525,6 +641,39 @@
     border-radius: 255px 14px 225px 14px / 14px 225px 14px 255px;
     background: transparent;
     box-shadow: 2px 2px 0 var(--acs-bot-text);
+}
+
+/* 时间戳。默认不开（"体验增强"里打开）：短会话里每条都挂个时间是纯噪音，
+ * 但跨了几十分钟回来的访客需要它才能分清哪句是刚才说的。 */
+.acs-message-time {
+    padding: 0 2px;
+    color: var(--acs-muted);
+    font-size: calc(var(--acs-font) * .72);
+    font-variant-numeric: tabular-nums;
+    line-height: 1.2;
+}
+
+/* 正文里的网址。textContent 落地后再切成 <a>，所以这里是真链接而不是被解释的 HTML。 */
+.acs-link {
+    color: inherit;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    overflow-wrap: anywhere;
+}
+.acs-message--assistant .acs-link { color: var(--acs-accent); }
+.acs-link:hover { text-decoration-thickness: 2px; }
+
+/* 发送失败的那条：留在原位并标红，配合输入框里被放回的原文重发 */
+.acs-message.is-failed .acs-message-bubble {
+    background: color-mix(in srgb, #ef4444 12%, var(--acs-surface));
+    color: var(--acs-text);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, #ef4444 42%, transparent);
+}
+.acs-message.is-failed .acs-message-stack::after {
+    content: "未发送";
+    padding: 0 2px;
+    color: #ef4444;
+    font-size: calc(var(--acs-font) * .72);
 }
 
 /* 入场动效 */
@@ -1060,17 +1209,21 @@
 /* ------------------------------------------------------------------ 移动端 */
 
 @media (max-width: 640px) {
-    #ai-customer-service-widget.acs-widget { bottom: var(--acs-mobile-y); }
-    #ai-customer-service-widget.acs-widget--right { right: var(--acs-mobile-x); }
-    #ai-customer-service-widget.acs-widget--left { left: var(--acs-mobile-x); }
+    /* env(safe-area-inset-*)：iPhone 底部的 home indicator 与 Safari 工具条会压住
+     * 浮标，横屏时刘海侧也会切掉一块。不加安全区，浮标在 iOS 上是"能看见但点不着"。
+     * 兜底值写 0px，老浏览器不认 env() 时整条 calc 才不会失效。 */
+    #ai-customer-service-widget.acs-widget { bottom: calc(var(--acs-mobile-y) + env(safe-area-inset-bottom, 0px)); }
+    #ai-customer-service-widget.acs-widget--right { right: calc(var(--acs-mobile-x) + env(safe-area-inset-right, 0px)); }
+    #ai-customer-service-widget.acs-widget--left { left: calc(var(--acs-mobile-x) + env(safe-area-inset-left, 0px)); }
     .acs-panel {
         /* 宽度必须扣掉「配置的边距 + 另一侧留 8px」。用固定的 100vw-24px 会在
          * mobile_offset_x 被调大时把面板顶出屏幕——那个值是后台可配的，不能假设。 */
         width: min(var(--acs-panel-width), calc(100vw - var(--acs-mobile-x) - 8px));
-        height: min(var(--acs-panel-height), calc(100dvh - var(--acs-size) - var(--acs-mobile-y) - 24px));
+        height: min(var(--acs-panel-height), calc(100dvh - var(--acs-size) - var(--acs-mobile-y) - env(safe-area-inset-bottom, 0px) - 24px));
     }
     .acs-widget--pill .acs-launcher-label { max-width: 132px; }
     .acs-teaser { max-width: min(210px, calc(100vw - 110px)); }
+    .acs-channels--list { max-width: min(240px, calc(100vw - var(--acs-mobile-x) - 56px)); }
     .acs-form-grid { grid-template-columns: minmax(0, 1fr); }
     .acs-card-items.is-grid { grid-template-columns: minmax(0, 1fr); }
 }

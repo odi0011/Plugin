@@ -24,7 +24,11 @@ $assert(is_array($manifest), 'plugin.json 必须是合法 JSON');
 $manifest = is_array($manifest) ? $manifest : [];
 $assert((string)($manifest['slug'] ?? '') === 'ai-customer-service', 'slug 必须与插件目录一致');
 $assert((string)($manifest['name'] ?? '') === 'AI客服', '市场名称必须是 AI客服');
-$assert((string)($manifest['version'] ?? '') === '1.2.2', '版本号应为 1.2.2');
+/* 版本号只有 plugin.json 这一处真源。这里只校验格式，跨文件一致性在"源码约定"里统一比对：
+ * 1.2.3 就是只改了这一行，PHP 常量 / 前台 JS / 五个 assets[].version 全留在 1.2.2，
+ * 于是浏览器拿的还是旧缓存。写死字面量的断言只会逼着每次发版再改一次测试，换成交叉核对。 */
+$version = (string)($manifest['version'] ?? '');
+$assert(preg_match('/^\d+\.\d+\.\d+$/', $version) === 1, '版本号必须是 x.y.z 形式，当前：' . $version);
 
 // ------------------------------------------------------------------ 声明式设置
 $sections = is_array($manifest['settings']['sections'] ?? null) ? $manifest['settings']['sections'] : [];
@@ -49,6 +53,7 @@ $assert($total <= 96, "字段数已到 {$total}，离核心上限 100 只剩 " .
 // 分页归属：这几个字段挪页会让后台逐页保存的范围出错
 $expectPage = [
     'enabled' => 'conversation', 'url_rules' => 'trigger', 'greeting_json' => 'trigger',
+    'experience_json' => 'trigger',
     'theme_json' => 'appearance', 'layout_json' => 'appearance', 'text_color' => 'appearance',
     'muted_color' => 'appearance', 'font_family' => 'appearance',
     'system_prompt' => 'ai', 'knowledge_json' => 'knowledge', 'knowledge_mode' => 'knowledge',
@@ -87,7 +92,7 @@ foreach ($fields as $key => $entry) {
     $assert($max * 3 <= 65535, $key . ' 的 max_length=' . $max . '，UTF-8 最坏 ' . ($max * 3) . ' 字节，会撑爆 settings.value(TEXT)');
 }
 $jsonKeys = ['theme_json', 'layout_json', 'greeting_json', 'knowledge_json', 'tools_json',
-    'cards_json', 'owner_json', 'guardrails_json', 'events_json', 'stickers_json'];
+    'cards_json', 'owner_json', 'guardrails_json', 'events_json', 'stickers_json', 'experience_json'];
 foreach ($jsonKeys as $key) {
     $assert(isset($fields[$key]), '缺少 JSON 型字段：' . $key);
     if (!isset($fields[$key])) continue;
@@ -136,6 +141,15 @@ foreach ($expectedPages as $page) {
     $assert(str_contains($service, "'{$page}' => ["), 'ADMIN_PAGES 缺少子页面：' . $page);
     $assert(str_contains($panels, "'{$page}' => ["), '后台面板分组缺少：' . $page);
 }
+
+/* 版本号跨文件一致性。1.2.3 的教训：只改 plugin.json 会让代码侧的常量、注入前台的
+ * version、以及五个 assets[].version 一起过期，浏览器继续用旧缓存，而测试全绿。 */
+$assert(str_contains($service, "public const VERSION = '" . $version . "';"),
+    "AiCustomerService::VERSION 必须与 plugin.json 的 {$version} 一致（版本号只在 plugin.json 写一处）");
+$assert(!preg_match("/\bversion: '\d+\.\d+\.\d+'/", $widgetJs),
+    '前台 JS 不得写死版本号，必须从注入配置读 config.version');
+$assert(str_contains($service, "'version' => self::VERSION"), '注入前台的配置必须带上版本号，供公开 API 回报');
+$assert(!preg_match('/\d+\.\d+\.\d+/', $plugin), 'plugin.php 不得写死版本号（含注释），一律读 AiCustomerService::VERSION');
 $assert(str_contains($plugin, "'/admin/ai-customer-service/{page}'"), '缺少子页面统一 {page} 路由');
 $assert(str_contains($plugin, "'/admin/ai-customer-service/x/{action}'"), '缺少后台异步动作路由');
 $assert(str_contains($plugin, "'/ai-customer-service/chat'"), '缺少访客同源聊天路由');
@@ -357,7 +371,11 @@ $assert(str_contains($presetBlock, "'" . (string)($themeDefault['preset'] ?? '')
 $assert(str_contains($adminJs, 'PANELS.customtools') && str_contains($adminJs, 'PANELS.cards')
     && str_contains($adminJs, 'PANELS.owner') && str_contains($adminJs, 'PANELS.guardrails')
     && str_contains($adminJs, 'PANELS.events') && str_contains($adminJs, 'PANELS.stickers')
-    && str_contains($adminJs, 'PANELS.greeting'), '缺少工具/卡片/名片/约束/事件/表情/问候面板');
+    && str_contains($adminJs, 'PANELS.greeting') && str_contains($adminJs, 'PANELS.experience'),
+    '缺少工具/卡片/名片/约束/事件/表情/问候/体验面板');
+// 后台给出的选项必须是 normalizeTheme() 真收的值，否则保存后被静默改回去，像是保存失败
+$assert(!str_contains($adminJs, "gradient: '渐变'"), '顶栏没有渐变档，后台不该提供这个选项');
+$assert(str_contains($service, "['solid', 'light'], 'light')"), '顶栏形态只有纯色与浅底两档');
 $assert(str_contains($adminJs, '.admin-sidebar-nav a'), 'admin.js 需要为左侧菜单补高亮');
 $assert(str_contains($adminSrc, 'Auth::requirePermission'), '异步动作必须各自重新校验权限');
 $assert(str_contains($adminSrc, 'Storage::put'), '表情包上传应复用核心 Storage 的白名单与消毒');

@@ -108,7 +108,7 @@
         theme_json: 'theme', layout_json: 'layout', greeting_json: 'greeting',
         knowledge_json: 'knowledge', tools_json: 'tools', cards_json: 'cards',
         owner_json: 'owner', guardrails_json: 'guardrails', events_json: 'events',
-        stickers_json: 'stickers'
+        stickers_json: 'stickers', experience_json: 'experience'
     };
     var jsonCache = {};
     function readJson(key, fallback) {
@@ -456,7 +456,9 @@
         }));
         grid.appendChild(segmented('theme_json', 'bubble_anim', '气泡动效', { none: '无', rise: '上浮', pop: '弹入', fade: '淡入' }));
         grid.appendChild(segmented('theme_json', 'typing', '打字指示', { dots: '三点', wave: '波浪', text: '文字' }));
-        grid.appendChild(segmented('theme_json', 'header_style', '顶栏', { solid: '纯色', gradient: '渐变', light: '浅底' }));
+        // 顶栏只有纯色与浅底两档：normalizeTheme() 只收这两个值，
+        // 曾经这里还列了"渐变"，选了保存后被静默改回纯色，像是保存失败。
+        grid.appendChild(segmented('theme_json', 'header_style', '顶栏', { solid: '纯色', light: '浅底' }));
         grid.appendChild(segmented('theme_json', 'quick_style', '快捷问题', { capsule: '胶囊', ghost: '幽灵', sketch: '手绘' }));
         grid.appendChild(segmented('theme_json', 'density', '密度', { cozy: '舒适', compact: '紧凑' }));
         themeHost.appendChild(grid);
@@ -627,6 +629,70 @@
             }
         }));
         host.appendChild(box);
+    };
+
+    /* ---- 体验增强：时间戳 / 接续会话 / 未读提醒 / 转化事件 / 浮标多渠道 ---- */
+    PANELS.experience = function (host) {
+        var exp = readJson('experience_json', {});
+        if (!exp.channels || typeof exp.channels !== 'object') {
+            exp.channels = { enabled: false, style: 'fan', title: '其他联系方式', max: 6 };
+        }
+        function save() {
+            jsonCache.experience_json = exp;
+            writeJson('experience_json');
+        }
+
+        var box = el('div', 'acs-a-sub');
+        box.appendChild(el('h3', '', '会话体验'));
+        box.appendChild(el('p', 'acs-a-sub-note', '这几项只改前台观感，不影响模型行为，也不改动上下文。'));
+        var toggles = el('div', 'acs-a-palette-row');
+        [
+            ['timestamps', '显示消息时间'],
+            ['resume', '刷新后接续会话'],
+            ['sound', '新回复提示音'],
+            ['unread_title', '标签页未读提醒'],
+            ['analytics', '上报转化事件']
+        ].forEach(function (pair) {
+            toggles.appendChild(switchField(pair[1], exp[pair[0]], function (checked) {
+                exp[pair[0]] = checked;
+                save();
+            }));
+        });
+        box.appendChild(toggles);
+        box.appendChild(el('p', 'acs-a-help', '接续会话：记录本来就存在服务端，打开后刷新页面不再是空窗口（换浏览器、或超过 6 小时仍然算新会话）。转化事件：只投给站点已经装好的 gtag / dataLayer，插件自己不加载任何统计脚本。'));
+        host.appendChild(box);
+
+        var chan = el('div', 'acs-a-sub');
+        chan.appendChild(el('h3', '', '浮标多渠道'));
+        chan.appendChild(el('p', 'acs-a-sub-note', '浮标上方多一颗按钮，展开就是微信 / WhatsApp / 电话——想直接联系的访客不用先跟机器人说话。条目取自「工具 → 站长名片」里的社媒，这里不重复维护一份。'));
+        var row = el('div', 'acs-a-palette-row');
+        row.appendChild(switchField('启用', exp.channels.enabled, function (checked) {
+            exp.channels.enabled = checked;
+            save();
+        }));
+        chan.appendChild(row);
+
+        var grid = el('div', 'acs-a-subgrid');
+        grid.appendChild(selectField('展开形态', exp.channels.style, { fan: '圆形图标竖排', list: '带文字的卡片' }, function (value) {
+            exp.channels.style = value;
+            save();
+        }));
+        grid.appendChild(textField('卡片标题', exp.channels.title, 40, function (value) {
+            exp.channels.title = value;
+            save();
+        }, '其他联系方式'));
+        grid.appendChild(numberField('最多显示几个', exp.channels.max, 1, 13, function (value) {
+            exp.channels.max = value;
+            save();
+        }));
+        chan.appendChild(grid);
+
+        var owner = readJson('owner_json', {});
+        var count = Array.isArray(owner.socials) ? owner.socials.length : 0;
+        chan.appendChild(el('p', 'acs-a-help', count > 0
+            ? ('「站长名片」里现有 ' + count + ' 个联系方式，展开时按上面的上限依次显示。')
+            : '「站长名片」里还没填社媒，这里开了也没有东西可展开。'));
+        host.appendChild(chan);
     };
 
     /* ACS_MARKER_JS_6 */
@@ -1817,6 +1883,11 @@
         show('.acs-ribbon', on('ribbon_enabled') && val('ribbon_text', '') !== '');
         show('.acs-teaser', on('teaser_enabled') && val('teaser_text', '') !== '' && pv.state === 'closed');
         show('.acs-handoff', val('handoff_url', '') !== '');
+        // 多渠道展开在前台要点一下才摊开；预览里面板关着时直接摊开给人看效果
+        var experience = readJson('experience_json', {});
+        var chan = (experience && experience.channels) || {};
+        show('[data-acs-channels]', !!chan.enabled && pv.state === 'closed');
+        show('[data-acs-channels-toggle]', !!chan.enabled && pv.state === 'closed');
         show('.acs-powered', on('show_powered_by'));
         show('.acs-avatar', on('show_avatar'));
         w.querySelectorAll('.acs-message-avatar').forEach(function (n) { n.hidden = !on('show_avatar'); });

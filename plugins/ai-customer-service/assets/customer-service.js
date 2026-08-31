@@ -23,12 +23,20 @@
     var counter = root.querySelector('[data-acs-counter]');
     var picker = root.querySelector('[data-acs-picker]');
     var feedback = root.querySelector('.acs-feedback');
+    var channels = root.querySelector('[data-acs-channels]');
+    var channelsToggle = root.querySelector('[data-acs-channels-toggle]');
     if (!panel || !chat || !quickReplies || !form || !input || !send || !feedback) return;
+
+    // 体验增强开关。缺字段一律当关，老版本的注入配置也不会炸。
+    var exp = (config.experience && typeof config.experience === 'object') ? config.experience : {};
 
     // show_launcher=false 时不渲染浮标，但面板仍然保留，供 window.AiCustomerService 打开。
     var state = {
         open: false, visible: false, greeted: false, busy: false,
-        userOpened: false, replied: false, conversationId: config.conversationId
+        userOpened: false, replied: false, conversationId: config.conversationId,
+        // dead: 设备不匹配时整个节点已被移除，公开 API 不能再往一棵脱离文档的树上操作
+        dead: false, nearBottom: true, unread: 0, lastFocus: null,
+        restored: false, restoring: false, opened: false
     };
     var AUTO_KEY = 'acs_auto_shown';
     var TEASER_KEY = 'acs_teaser_dismissed';
@@ -80,6 +88,68 @@
 
     /* ACS_MARKER_FJS_1 */
 
+    /* ---------------------------------------------------------------- 转化事件与未读提醒 */
+
+    /**
+     * 转化事件只投给站点已经装好的埋点：gtag（GA4）与 dataLayer（GTM）。
+     * 插件自己不加载任何统计脚本、也不往第三方发一个字节，所以关掉开关就是彻底没有。
+     */
+    function track(name, params) {
+        if (!exp.analytics) return;
+        var payload = params || {};
+        try {
+            if (typeof window.gtag === 'function') window.gtag('event', name, payload);
+            if (window.dataLayer && typeof window.dataLayer.push === 'function') {
+                var entry = { event: name };
+                Object.keys(payload).forEach(function (key) { entry[key] = payload[key]; });
+                window.dataLayer.push(entry);
+            }
+        } catch (error) { /* 埋点失败不能影响会话 */ }
+    }
+
+    var originalTitle = document.title;
+
+    function bumpTitle() {
+        if (!exp.unread_title || state.unread < 1) return;
+        document.title = '(' + state.unread + ') ' + originalTitle;
+    }
+    function restoreTitle() {
+        state.unread = 0;
+        if (document.title !== originalTitle) document.title = originalTitle;
+    }
+
+    /** 提示音用 WebAudio 现场合成，不为一声"叮"多下载一个音频文件。 */
+    function beep() {
+        if (!exp.sound) return;
+        try {
+            var Ctx = window.AudioContext || window.webkitAudioContext;
+            if (!Ctx) return;
+            var ctx = new Ctx();
+            var osc = ctx.createOscillator();
+            var gain = ctx.createGain();
+            var now = ctx.currentTime;
+            osc.type = 'sine';
+            osc.frequency.value = 880;
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            gain.gain.setValueAtTime(0.0001, now);
+            gain.gain.exponentialRampToValueAtTime(0.07, now + 0.02);
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.24);
+            osc.start(now);
+            osc.stop(now + 0.26);
+            osc.onended = function () { try { ctx.close(); } catch (error) { /* 已经关了 */ } };
+        } catch (error) { /* 自动播放被拦或没有 AudioContext：静音降级 */ }
+    }
+
+    /** 回复到达时的提醒：响一声，并在"访客没在看"时加角标 + 标签页计数。 */
+    function notifyReply() {
+        beep();
+        if (state.open && !document.hidden) return;
+        state.unread += 1;
+        if (launcher) launcher.classList.add('has-badge');
+        bumpTitle();
+    }
+
     /* ---------------------------------------------------------------- 显隐与自动动作 */
 
     function clearAttention() {
@@ -119,6 +189,7 @@
     }
 
     function setOpen(open) {
+        if (state.dead) return;
         if (!state.visible && open) reveal();
         state.open = !!open;
         panel.hidden = !state.open;
@@ -130,11 +201,25 @@
             launcher.classList.toggle('is-open', state.open);
         }
         cancelAutoOpen();
-        if (!state.open) return;
+        setChannels(false);
+        if (!state.open) {
+            // 关闭后把焦点还回打开它的那个控件，键盘用户不会掉到文档开头
+            var last = state.lastFocus;
+            state.lastFocus = null;
+            if (last && typeof last.focus === 'function' && document.contains(last)) last.focus();
+            return;
+        }
+        state.lastFocus = document.activeElement;
         clearAttention();
+        restoreTitle();
         dismissTeaser(false);
         showRibbon();
+        maybeRestore();
         ensureGreeting();
+        if (!state.opened) {
+            state.opened = true;
+            track('acs_open', {});
+        }
         window.setTimeout(function () { input.focus(); }, 0);
     }
 
@@ -217,15 +302,67 @@
         return { row: row, stack: stack };
     }
 
-    function scrollToEnd() {
-        chat.scrollTop = chat.scrollHeight;
+    /* 只有"本来就贴着底"时才跟着滚。访客往上翻旧消息时把视图拽回去是最恼人的一种打断。 */
+    var NEAR_BOTTOM_PX = 72;
+
+    function atBottom() {
+        return chat.scrollHeight - chat.scrollTop - chat.clientHeight <= NEAR_BOTTOM_PX;
+    }
+    function scrollToEnd(force) {
+        if (force || state.nearBottom) {
+            chat.scrollTop = chat.scrollHeight;
+            state.nearBottom = true;
+        }
     }
 
-    function appendMessage(role, content) {
+    function timeLabel(at) {
+        var date = at ? new Date(Number(at) * 1000) : new Date();
+        if (isNaN(date.getTime())) date = new Date();
+        var h = date.getHours();
+        var m = date.getMinutes();
+        return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m;
+    }
+    function stampTime(stack, at) {
+        if (!exp.timestamps) return;
+        stack.appendChild(el('div', 'acs-message-time', timeLabel(at)));
+    }
+
+    /* 正文里的网址变成可点链接。文本先经 el() 用 textContent 落地，这里只是把文本节点
+     * 切开再包一层 <a> —— 全程不碰 innerHTML，模型输出永远不当 HTML 解释。 */
+    var URL_RE = /https?:\/\/[^\s<>"'（）()【】]+/g;
+
+    function linkify(bubble, content) {
+        var text = String(content == null ? '' : content);
+        URL_RE.lastIndex = 0;
+        if (!URL_RE.test(text)) return;
+        URL_RE.lastIndex = 0;
+        var frag = document.createDocumentFragment();
+        var last = 0;
+        var match;
+        while ((match = URL_RE.exec(text)) !== null) {
+            var url = match[0].replace(/[.,;:!?，。！？、]+$/, '');
+            if (url === '') continue;
+            if (match.index > last) frag.appendChild(document.createTextNode(text.slice(last, match.index)));
+            var link = el('a', 'acs-link', url);
+            link.href = url;
+            link.target = '_blank';
+            link.rel = 'noopener nofollow ugc';
+            frag.appendChild(link);
+            last = match.index + url.length;
+        }
+        if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+        bubble.textContent = '';
+        bubble.appendChild(frag);
+    }
+
+    function appendMessage(role, content, at) {
         var entry = messageRow(role);
         // 一律 textContent：模型输出与站内标题都当不可信文本，不解释任何 HTML。
-        entry.stack.appendChild(el('div', 'acs-message-bubble', content));
-        scrollToEnd();
+        var bubble = el('div', 'acs-message-bubble', content);
+        entry.stack.appendChild(bubble);
+        linkify(bubble, content);
+        stampTime(entry.stack, at);
+        scrollToEnd(role === 'visitor');
         return entry;
     }
 
@@ -252,7 +389,8 @@
     }
 
     function ensureGreeting() {
-        if (state.greeted) return;
+        // 正在取回历史记录时先别铺欢迎语，否则等接口回来会出现两遍开场
+        if (state.greeted || state.restoring) return;
         state.greeted = true;
         if (config.welcomeMessage) appendMessage('assistant', config.welcomeMessage);
         renderQuickReplies();
@@ -380,6 +518,7 @@
             link.href = card.url;
             link.target = '_blank';
             link.rel = 'noopener';
+            link.addEventListener('click', function () { track('acs_handoff_click', {}); });
             wrap.appendChild(link);
         } else if (card.fallback) {
             wrap.appendChild(el('div', 'acs-form-card-note', card.fallback));
@@ -521,10 +660,17 @@
                 node.setAttribute('title', restore);
             }, 2400);
         };
+        // 复制可能被拒（非 HTTPS、无用户手势、权限策略）。之前失败也走 done()，
+        // 于是明明没复制上还提示"已复制"，访客粘出来是上一次的剪贴板内容。
+        var fail = function () {
+            node.setAttribute('title', value);
+            window.setTimeout(function () { node.setAttribute('title', restore); }, 4000);
+            showFeedback('浏览器不允许自动复制，请手动复制：' + value);
+        };
         if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(value).then(done, done);
+            navigator.clipboard.writeText(value).then(done, fail);
         } else {
-            done();
+            fail();
         }
     }
 
@@ -640,6 +786,7 @@
                 actions.remove();
                 var done = el('div', 'acs-form-status is-done', data.message || card.success || '已收到，我们会尽快联系您。');
                 wrap.appendChild(done);
+                track('acs_inquiry_submitted', {});
             }).catch(function (error) {
                 status.textContent = error.message;
                 status.className = 'acs-form-status is-error';
@@ -667,7 +814,9 @@
     }
     function setBusy(busy) {
         state.busy = busy;
-        input.disabled = busy;
+        // 刻意不 disable 输入框：等回复时访客往往正在把下一句打完，禁用会清掉输入法候选、
+        // 还会把焦点弹到页面开头。挡住重复提交只需要 disable 发送按钮（submit() 也有 busy 闸）。
+        input.setAttribute('aria-busy', busy ? 'true' : 'false');
         send.disabled = busy;
         quickReplies.querySelectorAll('button').forEach(function (button) { button.disabled = busy; });
     }
@@ -675,17 +824,28 @@
         feedback.textContent = message || '';
     }
 
+    /* 25 秒还没回来就当超时。模型侧最长 30 秒（CUSTOM_TIMEOUT），但浏览器这边如果不设
+     * 上限，遇到连接被中间设备挂住的情况会永远停在"正在输入"，访客只能刷新页面。 */
+    var TIMEOUT_MS = 25000;
+
     function request(message) {
         var body = new URLSearchParams();
         body.set('_csrf', config.csrf);
         body.set('conversation_id', state.conversationId);
         body.set('message', message);
-        return fetch(config.endpoint, {
+        var controller = window.AbortController ? new window.AbortController() : null;
+        var timer = null;
+        var options = {
             method: 'POST',
             credentials: 'same-origin',
             headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
             body: body
-        }).then(function (response) {
+        };
+        if (controller) {
+            options.signal = controller.signal;
+            timer = window.setTimeout(function () { controller.abort(); }, TIMEOUT_MS);
+        }
+        return fetch(config.endpoint, options).then(function (response) {
             return response.json().catch(function () { return {}; }).then(function (data) {
                 if (!response.ok || !data.ok) {
                     var error = new Error((data && (data.error || (data.data && data.data.message)))
@@ -695,6 +855,13 @@
                 }
                 return data.data || {};
             });
+        }, function (error) {
+            // 这一支只会是 fetch 本身失败：网络断了，或上面那个计时器 abort 了
+            throw new Error(error && error.name === 'AbortError'
+                ? '等待回复超时，消息还在输入框里，可以再发一次。'
+                : '网络似乎断开了，请检查连接后重发。');
+        }).finally(function () {
+            if (timer !== null) window.clearTimeout(timer);
         });
     }
 
@@ -706,6 +873,7 @@
     };
 
     function submit(rawMessage) {
+        if (state.dead) return;
         var message = String(rawMessage || '').trim();
         var max = Number(config.maxChars) || 2000;
         if (state.busy || message === '') return;
@@ -717,27 +885,48 @@
         cancelGreetings();
         showFeedback('');
         ensureGreeting();
-        appendMessage('visitor', message);
-        input.value = '';
-        resizeInput();
-        renderCounter();
+        var mine = appendMessage('visitor', message);
+        // 只有这条消息就是输入框里的内容时才清空。点快捷提问不该顺手删掉访客已经打了一半的话。
+        var typed = input.value;
+        var fromInput = typed.trim() === message;
+        if (fromInput) {
+            input.value = '';
+            resizeInput();
+            renderCounter();
+        }
         closePicker();
         setBusy(true);
+        track('acs_message_sent', { length: message.length });
 
         var typing = appendTyping();
         request(message).then(function (data) {
             typing.row.remove();
+            var reply = String(data.reply || config.unavailableMessage || '');
             var entry = messageRow('assistant');
             if (data.event && EVENT_LABEL[data.event]) appendToolChip(entry.stack, EVENT_LABEL[data.event]);
             if (Array.isArray(data.cards) && data.cards.length) {
                 appendToolChip(entry.stack, '已查站内数据 · ' + data.cards.length + ' 张卡片');
             }
-            entry.stack.appendChild(el('div', 'acs-message-bubble', String(data.reply || config.unavailableMessage || '')));
+            var bubble = el('div', 'acs-message-bubble', reply);
+            entry.stack.appendChild(bubble);
+            linkify(bubble, reply);
+            stampTime(entry.stack, data.at);
             renderCards(entry.stack, data.cards);
             scrollToEnd();
+            if (!state.nearBottom) showFeedback('客服已回复，往下滚动查看');
+            notifyReply();
+            if (data.event) track('acs_intent_' + data.event, {});
         }).catch(function (error) {
             typing.row.remove();
             showFeedback(error.message);
+            mine.row.classList.add('is-failed');
+            // 别把访客打的字吞掉：原样放回输入框，重发只要再点一下发送。
+            // 输入框里已经有新内容时不覆盖——那是访客正在打的下一句。
+            if (input.value === '') {
+                input.value = fromInput ? typed : message;
+                resizeInput();
+                renderCounter();
+            }
             // 后端在失败时也可能带回一张卡片（比如已经识别到转人工），别丢掉
             if (error.payload && Array.isArray(error.payload.cards) && error.payload.cards.length) {
                 var entry = messageRow('assistant');
@@ -746,6 +935,47 @@
         }).finally(function () {
             setBusy(false);
             input.focus();
+        });
+    }
+
+    /**
+     * 刷新页面后把本次会话的文字记录取回来重画。
+     *
+     * 上下文一直都存在服务端 session 里（每轮问答都要用），之前只是没人回传给浏览器，
+     * 于是访客一刷新就看到空窗口、以为客服把话忘了。只在第一次打开面板时取一次：
+     * 从不点开客服的访客不该为这个功能多付一次请求。卡片不存档，所以恢复的是纯文字。
+     */
+    function maybeRestore() {
+        if (state.restored) return;
+        state.restored = true;
+        if (!exp.resume) return;
+        state.restoring = true;
+        var body = new URLSearchParams();
+        body.set('_csrf', config.csrf);
+        body.set('conversation_id', state.conversationId);
+        body.set('action', 'history');
+        fetch(config.actionEndpoint, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            body: body
+        }).then(function (response) {
+            return response.json().catch(function () { return {}; });
+        }).then(function (data) {
+            var list = (data && data.ok && data.data && Array.isArray(data.data.messages)) ? data.data.messages : [];
+            if (!list.length || state.greeted) return;
+            state.greeted = true;
+            state.replied = true;
+            if (config.welcomeMessage) appendMessage('assistant', config.welcomeMessage);
+            list.forEach(function (item) {
+                if (!item || (item.role !== 'user' && item.role !== 'assistant')) return;
+                appendMessage(item.role === 'user' ? 'visitor' : 'assistant', String(item.content || ''), item.at);
+            });
+            renderQuickReplies();
+            scrollToEnd(true);
+        }).catch(function () { /* 取不回来就按新会话走，不打扰访客 */ }).finally(function () {
+            state.restoring = false;
+            if (state.open) ensureGreeting();
         });
     }
 
@@ -811,12 +1041,35 @@
         });
     }
 
+    /* ---------------------------------------------------------------- 浮标多渠道展开 */
+
+    /**
+     * 浮标旁边的"其他联系方式"。渠道条目由服务端从负责人社媒里取，前台只管开合：
+     * 想在微信里聊的访客不必先跟机器人说一句话才拿到二维码号。
+     */
+    function setChannels(open) {
+        if (!channels) return;
+        var next = !!open && !state.open;
+        channels.hidden = !next;
+        channels.classList.toggle('is-open', next);
+        if (channelsToggle) {
+            channelsToggle.setAttribute('aria-expanded', next ? 'true' : 'false');
+            channelsToggle.classList.toggle('is-open', next);
+        }
+        if (next) {
+            dismissTeaser(false);
+            track('acs_channels_open', {});
+        }
+    }
+
     /* ACS_MARKER_FJS_6 */
 
     /* ---------------------------------------------------------------- 触发规则与接线 */
 
     function activateVisibilityRules() {
         if (!allowedDevice()) {
+            // 节点整棵移除后，公开 API 再操作它就是往游离的 DOM 上写，标记成 dead 直接短路
+            state.dead = true;
             root.remove();
             return;
         }
@@ -859,6 +1112,25 @@
             setOpen(!state.open);
         });
     }
+    if (channelsToggle) {
+        channelsToggle.addEventListener('click', function (event) {
+            event.stopPropagation();
+            setChannels(channels ? channels.hidden : false);
+        });
+    }
+    if (channels) {
+        channels.querySelectorAll('[data-acs-copy]').forEach(function (node) {
+            node.addEventListener('click', function () {
+                copyValue(node.getAttribute('data-acs-copy') || '', node);
+                track('acs_channel_click', { network: node.getAttribute('data-acs-network') || '' });
+            });
+        });
+        channels.querySelectorAll('a[data-acs-network]').forEach(function (node) {
+            node.addEventListener('click', function () {
+                track('acs_channel_click', { network: node.getAttribute('data-acs-network') || '' });
+            });
+        });
+    }
     if (closeBtn) closeBtn.addEventListener('click', function () { setOpen(false); });
     if (restartBtn) {
         restartBtn.addEventListener('click', function () {
@@ -883,6 +1155,9 @@
                 quickReplies.innerHTML = '';
                 state.greeted = false;
                 state.replied = false;
+                // 刚清空的会话没有历史可恢复，别让下一次打开又把旧记录拉回来
+                state.restored = true;
+                state.nearBottom = true;
                 showFeedback('');
                 closePicker();
                 ensureGreeting();
@@ -932,8 +1207,42 @@
         event.preventDefault();
         submit(input.value);
     });
+    chat.addEventListener('scroll', function () {
+        state.nearBottom = atBottom();
+        // 自己滚回底部就算把"有新回复"这条提示看过了
+        if (state.nearBottom && feedback.textContent === '客服已回复，往下滚动查看') showFeedback('');
+    }, { passive: true });
+
+    // 回到这个标签页就把标题上的未读计数擦掉，别让 "(3) 站点名" 一直挂着
+    document.addEventListener('visibilitychange', function () {
+        if (!document.hidden && state.open) {
+            clearAttention();
+            restoreTitle();
+        }
+    });
+
+    /* 面板打开时把 Tab 圈在面板里：不然一个 Tab 就跳到页面正文，键盘用户很难再回来。 */
+    panel.addEventListener('keydown', function (event) {
+        if (event.key !== 'Tab' || !state.open) return;
+        var focusable = panel.querySelectorAll('a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])');
+        var list = Array.prototype.filter.call(focusable, function (node) {
+            return node.offsetWidth > 0 || node.offsetHeight > 0 || node === document.activeElement;
+        });
+        if (!list.length) return;
+        var first = list[0];
+        var last = list[list.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault();
+            last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
+        }
+    });
+
     document.addEventListener('keydown', function (event) {
         if (event.key !== 'Escape') return;
+        if (channels && !channels.hidden) { setChannels(false); return; }
         if (picker && !picker.hidden) { closePicker(); return; }
         if (state.open) setOpen(false);
     });
@@ -947,7 +1256,8 @@
             setOpen(true);
             submit(String(text || ''));
         },
-        version: '1.2.2'
+        // 版本号只有 plugin.json 一处真源，注入配置里带过来，别在这儿再抄一遍
+        version: String(config.version || '')
     };
 
     renderCounter();

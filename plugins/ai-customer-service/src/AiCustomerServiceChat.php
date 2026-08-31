@@ -66,8 +66,10 @@ final class AiCustomerServiceChat
             $cards[] = $outcome['card'];
         }
 
-        $history[] = ['role' => 'user', 'content' => $message];
-        $history[] = ['role' => 'assistant', 'content' => $assistant];
+        // 时间戳只落在会话存档里，不进 buildMessages() 的出站载荷（那边是显式重建的）。
+        $at = time();
+        $history[] = ['role' => 'user', 'content' => $message, 'at' => $at];
+        $history[] = ['role' => 'assistant', 'content' => $assistant, 'at' => $at];
         $conversation['messages'] = array_slice($history, -max(2, (int)$config['history_limit']));
         AiCustomerService::saveConversation($conversationId, $conversation);
 
@@ -78,6 +80,7 @@ final class AiCustomerServiceChat
             'event' => $event,
             'blocked' => $screened['blocked'],
             'remaining' => $rate,
+            'at' => $at,
         ]);
     }
 
@@ -347,7 +350,7 @@ final class AiCustomerServiceChat
 
     // ---------------------------------------------------------------- 访客动作
 
-    /** 询盘卡提交与重开会话。同样是同源 + CSRF 通道，不走 API token。 */
+    /** 询盘卡提交、重开会话、以及刷新后取回本次会话的文字记录。 */
     public static function dispatchAction(): void
     {
         $config = AiCustomerService::config();
@@ -356,17 +359,47 @@ final class AiCustomerServiceChat
         }
         $action = AiCustomerService::slugValue((string)($_POST['action'] ?? ''), 20);
         $conversationId = trim((string)($_POST['conversation_id'] ?? ''));
-        if (AiCustomerService::conversation($conversationId) === null) {
+        $conversation = AiCustomerService::conversation($conversationId);
+        if ($conversation === null) {
             self::respond(false, ['message' => '会话已过期，请刷新页面后重试'], 422, 'conversation_expired');
         }
 
         if ($action === 'reset') {
             self::respond(true, ['conversation_id' => AiCustomerService::newConversation()]);
         }
+        if ($action === 'history') {
+            self::respondHistory($config, $conversationId, (array)$conversation);
+        }
         if ($action !== 'inquiry') {
             self::respond(false, ['message' => '不支持的动作'], 422, 'invalid_action');
         }
         self::submitInquiry($config, $conversationId);
+    }
+
+    /**
+     * 刷新页面后把本次会话的文字记录还回去。
+     *
+     * 上下文本来就一直存在服务端 session 里（converse() 每轮都要用），之前只是没人把它
+     * 回传给浏览器，于是访客一刷新就看到一个空窗口、以为客服把话忘了。卡片刻意不存档：
+     * 那是查询结果的快照，存进 session 会让 8 个会话的体积失控，过一会儿也可能已经过期。
+     *
+     * @param array<string,mixed> $conversation
+     */
+    private static function respondHistory(array $config, string $conversationId, array $conversation): void
+    {
+        if (empty($config['experience']['resume'])) {
+            self::respond(true, ['conversation_id' => $conversationId, 'messages' => []]);
+        }
+        $limit = max(2, (int)$config['history_limit']);
+        $messages = [];
+        foreach (array_slice(is_array($conversation['messages'] ?? null) ? $conversation['messages'] : [], -$limit) as $item) {
+            if (!is_array($item)) continue;
+            $role = (string)($item['role'] ?? '');
+            $content = trim((string)($item['content'] ?? ''));
+            if ($content === '' || !in_array($role, ['user', 'assistant'], true)) continue;
+            $messages[] = ['role' => $role, 'content' => $content, 'at' => (int)($item['at'] ?? 0)];
+        }
+        self::respond(true, ['conversation_id' => $conversationId, 'messages' => $messages]);
     }
 
     private static function submitInquiry(array $config, string $conversationId): void

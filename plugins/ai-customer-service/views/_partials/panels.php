@@ -34,6 +34,7 @@ $groups = [
         ['自动动作', '自动展开、提醒动画与角标属于同一组"自动打扰"，可以整组只做一次。', ['show_launcher', 'initial_open', 'initial_open_delay', 'once_per_session', 'badge_enabled', 'attention_effect'], ''],
         ['主动招呼', '浮标旁的引流气泡、悬停提示，以及窗口里的飘带与定时问候。', ['tooltip_text', 'teaser_enabled', 'teaser_text', 'ribbon_enabled', 'ribbon_text'], 'greeting'],
         ['服务时段', '不在服务时段时整个挂件不渲染。', ['schedule_enabled', 'schedule_days', 'schedule_start', 'schedule_end'], ''],
+        ['体验增强', '时间戳、刷新后接续会话、未读提醒，以及浮标旁直接摊开联系方式。', [], 'experience'],
     ],
     'appearance' => [
         ['预设主题', '一键套一整套配色、圆角与气泡形态，之后仍可逐项微调。', [], 'presets'],

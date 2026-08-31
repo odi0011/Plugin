@@ -151,10 +151,11 @@ final class AiCustomerServiceCards
 
     /**
      * 社媒条目。微信号/电话不是链接，标成 copy 让前台渲染成"点击复制"而不是超链接。
+     * 除了社媒卡，浮标旁的多渠道展开也用这一份数据（同一套联系方式只维护一处）。
      *
      * @return list<array<string,mixed>>
      */
-    private static function socialItems(array $socials): array
+    public static function socialItems(array $socials): array
     {
         $out = [];
         foreach ($socials as $social) {

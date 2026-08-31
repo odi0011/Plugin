@@ -39,7 +39,7 @@ $this->startSection('content');
 $values = (array)($form['values'] ?? []);
 $fields = (array)($section['fields'] ?? []);
 $jsonKeys = ['theme_json', 'layout_json', 'greeting_json', 'knowledge_json', 'tools_json',
-    'cards_json', 'owner_json', 'guardrails_json', 'events_json', 'stickers_json'];
+    'cards_json', 'owner_json', 'guardrails_json', 'events_json', 'stickers_json', 'experience_json'];
 
 $saveKeys = [];
 foreach ($fields as $field) {

@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 /**
- * AI客服插件（1.2.0）。
+ * AI客服插件。版本号只在 plugin.json 里写一处，代码侧一律读 AiCustomerService::VERSION。
  *
  * 结构：
  * - 后台 8 个子页面（会话/触发/外观/AI/资料/工具/边界/输入），逐页保存；

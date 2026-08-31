@@ -16,7 +16,7 @@ declare(strict_types=1);
 final class AiCustomerService
 {
     public const SLUG = 'ai-customer-service';
-    public const VERSION = '1.2.2';
+    public const VERSION = '1.3.0';
 
     private const SESSION_KEY = '_ai_customer_service';
     private const CONVERSATION_TTL = 21600;
@@ -48,6 +48,7 @@ final class AiCustomerService
         'guardrails_json' => 'defaultGuardrails',
         'events_json' => 'defaultEvents',
         'stickers_json' => 'defaultStickers',
+        'experience_json' => 'defaultExperience',
     ];
 
     /** @var array<string,mixed>|null 单请求缓存：前台一次渲染只解析一次。 */
@@ -133,6 +134,7 @@ final class AiCustomerService
             'schedule_days' => self::scheduleDays((string)$get('schedule_days', '')),
             'schedule_start' => self::timeValue((string)$get('schedule_start', ''), '00:00'),
             'schedule_end' => self::timeValue((string)$get('schedule_end', ''), '23:59'),
+            'experience' => self::normalizeExperience(self::json($get('experience_json', ''), self::defaultExperience())),
     // ACS_MARKER_CONFIG2
             'theme' => self::normalizeTheme($theme),
             'layout' => self::normalizeLayout($layout),
@@ -380,6 +382,17 @@ final class AiCustomerService
             'emoji_set' => ['😀', '😄', '😊', '🙂', '😉', '👍', '🙏', '🎉', '❤️', '🔥', '✨', '💡', '📦', '🚚', '💰', '📞']];
     }
 
+    /**
+     * 体验增强的默认值。全部默认关闭（analytics 会往站点的统计里打事件、sound 会响，
+     * 这类"会被访客感知"的开关不适合装完就生效），只有 resume 默认开：会话上下文本来
+     * 就存在服务端 session 里，刷新后把它取回来只是消除了一个反直觉的信息丢失。
+     */
+    public static function defaultExperience(): array
+    {
+        return ['timestamps' => false, 'resume' => true, 'sound' => false, 'unread_title' => false,
+            'analytics' => false, 'channels' => ['enabled' => false, 'style' => 'fan', 'title' => '其他联系方式', 'max' => 6]];
+    }
+
     // ACS_MARKER_NORMALIZE
 
     // ---------------------------------------------------------------- JSON 归一化
@@ -441,6 +454,28 @@ final class AiCustomerService
             'once_per_session' => self::bool($greeting['once_per_session'] ?? true),
             'stop_after_reply' => self::bool($greeting['stop_after_reply'] ?? true),
             'steps' => $steps,
+        ];
+    }
+
+    /**
+     * 体验增强。channels 只描述"怎么展示"，展示什么直接取 owner.socials —— 联系方式
+     * 在「站长名片」里已经有一份权威数据，再让用户在这里填第二遍就一定会出现两份不一致。
+     */
+    private static function normalizeExperience(array $experience): array
+    {
+        $channels = is_array($experience['channels'] ?? null) ? $experience['channels'] : [];
+        return [
+            'timestamps' => self::bool($experience['timestamps'] ?? false),
+            'resume' => self::bool($experience['resume'] ?? true),
+            'sound' => self::bool($experience['sound'] ?? false),
+            'unread_title' => self::bool($experience['unread_title'] ?? false),
+            'analytics' => self::bool($experience['analytics'] ?? false),
+            'channels' => [
+                'enabled' => self::bool($channels['enabled'] ?? false),
+                'style' => self::choice($channels['style'] ?? '', ['fan', 'list'], 'fan'),
+                'title' => self::text($channels['title'] ?? '', 40, '其他联系方式'),
+                'max' => self::int($channels['max'] ?? 6, 1, 13, 6),
+            ],
         ];
     }
 
@@ -881,6 +916,7 @@ final class AiCustomerService
             'guardrails_json' => self::normalizeGuardrails($decoded),
             'events_json' => self::normalizeEvents($decoded),
             'stickers_json' => self::normalizeStickers($decoded),
+            'experience_json' => self::normalizeExperience($decoded),
             default => $decoded,
         };
     }
@@ -1073,6 +1109,7 @@ final class AiCustomerService
 
         if (!empty($config['show_launcher'])) {
             echo self::launcherMarkup($config);
+            echo self::channelsMarkup($config);
         }
         echo self::panelMarkup($config);
         echo '<script id="acs-widget-config" type="application/json">' . $json . '</script></div>';
@@ -1168,13 +1205,52 @@ final class AiCustomerService
     }
 
     /**
+     * 浮标旁的多渠道入口（Chaty 式）。链接类条目是真 <a>，不依赖 JS 也能点；
+     * 微信号/电话这种要复制的走 <button data-acs-copy>，由 customer-service.js 接管。
+     */
+    private static function channelsMarkup(array $config): string
+    {
+        $channels = self::launcherChannels($config);
+        if (empty($channels['enabled'])) return '';
+
+        $title = (string)$channels['title'];
+        $listClass = 'acs-channels acs-channels--' . ($channels['style'] === 'list' ? 'list' : 'fan');
+        $html = '<div class="' . self::escape($listClass) . '" data-acs-channels hidden>';
+        if ($channels['style'] === 'list' && $title !== '') {
+            $html .= '<span class="acs-channels-title">' . self::escape($title) . '</span>';
+        }
+        foreach ($channels['items'] as $item) {
+            $label = self::escape((string)$item['label']);
+            $network = self::escape((string)$item['network']);
+            $inner = '<i class="bi ' . self::escape((string)$item['icon']) . '" aria-hidden="true"></i>'
+                . '<span class="acs-channel-name">' . $label . '</span>';
+            if ((string)$item['mode'] === 'copy') {
+                $html .= '<button type="button" class="acs-channel" data-acs-network="' . $network
+                    . '" data-acs-copy="' . self::escape((string)$item['value'])
+                    . '" title="' . $label . '" aria-label="复制' . $label . '">' . $inner . '</button>';
+            } else {
+                $target = (string)$item['mode'] === 'link' ? ' target="_blank" rel="noopener nofollow"' : '';
+                $html .= '<a class="acs-channel" data-acs-network="' . $network
+                    . '" href="' . self::escape((string)$item['href']) . '"' . $target
+                    . ' title="' . $label . '">' . $inner . '</a>';
+            }
+        }
+        $html .= '</div>';
+
+        return $html . '<button type="button" class="acs-channels-toggle" data-acs-channels-toggle aria-expanded="false"'
+            . ' aria-label="' . ($title !== '' ? self::escape($title) : '其他联系方式') . '">'
+            . '<i class="bi bi-three-dots acs-channels-icon" aria-hidden="true"></i></button>';
+    }
+
+    /**
      * 面板标记。$chat / $quick 只有后台预览会传（服务端先把示例内容填进去）；
      * 前台留空，由 customer-service.js 填。$open=true 时不输出 hidden——预览要一上来就展开。
      */
     private static function panelMarkup(array $config, string $chat = '', string $quick = '', bool $open = false): string
     {
         $brand = self::escape((string)$config['brand_name']);
-        $html = '<section ' . ($open ? '' : 'id="acs-panel" ') . 'class="acs-panel" aria-label="' . $brand . '对话"'
+        // role="dialog"：面板是浮层，键盘用户在里面 Tab 循环、Esc 关闭并把焦点还回浮标
+        $html = '<section ' . ($open ? '' : 'id="acs-panel" ') . 'class="acs-panel" role="dialog" aria-label="' . $brand . '对话"'
             . ($open ? '>' : ' aria-hidden="true" hidden>');
 
         if (!empty($config['ribbon_enabled']) && (string)$config['ribbon_text'] !== '') {
@@ -1274,6 +1350,7 @@ final class AiCustomerService
         $html = '<div class="' . self::escape(implode(' ', $classes)) . '" data-acs-preview'
             . ' data-visible="true" data-acs-open="true" style="' . self::escape(self::styleVars($config)) . '">';
         $html .= self::launcherMarkup($config);
+        $html .= self::channelsMarkup($config);
         $html .= self::panelMarkup($config, self::sampleConversation($config), self::sampleQuickReplies($config), true);
         return $html . '</div>';
     }
@@ -1402,6 +1479,35 @@ final class AiCustomerService
             'stickerPacks' => !empty($config['sticker_enabled']) ? $config['stickers']['packs'] : [],
             'showAvatar' => $config['show_avatar'],
             'avatarUrl' => $config['avatar_url'],
+            'version' => self::VERSION,
+            'experience' => [
+                'timestamps' => $config['experience']['timestamps'],
+                'resume' => $config['experience']['resume'],
+                'sound' => $config['experience']['sound'],
+                'unread_title' => $config['experience']['unread_title'],
+                'analytics' => $config['experience']['analytics'],
+            ],
+        ];
+    }
+
+    /**
+     * 浮标旁的多渠道展开（Chaty 的招牌形态）。条目直接取「站长名片」里的社媒：
+     * 联系方式在那边已经有一份权威数据，再让用户填第二遍就一定会出现两份不一致。
+     *
+     * @return array{enabled:bool,style:string,title:string,items:list<array<string,mixed>>}
+     */
+    private static function launcherChannels(array $config): array
+    {
+        $channels = $config['experience']['channels'];
+        $items = [];
+        if (!empty($channels['enabled']) && !empty($config['show_launcher'])) {
+            $items = array_slice(AiCustomerServiceCards::socialItems($config['owner']['socials']), 0, (int)$channels['max']);
+        }
+        return [
+            'enabled' => $items !== [],
+            'style' => (string)$channels['style'],
+            'title' => (string)$channels['title'],
+            'items' => $items,
         ];
     }
 
