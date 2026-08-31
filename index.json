@@ -1,6 +1,6 @@
 {
     "schema_version": 1,
-    "generated_at": "2026-08-30T17:12:40Z",
+    "generated_at": "2026-08-31T03:29:31Z",
     "source": {
         "type": "github-static",
         "repo": "odi0011/Plugin",
@@ -457,7 +457,7 @@
             "slug": "ai-customer-service",
             "namespace": "",
             "name": "AI客服",
-            "version": "1.2.2",
+            "version": "1.2.3",
             "description": "为前台站点提供一个会办事的悬浮 AI 客服：描述词与资料分离管理（站内产品/文章/页面 + 上传知识库文件），可调用工具回一张能点击跳转的站内卡片，支持询盘转化与转人工的自然语言识别、话题边界约束、拖拽布局与预设主题、emoji 与自定义表情包。",
             "category": "other",
             "tags": [
@@ -494,12 +494,12 @@
                 }
             ],
             "agent": [],
-            "published_at": "2026-08-30T17:12:40Z",
-            "changelog": "实时预览改为直接渲染前台标记 + 前台样式（AiCustomerService::previewMarkup 复用 panelMarkup/launcherMarkup，plugin.php 只在本插件页面注入 customer-service.css / preset-cards.css），删掉 admin.css/admin.js 里约 340 行 acs-pv-* 仿制实现，预览与线上不可能再走样；预览列加宽到 468px 并按舞台等比缩放；所有图片类字段（客服头像、浮标图片、站长头像、表情包）接入核心媒体选择框 MediaPicker，不再让人手抄 URL；六套预设主题全部改成平色：去掉渐变顶栏与默认投影，默认改为素白 Plain；删掉自我描述型说明文案；同步 plugin.json 声明默认值与 config() 兜底值（此前两处不一致，新装站点顶栏还是旧配色）。",
+            "published_at": "2026-08-31T03:29:31Z",
+            "changelog": "plugin.json 显式声明 update_check_url 为空串（市场通道要求它留空，但引擎安装后的库存回读要求这个键存在：回读拿 zip 里的原文和写库前被 readManifest() 补过默认值的记录逐字节比 JSON，缺键必然比出差异并回滚整次更新）。无功能改动，代码与 1.2.2 完全一致。",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@4795059b668fa4af4980b72db7f32c63c7b56ec2/dist/ai-customer-service-1.2.2.zip",
-                "sha256": "56c0a86897aa5d65192de81e16c4a4f3c1ea50c0890677568cad437c1133065b",
-                "size_bytes": 150171
+                "url": "",
+                "sha256": "e2638ed1694946565264a17dd4981818e05bde8b84ec412e7d523ecd50d41fe6",
+                "size_bytes": 153221
             },
             "license": {
                 "type": "free"
