@@ -150,7 +150,8 @@ final class AiCustomerServiceCards
     }
 
     /**
-     * 社媒条目。微信号/电话不是链接，标成 copy 让前台渲染成"点击复制"而不是超链接。
+     * 社媒条目。微信号不是链接，标成 copy 让前台渲染成"点击复制"而不是超链接；
+     * 电话 / Viber / 短信填的是号码，在这里拼成对应的协议 URI。
      * 除了社媒卡，浮标旁的多渠道展开也用这一份数据（同一套联系方式只维护一处）。
      *
      * @return list<array<string,mixed>>
@@ -168,11 +169,17 @@ final class AiCustomerServiceCards
                 'wechat' => 'copy',
                 'phone' => 'tel',
                 'email' => 'mailto',
+                'viber' => 'viber',
+                'sms' => 'sms',
                 default => 'link',
             };
+            // 号码类只留数字和 +：viber:// 与 sms: 的号码位不接受空格、括号、连字符。
+            $digits = static fn (string $raw): string => (string)preg_replace('/[^0-9+]/', '', $raw);
             $href = match ($mode) {
                 'tel' => 'tel:' . preg_replace('/[^0-9+\-\s]/', '', $value),
                 'mailto' => 'mailto:' . $value,
+                'viber' => 'viber://chat?number=' . rawurlencode($digits($value)),
+                'sms' => 'sms:' . $digits($value),
                 'link' => $value,
                 default => '',
             };
@@ -183,6 +190,7 @@ final class AiCustomerServiceCards
                 'value' => $value,
                 'mode' => $mode,
                 'href' => (string)$href,
+                'qr' => (string)($social['qr'] ?? ''),
             ];
         }
         return $out;

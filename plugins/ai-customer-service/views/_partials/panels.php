@@ -28,6 +28,7 @@ $groups = [
         ['引导', '快捷问题会渲染成一排可点的胶囊，点了等于替访客发这句话。', ['quick_replies_title', 'quick_replies', 'input_placeholder'], ''],
         ['兜底与转接', '模型不可用、或访客要真人时走这条路。', ['unavailable_message', 'handoff_label', 'handoff_url'], ''],
         ['会话额度', '上下文长度与单个访客的提问频率。', ['history_limit', 'rate_limit_per_minute'], ''],
+        ['聊天前的同意确认', '打开后，访客要先勾一次同意才能发出第一条消息。', [], 'consent'],
     ],
     'trigger' => [
         ['出现条件', '设备、页面与触发时机。多个条件里先满足的生效。', ['device_mode', 'url_mode', 'url_rules', 'delay_seconds', 'scroll_percent', 'exit_intent'], ''],
@@ -35,6 +36,7 @@ $groups = [
         ['主动招呼', '浮标旁的引流气泡、悬停提示，以及窗口里的飘带与定时问候。', ['tooltip_text', 'teaser_enabled', 'teaser_text', 'ribbon_enabled', 'ribbon_text'], 'greeting'],
         ['服务时段', '不在服务时段时整个挂件不渲染。', ['schedule_enabled', 'schedule_days', 'schedule_start', 'schedule_end'], ''],
         ['体验增强', '时间戳、刷新后接续会话、未读提醒，以及浮标旁直接摊开联系方式。', [], 'experience'],
+        ['按国家 / 语言显示', '按访客的国家与浏览器语言决定浮标出不出现。这是展示层的定向，不是访问控制。', [], 'targeting'],
     ],
     'appearance' => [
         ['预设主题', '一键套一整套配色、圆角与气泡形态，之后仍可逐项微调。', [], 'presets'],

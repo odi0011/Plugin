@@ -16,7 +16,7 @@ declare(strict_types=1);
 final class AiCustomerService
 {
     public const SLUG = 'ai-customer-service';
-    public const VERSION = '1.3.0';
+    public const VERSION = '1.4.0';
 
     private const SESSION_KEY = '_ai_customer_service';
     private const CONVERSATION_TTL = 21600;
@@ -49,6 +49,8 @@ final class AiCustomerService
         'events_json' => 'defaultEvents',
         'stickers_json' => 'defaultStickers',
         'experience_json' => 'defaultExperience',
+        'targeting_json' => 'defaultTargeting',
+        'consent_json' => 'defaultConsent',
     ];
 
     /** @var array<string,mixed>|null 单请求缓存：前台一次渲染只解析一次。 */
@@ -108,9 +110,10 @@ final class AiCustomerService
             'quick_replies' => self::lines((string)$get('quick_replies', ''), 8, 180),
             'unavailable_message' => self::text($get('unavailable_message', ''), 500, '当前客服暂时不可用，请稍后再试。'),
             'handoff_label' => self::text($get('handoff_label', ''), 80, '联系人工客服'),
-            'handoff_url' => self::httpUrl((string)$get('handoff_url', '')),
+            'handoff_url' => self::relativeOrHttpUrl((string)$get('handoff_url', '')),
             'history_limit' => self::int($get('history_limit', 8), 2, 20, 8),
             'rate_limit_per_minute' => self::int($get('rate_limit_per_minute', 8), 1, 60, 8),
+            'consent' => self::normalizeConsent(self::json($get('consent_json', ''), self::defaultConsent())),
 
             'device_mode' => self::choice($get('device_mode', ''), ['all', 'desktop', 'mobile'], 'all'),
             'url_mode' => self::choice($get('url_mode', ''), ['all', 'include', 'exclude'], 'all'),
@@ -135,13 +138,14 @@ final class AiCustomerService
             'schedule_start' => self::timeValue((string)$get('schedule_start', ''), '00:00'),
             'schedule_end' => self::timeValue((string)$get('schedule_end', ''), '23:59'),
             'experience' => self::normalizeExperience(self::json($get('experience_json', ''), self::defaultExperience())),
+            'targeting' => self::normalizeTargeting(self::json($get('targeting_json', ''), self::defaultTargeting())),
     // ACS_MARKER_CONFIG2
             'theme' => self::normalizeTheme($theme),
             'layout' => self::normalizeLayout($layout),
             'font_family' => self::choice($get('font_family', ''), array_keys(self::FONT_STACKS), 'system'),
             'launcher_style' => self::choice($get('launcher_style', ''), ['bubble', 'pill'], 'bubble'),
             'launcher_icon' => self::choice($get('launcher_icon', ''), ['chat', 'sparkles', 'headset', 'question'], 'chat'),
-            'launcher_image_url' => self::httpUrl((string)$get('launcher_image_url', '')),
+            'launcher_image_url' => self::relativeOrHttpUrl((string)$get('launcher_image_url', '')),
             'launcher_corner' => self::int($get('launcher_corner', 10), 0, 30, 10),
             'position' => self::choice($get('position', ''), ['right', 'left'], 'right'),
             'widget_size' => self::int($get('widget_size', 56), 40, 96, 56),
@@ -164,7 +168,7 @@ final class AiCustomerService
             'bot_bubble_text_color' => self::color((string)$get('bot_bubble_text_color', ''), '#111827'),
             'visitor_bubble_color' => self::color((string)$get('visitor_bubble_color', ''), '#4F46E5'),
             'visitor_bubble_text_color' => self::color((string)$get('visitor_bubble_text_color', ''), '#FFFFFF'),
-            'avatar_url' => self::httpUrl((string)$get('avatar_url', '')),
+            'avatar_url' => self::relativeOrHttpUrl((string)$get('avatar_url', '')),
             'show_avatar' => self::bool($get('show_avatar', true)),
             'show_powered_by' => self::bool($get('show_powered_by', false)),
 
@@ -393,6 +397,26 @@ final class AiCustomerService
             'analytics' => false, 'channels' => ['enabled' => false, 'style' => 'fan', 'title' => '其他联系方式', 'max' => 6]];
     }
 
+    /**
+     * 国家 / 语言定向的默认值：两个维度都关。开启后是「只在名单内显示」（allow）或
+     * 「名单内不显示」（deny）；名单为空等于没配，判定时视作 off。
+     */
+    public static function defaultTargeting(): array
+    {
+        return ['country_mode' => 'off', 'countries' => [], 'language_mode' => 'off', 'languages' => []];
+    }
+
+    /**
+     * 聊天前的同意确认。默认关闭：装完插件就先弹一段法律声明会打断所有站点，需要合规
+     * 文案的站点自己开。开启后是硬门槛（服务端同样拦），没有「只提示不拦」的中间态。
+     */
+    public static function defaultConsent(): array
+    {
+        return ['enabled' => false, 'title' => '开始对话前',
+            'text' => '我同意本站按隐私政策处理我在对话中提交的信息。',
+            'link_label' => '隐私政策', 'link_url' => '', 'button' => '同意并开始'];
+    }
+
     // ACS_MARKER_NORMALIZE
 
     // ---------------------------------------------------------------- JSON 归一化
@@ -474,8 +498,56 @@ final class AiCustomerService
                 'enabled' => self::bool($channels['enabled'] ?? false),
                 'style' => self::choice($channels['style'] ?? '', ['fan', 'list'], 'fan'),
                 'title' => self::text($channels['title'] ?? '', 40, '其他联系方式'),
-                'max' => self::int($channels['max'] ?? 6, 1, 13, 6),
+                'max' => self::int($channels['max'] ?? 6, 1, 12, 6),
             ],
+        ];
+    }
+
+    /**
+     * 国家 / 语言定向。两个维度各自独立：任一维度判定为"不显示"就不渲染挂件。
+     * 名单去重后落成规范形态（国家 ISO-3166-1 alpha-2 大写，语言小写 BCP-47 前缀），
+     * 名单为空时把 mode 强制回 off —— 否则 allow 模式配了空名单会把挂件全站关掉，
+     * 而那看起来像插件坏了而不是像一条规则。
+     */
+    private static function normalizeTargeting(array $targeting): array
+    {
+        $countries = [];
+        foreach (self::listOf($targeting['countries'] ?? null, 60) as $code) {
+            if (!is_scalar($code)) continue;
+            $code = strtoupper(preg_replace('/[^A-Za-z]/', '', (string)$code) ?? '');
+            if (strlen($code) !== 2 || in_array($code, $countries, true)) continue;
+            $countries[] = $code;
+        }
+        $languages = [];
+        foreach (self::listOf($targeting['languages'] ?? null, 30) as $tag) {
+            if (!is_scalar($tag)) continue;
+            $tag = strtolower(trim(str_replace('_', '-', (string)$tag)));
+            if ($tag === '' || !preg_match('/^[a-z]{2,3}(?:-[a-z0-9]{2,8})*$/', $tag) || in_array($tag, $languages, true)) continue;
+            $languages[] = $tag;
+        }
+        $countryMode = self::choice($targeting['country_mode'] ?? '', ['off', 'allow', 'deny'], 'off');
+        $languageMode = self::choice($targeting['language_mode'] ?? '', ['off', 'allow', 'deny'], 'off');
+        return [
+            'country_mode' => $countries === [] ? 'off' : $countryMode,
+            'countries' => $countries,
+            'language_mode' => $languages === [] ? 'off' : $languageMode,
+            'languages' => $languages,
+        ];
+    }
+
+    /**
+     * 聊天前的同意确认。文案全部有兜底：开着这个开关却把文字清空会得到一个无法勾选
+     * 的空白门槛，那等于把挂件锁死。链接留空就只渲染纯文本，不出空 <a>。
+     */
+    private static function normalizeConsent(array $consent): array
+    {
+        return [
+            'enabled' => self::bool($consent['enabled'] ?? false),
+            'title' => self::text($consent['title'] ?? '', 60, '开始对话前'),
+            'text' => self::text($consent['text'] ?? '', 600, '我同意本站按隐私政策处理我在对话中提交的信息。'),
+            'link_label' => self::text($consent['link_label'] ?? '', 60, ''),
+            'link_url' => self::relativeOrHttpUrl((string)($consent['link_url'] ?? '')),
+            'button' => self::text($consent['button'] ?? '', 40, '同意并开始'),
         ];
     }
 
@@ -617,15 +689,25 @@ final class AiCustomerService
         ];
     }
 
+    /**
+     * 可选渠道。图标一律取 Bootstrap Icons 1.11.2 里真实存在的字形 —— viber / sms 没有
+     * 专用字形，用形近的通用图标顶上，不要写 bi-viber / bi-sms 那种会渲染成空方块的名字。
+     */
     public const SOCIAL_NETWORKS = [
         'wechat' => ['微信', 'bi-wechat'], 'whatsapp' => ['WhatsApp', 'bi-whatsapp'],
-        'telegram' => ['Telegram', 'bi-telegram'], 'facebook' => ['Facebook', 'bi-facebook'],
+        'telegram' => ['Telegram', 'bi-telegram'], 'messenger' => ['Messenger', 'bi-messenger'],
+        'line' => ['LINE', 'bi-line'], 'viber' => ['Viber', 'bi-phone-vibrate-fill'],
+        'sms' => ['短信', 'bi-chat-text-fill'], 'skype' => ['Skype', 'bi-skype'],
+        'discord' => ['Discord', 'bi-discord'], 'facebook' => ['Facebook', 'bi-facebook'],
         'instagram' => ['Instagram', 'bi-instagram'], 'linkedin' => ['LinkedIn', 'bi-linkedin'],
         'x' => ['X / Twitter', 'bi-twitter-x'], 'youtube' => ['YouTube', 'bi-youtube'],
         'tiktok' => ['TikTok', 'bi-tiktok'], 'github' => ['GitHub', 'bi-github'],
         'email' => ['邮箱', 'bi-envelope-fill'], 'phone' => ['电话', 'bi-telephone-fill'],
         'website' => ['网站', 'bi-globe2'],
     ];
+
+    /** 填号码而不是链接的渠道：这几类的 url 字段按纯文本收，拼 href 时再转协议。 */
+    public const SOCIAL_PLAIN_NETWORKS = ['wechat', 'phone', 'viber', 'sms'];
 
     private static function normalizeOwner(array $owner): array
     {
@@ -634,8 +716,8 @@ final class AiCustomerService
             if (!is_array($social)) continue;
             $network = self::choice($social['network'] ?? '', array_keys(self::SOCIAL_NETWORKS), '');
             if ($network === '') continue;
-            // 微信/电话常见的是号码而不是链接，所以这两类允许纯文本。
-            $url = in_array($network, ['wechat', 'phone'], true)
+            // 微信/电话/Viber/短信常见的是号码而不是链接，所以这几类允许纯文本。
+            $url = in_array($network, self::SOCIAL_PLAIN_NETWORKS, true)
                 ? self::text($social['url'] ?? '', 120, '')
                 : ($network === 'email' ? self::email((string)($social['url'] ?? '')) : self::httpUrl((string)($social['url'] ?? '')));
             if ($url === '') continue;
@@ -643,12 +725,15 @@ final class AiCustomerService
                 'network' => $network,
                 'label' => self::text($social['label'] ?? '', 40, self::SOCIAL_NETWORKS[$network][0]),
                 'url' => $url,
+                // 二维码是"扫一扫加我"的图，站长自己传（插件不生成二维码：那要么引第三方
+                // 接口把访客地址泄给外站，要么塞一个 QR 编码器进前端包）。
+                'qr' => self::relativeOrHttpUrl((string)($social['qr'] ?? '')),
             ];
         }
         return [
             'name' => self::text($owner['name'] ?? '', 60, ''),
             'title' => self::text($owner['title'] ?? '', 80, ''),
-            'avatar' => self::httpUrl((string)($owner['avatar'] ?? '')),
+            'avatar' => self::relativeOrHttpUrl((string)($owner['avatar'] ?? '')),
             'bio' => self::text($owner['bio'] ?? '', 300, ''),
             'socials' => $socials,
         ];
@@ -917,6 +1002,8 @@ final class AiCustomerService
             'events_json' => self::normalizeEvents($decoded),
             'stickers_json' => self::normalizeStickers($decoded),
             'experience_json' => self::normalizeExperience($decoded),
+            'targeting_json' => self::normalizeTargeting($decoded),
+            'consent_json' => self::normalizeConsent($decoded),
             default => $decoded,
         };
     }
@@ -1089,6 +1176,23 @@ final class AiCustomerService
         }
     }
 
+    /**
+     * 访客是否已经勾过同意。存在 session 里与 conversations 平级 —— 「重新开始」清对话
+     * 但不该把已经作出的同意也一起清掉，那会让访客每次重开都再勾一遍。
+     */
+    public static function consentGiven(): bool
+    {
+        return !empty($_SESSION[self::SESSION_KEY]['consent']);
+    }
+
+    public static function grantConsent(): void
+    {
+        if (!isset($_SESSION[self::SESSION_KEY]) || !is_array($_SESSION[self::SESSION_KEY])) {
+            $_SESSION[self::SESSION_KEY] = [];
+        }
+        $_SESSION[self::SESSION_KEY]['consent'] = time();
+    }
+
     // ACS_MARKER_RENDER
 
     // ---------------------------------------------------------------- 前台渲染
@@ -1096,7 +1200,8 @@ final class AiCustomerService
     public static function renderWidget(): void
     {
         $config = self::config();
-        if (!$config['enabled'] || !self::pathAllowed($config) || !self::scheduleAllowed($config)) return;
+        if (!$config['enabled'] || !self::pathAllowed($config) || !self::scheduleAllowed($config)
+            || !self::targetingAllowed($config)) return;
 
         $json = json_encode(
             self::publicWidgetConfig($config),
@@ -1222,16 +1327,18 @@ final class AiCustomerService
         foreach ($channels['items'] as $item) {
             $label = self::escape((string)$item['label']);
             $network = self::escape((string)$item['network']);
+            // 有二维码就带上：链接照样可点，二维码由 JS 在悬停/聚焦时弹出（手机上点开）。
+            $qr = (string)($item['qr'] ?? '') !== '' ? ' data-acs-qr="' . self::escape((string)$item['qr']) . '"' : '';
             $inner = '<i class="bi ' . self::escape((string)$item['icon']) . '" aria-hidden="true"></i>'
                 . '<span class="acs-channel-name">' . $label . '</span>';
             if ((string)$item['mode'] === 'copy') {
                 $html .= '<button type="button" class="acs-channel" data-acs-network="' . $network
-                    . '" data-acs-copy="' . self::escape((string)$item['value'])
-                    . '" title="' . $label . '" aria-label="复制' . $label . '">' . $inner . '</button>';
+                    . '" data-acs-copy="' . self::escape((string)$item['value']) . '"' . $qr
+                    . ' title="' . $label . '" aria-label="复制' . $label . '">' . $inner . '</button>';
             } else {
                 $target = (string)$item['mode'] === 'link' ? ' target="_blank" rel="noopener nofollow"' : '';
                 $html .= '<a class="acs-channel" data-acs-network="' . $network
-                    . '" href="' . self::escape((string)$item['href']) . '"' . $target
+                    . '" href="' . self::escape((string)$item['href']) . '"' . $target . $qr
                     . ' title="' . $label . '">' . $inner . '</a>';
             }
         }
@@ -1277,6 +1384,8 @@ final class AiCustomerService
                 . self::escape((string)$config['handoff_label']) . '</span></a>';
         }
 
+        $html .= self::consentMarkup($config, $open);
+
         $html .= '<form class="acs-composer" novalidate>'
             . '<label class="acs-sr-only" for="acs-message">输入消息</label>'
             . '<div class="acs-composer-shell">'
@@ -1296,6 +1405,35 @@ final class AiCustomerService
         }
         $html .= '<div class="acs-feedback" role="status" aria-live="polite"></div>';
         return $html . '</section>';
+    }
+
+    /**
+     * 聊天前的同意确认块。只在开关打开时输出；服务端已经记下同意就直接 hidden，
+     * 前端不必闪一下再消失。后台预览（$preview=true）永远显示，否则预览里看不到效果。
+     */
+    private static function consentMarkup(array $config, bool $preview = false): string
+    {
+        $consent = is_array($config['consent'] ?? null) ? $config['consent'] : [];
+        if (empty($consent['enabled'])) return '';
+
+        $accepted = !$preview && self::consentGiven();
+        $text = self::escape((string)$consent['text']);
+        $linkLabel = (string)$consent['link_label'];
+        $linkUrl = (string)$consent['link_url'];
+        if ($linkUrl !== '' && $linkLabel !== '') {
+            $text .= ' <a class="acs-consent-link" href="' . self::escape($linkUrl) . '" target="_blank" rel="noopener">'
+                . self::escape($linkLabel) . '</a>';
+        }
+
+        $html = '<div class="acs-consent" data-acs-consent' . ($accepted ? ' hidden' : '') . '>';
+        if ((string)$consent['title'] !== '') {
+            $html .= '<strong class="acs-consent-title">' . self::escape((string)$consent['title']) . '</strong>';
+        }
+        return $html
+            . '<label class="acs-consent-row"><input type="checkbox" class="acs-consent-box" data-acs-consent-box>'
+            . '<span class="acs-consent-text">' . $text . '</span></label>'
+            . '<button type="button" class="acs-consent-accept" data-acs-consent-accept disabled>'
+            . self::escape((string)$consent['button']) . '</button></div>';
     }
 
     private static function composerToolsMarkup(array $config): string
@@ -1487,6 +1625,13 @@ final class AiCustomerService
                 'unread_title' => $config['experience']['unread_title'],
                 'analytics' => $config['experience']['analytics'],
             ],
+            // accepted 取的是服务端 session。万一页面被整页缓存导致这里是过期的 false，
+            // 访客再勾一次即可；反过来若缓存成过期的 true，聊天接口会回 consent_required，
+            // 前端据此把同意块重新打开 —— 两个方向都不会把人锁死。
+            'consent' => [
+                'enabled' => !empty($config['consent']['enabled']),
+                'accepted' => self::consentGiven(),
+            ],
         ];
     }
 
@@ -1582,6 +1727,9 @@ final class AiCustomerService
             'builtinTools' => AiCustomerServiceTools::builtinCatalog(),
             'contentTypes' => AiCustomerServiceKnowledge::contentTypeOptions(),
             'knowledgeFiles' => AiCustomerServiceKnowledge::fileSummary(self::config()),
+            // 定向面板要能自证：把服务端在「这一次后台请求」里读到的国家/语言给它，
+            // 否则站长配完 allow 名单挂件消失了，也分不清是规则生效还是缺请求头。
+            'geo' => ['country' => self::visitorCountry(), 'languages' => self::visitorLanguages()],
             'version' => self::VERSION,
         ];
     }
@@ -1648,6 +1796,105 @@ final class AiCustomerService
         if ($rule === '') return false;
         $regex = '#^' . str_replace('\\*', '.*', preg_quote($rule, '#')) . '$#u';
         return @preg_match($regex, $path) === 1;
+    }
+
+    /**
+     * 反向代理 / CDN 提供的访客国家请求头，按可信度从高到低试。PHP 自己拿不到访客
+     * 的地理位置，所以没有这些头就是"未知"，不做 IP 库查询（插件里塞一个 GeoIP 库
+     * 或去调第三方接口都会把访客地址交给外部）。
+     */
+    private const COUNTRY_HEADERS = [
+        'HTTP_CF_IPCOUNTRY',              // Cloudflare
+        'HTTP_CLOUDFRONT_VIEWER_COUNTRY', // AWS CloudFront
+        'HTTP_X_COUNTRY_CODE',            // 常见的自建 Nginx GeoIP 约定
+        'HTTP_X_GEO_COUNTRY',
+        'HTTP_X_APPENGINE_COUNTRY',       // Google App Engine
+    ];
+
+    /** 访客国家（ISO-3166-1 alpha-2 大写）；取不到返回空串。 */
+    public static function visitorCountry(): string
+    {
+        foreach (self::COUNTRY_HEADERS as $header) {
+            $value = strtoupper(trim((string)($_SERVER[$header] ?? '')));
+            // Cloudflare 用 XX 表示"查不到"、T1 表示 Tor 出口，两者都不是国家。
+            if ($value === '' || $value === 'XX' || $value === 'T1') continue;
+            if (preg_match('/^[A-Z]{2}$/', $value)) return $value;
+        }
+        return '';
+    }
+
+    /** 访客语言偏好，按 Accept-Language 的 q 值降序，小写 BCP-47。 @return list<string> */
+    public static function visitorLanguages(): array
+    {
+        $raw = (string)($_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? '');
+        if ($raw === '' || strlen($raw) > 512) return [];
+        $weighted = [];
+        foreach (explode(',', $raw) as $index => $part) {
+            $bits = explode(';', $part);
+            $tag = strtolower(trim(str_replace('_', '-', $bits[0])));
+            if ($tag === '' || $tag === '*' || !preg_match('/^[a-z]{2,3}(?:-[a-z0-9]{2,8})*$/', $tag)) continue;
+            $q = 1.0;
+            foreach (array_slice($bits, 1) as $param) {
+                if (preg_match('/^\s*q\s*=\s*([0-9.]+)\s*$/i', $param, $m)) $q = (float)$m[1];
+            }
+            if (!isset($weighted[$tag])) $weighted[$tag] = [$q, $index];
+        }
+        uasort($weighted, static fn (array $a, array $b): int => ($b[0] <=> $a[0]) ?: ($a[1] <=> $b[1]));
+        return array_slice(array_keys($weighted), 0, 12);
+    }
+
+    /**
+     * 规则是否命中某个语言标签：以连字符为边界做前缀匹配 —— 规则 zh 命中 zh-cn，
+     * 规则 zh-cn 只命中 zh-cn（不会被 zh 反向命中，也不会误伤 zhx）。
+     */
+    private static function languageMatches(string $rule, string $tag): bool
+    {
+        return $tag === $rule || str_starts_with($tag, $rule . '-');
+    }
+
+    /**
+     * 国家 / 语言定向。两个维度都要过才渲染。
+     *
+     * 注意三件事：①国家来自请求头，请求头是可以伪造的，所以这只是"展示层的定向"，
+     * 不是访问控制；②未知国家在 allow 模式下不显示、在 deny 模式下显示 —— 名单式规则
+     * 的语义就是"只对名单内的人开"，把未知也算进去等于名单失效；③聊天接口故意不做
+     * 地理判定，和 pathAllowed / scheduleAllowed 一致：已经打开的会话不该因为一次
+     * CDN 抖动导致请求头缺失就中途断掉。
+     */
+    private static function targetingAllowed(array $config): bool
+    {
+        $targeting = is_array($config['targeting'] ?? null) ? $config['targeting'] : [];
+
+        $countryMode = (string)($targeting['country_mode'] ?? 'off');
+        if ($countryMode !== 'off') {
+            $countries = (array)($targeting['countries'] ?? []);
+            $country = self::visitorCountry();
+            if ($country === '') {
+                if ($countryMode === 'allow') return false;
+            } else {
+                $hit = in_array($country, $countries, true);
+                if ($countryMode === 'allow' ? !$hit : $hit) return false;
+            }
+        }
+
+        $languageMode = (string)($targeting['language_mode'] ?? 'off');
+        if ($languageMode !== 'off') {
+            $rules = (array)($targeting['languages'] ?? []);
+            $tags = self::visitorLanguages();
+            if ($tags === []) {
+                if ($languageMode === 'allow') return false;
+            } else {
+                $hit = false;
+                foreach ($rules as $rule) {
+                    foreach ($tags as $tag) {
+                        if (self::languageMatches((string)$rule, $tag)) { $hit = true; break 2; }
+                    }
+                }
+                if ($languageMode === 'allow' ? !$hit : $hit) return false;
+            }
+        }
+
+        return true;
     }
 
     private static function validateUrlRules(string $raw): string
@@ -1738,7 +1985,9 @@ final class AiCustomerService
         $value = trim($value);
         if ($value === '' || strlen($value) > 2048) return '';
         if (str_starts_with($value, '/') && !str_starts_with($value, '//') && !str_contains($value, '..')) {
-            return preg_match('#^/[A-Za-z0-9._~!$&\'()*+,;=:@%/-]*$#', $value) === 1 ? $value : '';
+            // 允许查询串与锚点：站内跳转链接（/contact?from=chat#form）是常见写法，
+            // 字符集是白名单，输出端一律 escape()，所以放开 ? 与 # 不会带来注入面。
+            return preg_match('#^/[A-Za-z0-9._~!$&\'()*+,;=:@%/?#-]*$#', $value) === 1 ? $value : '';
         }
         return self::httpUrl($value);
     }

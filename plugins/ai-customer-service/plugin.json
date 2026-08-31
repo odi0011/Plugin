@@ -1,19 +1,19 @@
 {
     "slug": "ai-customer-service",
     "name": "AI客服",
-    "version": "1.3.0",
+    "version": "1.4.0",
     "author": "odi0011",
     "author_url": "",
     "homepage": "",
     "update_check_url": "",
-    "description": "为前台站点提供一个会办事的悬浮 AI 客服：描述词与资料分离管理（站内产品/文章/页面 + 上传知识库文件），可调用工具回一张能点击跳转的站内卡片，支持询盘转化与转人工的自然语言识别、话题边界约束、拖拽布局与预设主题、emoji 与自定义表情包。",
+    "description": "为前台站点提供一个会办事的悬浮 AI 客服：描述词与资料分离管理（站内产品/文章/页面 + 上传知识库文件），可调用工具回一张能点击跳转的站内卡片，支持询盘转化与转人工的自然语言识别、话题边界约束、拖拽布局与预设主题、emoji 与自定义表情包。浮标旁还能直接摊开 19 种联系渠道（微信 / WhatsApp / Messenger / LINE / Viber / 短信 / 电话等，每个渠道可挂二维码），并按国家与浏览器语言决定要不要出现、可要求访客先勾选同意再开始对话。",
     "icon": "icon.svg",
     "screenshots": [],
     "requires": "7i",
     "requires_php": "8.0",
     "license": "MIT",
     "category": "other",
-    "changelog": "体验增强：会话可在刷新后接续（服务端本来就存着上下文，之前只是没回传给浏览器）、消息时间戳、正文里的网址自动变可点链接、未读角标与提示音、浏览器标签页未读提醒、GA4 / dataLayer 转化事件、以及 Chaty 式的浮标多渠道展开（数据源复用「站长名片」里的社媒，不用重复填）。稳健性：发送失败会把内容放回输入框而不是吞掉、请求有 25 秒超时、等待回复时不再锁住输入框、正在往上翻历史时不会被新消息拽回底部、复制失败不再假报成功、面板加了焦点陷阱与 iOS 安全区适配。另外修掉后台「顶栏」多出的一个「渐变」选项——它在服务端是不被接受的值，选了会静默回退。版本号从此由 plugin.json 单点决定，前台 JS 与后台常量都跟着它走。",
+    "changelog": "对标 Chaty / 常见在线客服插件补上四件事：①按国家与浏览器语言决定浮标出不出现（国家取自 CDN 的地区请求头，插件不带 IP 库也不查第三方；这是展示层定向，不是访问控制，聊天接口故意不按地区拦）；②每个联系渠道可以单独挂一张二维码，鼠标悬停或点一下就展开——微信、WhatsApp 这类扫码即走的渠道在桌面端终于能用了；③聊天前的同意确认，勾选前输入框与快捷问题都锁着，同意记在服务端会话里，接口那边也拦一道，前台被 CDN 缓存住也绕不过去；④联系渠道从 13 个扩到 19 个，新增 Messenger、LINE、Viber、短信、Skype、Discord，号码类渠道自动拼 viber:// 与 sms: 协议。另外修掉三个隐患：转接、浮标图片、头像三个地址字段原来只收 http(s) 绝对地址，站内相对路径会被静默丢掉，现在相对路径与 ?query#hash 都收；后台定向面板会把服务端这次读到的国家与语言写在说明里，配完浮标不见了能分清是规则生效还是缺请求头；浮标多渠道的数量上限跟错了常量，从 13 收回真实上限 12。",
     "tags": [
         "AI",
         "客服",
@@ -43,14 +43,14 @@
             "type": "css",
             "area": "frontend",
             "src": "assets/customer-service.css",
-            "version": "1.3.0"
+            "version": "1.4.0"
         },
         {
             "handle": "ai-customer-service-preset-cards",
             "type": "css",
             "area": "frontend",
             "src": "assets/preset-cards.css",
-            "version": "1.3.0",
+            "version": "1.4.0",
             "deps": [
                 "ai-customer-service-widget-css"
             ]
@@ -60,7 +60,7 @@
             "type": "js",
             "area": "frontend",
             "src": "assets/customer-service.js",
-            "version": "1.3.0",
+            "version": "1.4.0",
             "defer": true
         },
         {
@@ -68,14 +68,14 @@
             "type": "css",
             "area": "admin",
             "src": "assets/admin.css",
-            "version": "1.3.0"
+            "version": "1.4.0"
         },
         {
             "handle": "ai-customer-service-admin-js",
             "type": "js",
             "area": "admin",
             "src": "assets/admin.js",
-            "version": "1.3.0",
+            "version": "1.4.0",
             "defer": true
         }
     ],
@@ -158,10 +158,12 @@
                     {
                         "key": "handoff_url",
                         "label": "人工客服跳转链接",
-                        "type": "url",
+                        "type": "text",
                         "default": "",
                         "max_length": 2048,
-                        "help": "留空时不显示人工客服按钮。"
+                        "pattern": "^(?:https?://[^\\s]+|/[^/\\s][^\\s]*)$",
+                        "placeholder": "/contact 或 https://…",
+                        "help": "留空时不显示人工客服按钮。可以填站内相对路径（/contact），也可以填外链。"
                     },
                     {
                         "key": "history_limit",
@@ -180,6 +182,14 @@
                         "min": 1,
                         "max": 60,
                         "step": 1
+                    },
+                    {
+                        "key": "consent_json",
+                        "label": "聊天前的同意确认",
+                        "type": "textarea",
+                        "default": "{\"enabled\":false,\"title\":\"开始对话前\",\"text\":\"我同意本站按隐私政策处理我在对话中提交的信息。\",\"link_label\":\"隐私政策\",\"link_url\":\"\",\"button\":\"同意并开始\"}",
+                        "max_length": 2000,
+                        "help": "开启后访客必须先勾选同意才能发第一条消息，服务端同样拦截。由上方可视化编辑器写入。"
                     }
                 ]
             },
@@ -409,6 +419,14 @@
                         "default": "{\"timestamps\":false,\"resume\":true,\"sound\":false,\"unread_title\":false,\"analytics\":false,\"channels\":{\"enabled\":false,\"style\":\"fan\",\"title\":\"其他联系方式\",\"max\":6}}",
                         "max_length": 2000,
                         "help": "时间戳、刷新后接续会话、未读提示音与标签页提醒、转化事件上报、浮标多渠道展开。由上方可视化编辑器写入。"
+                    },
+                    {
+                        "key": "targeting_json",
+                        "label": "国家与语言定向",
+                        "type": "textarea",
+                        "default": "{\"country_mode\":\"off\",\"countries\":[],\"language_mode\":\"off\",\"languages\":[]}",
+                        "max_length": 2000,
+                        "help": "按访客所在国家 / 浏览器语言决定是否渲染挂件，服务端判定。国家需要 CDN 或反向代理提供地区请求头。由上方可视化编辑器写入。"
                     }
                 ]
             },
@@ -508,10 +526,12 @@
                     {
                         "key": "launcher_image_url",
                         "label": "自定义浮标图片",
-                        "type": "url",
+                        "type": "text",
                         "default": "",
                         "max_length": 2048,
-                        "help": "填写后将替代图标显示这张图片（建议正方形）。胶囊样式会同时替换文字位置。"
+                        "pattern": "^(?:https?://[^\\s]+|/[^/\\s][^\\s]*)$",
+                        "placeholder": "/uploads/… 或 https://…",
+                        "help": "填写后将替代图标显示这张图片（建议正方形）。胶囊样式会同时替换文字位置。可以直接点「选图」从媒体库挑。"
                     },
                     {
                         "key": "launcher_corner",
@@ -707,9 +727,12 @@
                     {
                         "key": "avatar_url",
                         "label": "客服头像或 Logo 地址",
-                        "type": "url",
+                        "type": "text",
                         "default": "",
-                        "max_length": 2048
+                        "max_length": 2048,
+                        "pattern": "^(?:https?://[^\\s]+|/[^/\\s][^\\s]*)$",
+                        "placeholder": "/uploads/… 或 https://…",
+                        "help": "可以直接点「选图」从媒体库挑，也可以粘贴外链。"
                     },
                     {
                         "key": "show_avatar",
@@ -918,8 +941,8 @@
                         "label": "站长名片资料",
                         "type": "textarea",
                         "default": "{\"name\":\"\",\"title\":\"\",\"avatar\":\"\",\"bio\":\"\",\"socials\":[]}",
-                        "max_length": 4000,
-                        "help": "名片与社媒卡片的数据源：姓名、头衔、头像、简介与社媒链接。"
+                        "max_length": 6000,
+                        "help": "名片与社媒卡片的数据源：姓名、头衔、头像、简介、社媒链接与每个渠道可选的二维码图。"
                     }
                 ]
             },

@@ -1014,6 +1014,71 @@
 
 /* ACS_MARKER_W9 */
 
+/* ------------------------------------------------------------------ 同意确认
+ * 挡在输入区前面的一块：勾了才解锁输入框。放在 composer 上方而不是盖住整个面板，
+ * 是为了让欢迎语与快捷问题仍然可读——访客得先看懂这是什么服务才愿意勾同意。 */
+
+.acs-consent {
+    display: grid;
+    gap: 8px;
+    margin: 0 var(--acs-pad) 6px;
+    padding: 10px 12px;
+    border: 1px solid var(--acs-line);
+    border-radius: 12px;
+    background: var(--acs-sunken);
+}
+.acs-widget .acs-consent[hidden],
+#ai-customer-service-widget .acs-consent[hidden] { display: none !important; }
+.acs-consent-title { font-size: calc(var(--acs-font) * .9); font-weight: 700; }
+.acs-consent-row { display: flex; align-items: flex-start; gap: 8px; cursor: pointer; }
+.acs-consent-box {
+    flex: 0 0 auto;
+    width: 15px;
+    height: 15px;
+    margin: 2px 0 0;
+    accent-color: var(--acs-accent);
+}
+.acs-consent-text { color: var(--acs-muted); font-size: calc(var(--acs-font) * .82); line-height: 1.55; }
+.acs-consent-link { color: var(--acs-accent); text-decoration: underline; }
+.acs-consent-accept {
+    justify-self: start;
+    padding: 6px 14px;
+    border: 0;
+    border-radius: 999px;
+    background: var(--acs-accent);
+    color: #fff;
+    font: inherit;
+    font-size: calc(var(--acs-font) * .84);
+    cursor: pointer;
+    transition: opacity .15s ease, transform .15s ease;
+}
+.acs-consent-accept:hover:not([disabled]) { transform: translateY(-1px); }
+.acs-consent-accept:focus-visible { outline: 2px solid var(--acs-accent); outline-offset: 2px; }
+.acs-consent-accept[disabled] { opacity: .45; cursor: not-allowed; transform: none; }
+
+/* ------------------------------------------------------------------ 二维码浮层
+ * 站长自己传的「扫一扫」图。整个挂件共用一个节点，由 JS 按触发元素的位置摆放：
+ * 挂件根节点是 position: fixed，所以这里只要 absolute + 由 JS 写 left/top。 */
+
+.acs-qr-pop {
+    position: absolute;
+    z-index: 3;
+    display: grid;
+    gap: 6px;
+    justify-items: center;
+    padding: 8px;
+    border: 1px solid var(--acs-line);
+    border-radius: 12px;
+    background: var(--acs-surface);
+    box-shadow: 0 12px 30px rgba(15, 23, 42, .18);
+    animation: acs-qr-in .14s ease-out;
+}
+.acs-widget .acs-qr-pop[hidden],
+#ai-customer-service-widget .acs-qr-pop[hidden] { display: none !important; }
+@keyframes acs-qr-in { from { opacity: 0; transform: scale(.94); } }
+.acs-qr-img { display: block; width: 132px; height: 132px; border-radius: 6px; object-fit: contain; }
+.acs-qr-name { max-width: 132px; color: var(--acs-muted); font-size: calc(var(--acs-font) * .78); text-align: center; }
+
 /* ------------------------------------------------------------------ 快捷问题
  * 单行横滑。面板高度是固定的，标题行 + 换行的胶囊要吃掉近 60px，
  * 直接后果是卡片被截断——所以只留一行，长列表靠横滚。 */
@@ -1092,7 +1157,8 @@
     resize: none;
 }
 .acs-composer textarea::placeholder { color: var(--acs-muted); opacity: 1; }
-.acs-composer textarea:disabled { cursor: wait; opacity: .6; }
+/* 输入框只在「还没勾同意」时才 disabled（等回复期间刻意不禁用），所以这里是 not-allowed */
+.acs-composer textarea:disabled { cursor: not-allowed; opacity: .6; }
 .acs-composer-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .acs-composer-tools { display: flex; align-items: center; gap: 2px; }
 .acs-composer-right { display: flex; align-items: center; gap: 8px; }

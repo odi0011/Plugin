@@ -404,6 +404,9 @@
 
 /* Interactive Button States —— 原文按平台各给一色，这里按平台名沿用同一套点缀色 */
 .acs-doodle-btn.acs-net-facebook:hover,
+.acs-doodle-btn.acs-net-messenger:hover,
+.acs-doodle-btn.acs-net-discord:hover,
+.acs-doodle-btn.acs-net-skype:hover,
 .acs-doodle-btn.acs-net-linkedin:hover,
 .acs-doodle-btn.acs-net-telegram:hover { background: var(--accent-lavender); }
 .acs-doodle-btn.acs-net-github:hover,
@@ -411,6 +414,9 @@
 .acs-doodle-btn.acs-net-instagram:hover { background: var(--accent-coral); }
 .acs-doodle-btn.acs-net-wechat:hover,
 .acs-doodle-btn.acs-net-whatsapp:hover,
+.acs-doodle-btn.acs-net-line:hover,
+.acs-doodle-btn.acs-net-viber:hover,
+.acs-doodle-btn.acs-net-sms:hover,
 .acs-doodle-btn.acs-net-phone:hover { background: var(--accent-mint); }
 .acs-doodle-btn.acs-net-email:hover,
 .acs-doodle-btn.acs-net-website:hover,

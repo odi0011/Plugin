@@ -108,7 +108,8 @@
         theme_json: 'theme', layout_json: 'layout', greeting_json: 'greeting',
         knowledge_json: 'knowledge', tools_json: 'tools', cards_json: 'cards',
         owner_json: 'owner', guardrails_json: 'guardrails', events_json: 'events',
-        stickers_json: 'stickers', experience_json: 'experience'
+        stickers_json: 'stickers', experience_json: 'experience',
+        targeting_json: 'targeting', consent_json: 'consent'
     };
     var jsonCache = {};
     function readJson(key, fallback) {
@@ -681,7 +682,7 @@
             exp.channels.title = value;
             save();
         }, '其他联系方式'));
-        grid.appendChild(numberField('最多显示几个', exp.channels.max, 1, 13, function (value) {
+        grid.appendChild(numberField('最多显示几个', exp.channels.max, 1, 12, function (value) {
             exp.channels.max = value;
             save();
         }));
@@ -693,6 +694,110 @@
             ? ('「站长名片」里现有 ' + count + ' 个联系方式，展开时按上面的上限依次显示。')
             : '「站长名片」里还没填社媒，这里开了也没有东西可展开。'));
         host.appendChild(chan);
+    };
+
+    /* ---- 按国家 / 语言显示：只管浮标要不要出现在这个访客眼里 ---- */
+    PANELS.targeting = function (host) {
+        var t = readJson('targeting_json', {});
+        if (!Array.isArray(t.countries)) t.countries = [];
+        if (!Array.isArray(t.languages)) t.languages = [];
+        if (t.country_mode !== 'allow' && t.country_mode !== 'deny') t.country_mode = 'off';
+        if (t.language_mode !== 'allow' && t.language_mode !== 'deny') t.language_mode = 'off';
+
+        /* 原地洗数组：tagInput 攥着这个数组的引用，换成新数组它就画不到了。
+         * 规则和服务端 normalizeTargeting() 一模一样，敲的 cn 当场变成 CN，
+         * 不用等保存完再回来疑惑自己填的东西去哪了。 */
+        function scrub(values, limit, map) {
+            var seen = {}, out = [], bad = 0;
+            values.forEach(function (raw) {
+                var v = map(String(raw));
+                if (v === '') { bad += 1; return; }
+                if (seen[v] || out.length >= limit) return;
+                seen[v] = true;
+                out.push(v);
+            });
+            values.length = 0;
+            out.forEach(function (v) { values.push(v); });
+            return bad;
+        }
+        function save() {
+            var badC = scrub(t.countries, 60, function (raw) {
+                var v = raw.trim().toUpperCase().replace(/[^A-Z]/g, '');
+                return v.length === 2 ? v : '';
+            });
+            var badL = scrub(t.languages, 30, function (raw) {
+                var v = raw.trim().toLowerCase().replace(/_/g, '-');
+                return /^[a-z]{2,3}(-[a-z0-9]{2,8})*$/.test(v) ? v : '';
+            });
+            jsonCache.targeting_json = t;
+            writeJson('targeting_json');
+            if (badC) toast('国家要填两位字母代码（CN、US、DE），已忽略 ' + badC + ' 条', true);
+            if (badL) toast('语言要填 BCP-47 标签（zh、zh-cn、en），已忽略 ' + badL + ' 条', true);
+            paintHint();
+        }
+        /* 定向面板必须能自证：把服务端这一次读到的国家 / 语言摊开写出来，
+         * 站长才分得清"浮标不见了"是规则生效还是根本没有地区请求头。 */
+        function paintHint() {
+            var geo = BOOT.geo || {};
+            var langs = Array.isArray(geo.languages) ? geo.languages : [];
+            var parts = [geo.country
+                ? ('服务端在这次后台请求里读到的国家是 ' + geo.country + '；')
+                : '服务端这次读不到国家（没有地区请求头）；'];
+            parts.push(langs.length ? ('浏览器语言 ' + langs.slice(0, 5).join('、') + '。') : '也读不到浏览器语言。');
+            if (t.country_mode === 'allow' && t.countries.length && !geo.country) {
+                parts.push('⚠ 读不到国家时「只显示给名单里的」会对所有访客隐藏浮标，先确认 CDN 传了地区请求头再开。');
+            }
+            if (t.language_mode === 'allow' && t.languages.length && !langs.length) {
+                parts.push('⚠ 读不到语言时「只显示给名单里的」会对所有访客隐藏浮标。');
+            }
+            if (t.country_mode !== 'off' && !t.countries.length) parts.push('⚠ 国家名单是空的，保存后这条规则会自动回到「不限制」。');
+            if (t.language_mode !== 'off' && !t.languages.length) parts.push('⚠ 语言名单是空的，保存后这条规则会自动回到「不限制」。');
+            hint.textContent = parts.join(' ');
+        }
+
+        var modes = { off: '不限制', allow: '只显示给名单里的', deny: '名单里的不显示' };
+        var box = el('div', 'acs-a-sub');
+        box.appendChild(el('h3', '', '按国家 / 语言显示'));
+        box.appendChild(el('p', 'acs-a-sub-note', '两个维度各自独立，任一条判定「不显示」浮标就整个不渲染。这是展示层的定向，不是访问控制：请求头能伪造，聊天接口也故意不按地区拦——已经开着的会话不该因为 CDN 抖一下就断掉。'));
+        var grid = el('div', 'acs-a-subgrid');
+        grid.appendChild(selectField('国家 / 地区', t.country_mode, modes, function (v) { t.country_mode = v; save(); }));
+        grid.appendChild(selectField('语言', t.language_mode, modes, function (v) { t.language_mode = v; save(); }));
+        box.appendChild(grid);
+        var hint = el('p', 'acs-a-help');
+        box.appendChild(hint);
+        host.appendChild(box);
+
+        var lists = el('div', 'acs-a-subgrid');
+        lists.appendChild(tagInput('国家 / 地区代码', '两位 ISO-3166 代码，最多 60 条。国家取自 CDN 传的地区请求头（Cloudflare、CloudFront、或自己配的 X-Country-Code），插件不带 IP 库、也不去查第三方接口。', t.countries, save, '例如 CN'));
+        lists.appendChild(tagInput('语言标签', '取自浏览器的 Accept-Language。填 zh 能同时命中 zh-CN / zh-TW；要精确就填 zh-cn。最多 30 条。', t.languages, save, '例如 zh-cn'));
+        host.appendChild(lists);
+        paintHint();
+    };
+
+    /* ---- 聊天前的同意确认 ---- */
+    PANELS.consent = function (host) {
+        var c = readJson('consent_json', {});
+        function save() { jsonCache.consent_json = c; writeJson('consent_json'); }
+
+        var box = el('div', 'acs-a-sub');
+        box.appendChild(el('h3', '', '聊天前的同意确认'));
+        box.appendChild(el('p', 'acs-a-sub-note', '打开后访客第一次发消息前要先勾一次同意：输入框和快捷问题都锁着，勾完点按钮才解锁。同意记在服务端会话里，一个会话只问一次；聊天接口那边也拦一道，前台被 CDN 缓存住了也绕不过去。'));
+        var row = el('div', 'acs-a-palette-row');
+        row.appendChild(switchField('启用', c.enabled, function (v) { c.enabled = v; save(); }));
+        box.appendChild(row);
+        host.appendChild(box);
+
+        var grid = el('div', 'acs-a-subgrid');
+        grid.appendChild(textField('标题', c.title, 60, function (v) { c.title = v; save(); }, '开始对话前'));
+        grid.appendChild(textField('按钮文案', c.button, 40, function (v) { c.button = v; save(); }, '同意并开始'));
+        grid.appendChild(textField('链接文字', c.link_label, 60, function (v) { c.link_label = v; save(); }, '隐私政策'));
+        grid.appendChild(textField('链接地址', c.link_url, 500, function (v) { c.link_url = v; save(); }, '/privacy'));
+        host.appendChild(grid);
+
+        var wrap = el('div', 'acs-a-sub');
+        wrap.appendChild(textareaField('勾选框旁边的正文', c.text, 600, function (v) { c.text = v; save(); }, '我同意本站按隐私政策处理我在对话中提交的信息。'));
+        wrap.appendChild(el('p', 'acs-a-help', '标题、正文、按钮清空了会各自回落到默认文案——开着开关又把文字删干净，得到的是一个点不动的空门槛。链接文字和地址要两个都填才会渲染链接，只填一个当没填。'));
+        host.appendChild(wrap);
     };
 
     /* ACS_MARKER_JS_6 */
@@ -1395,6 +1500,18 @@
     /* ACS_MARKER_JS_10 */
 
     /* ---- 站长名片 ---- */
+    // 每个平台的"值"字段叫什么、示例填什么。链接类走默认，只列需要区别对待的。
+    var SOCIAL_VALUE_LABEL = {
+        wechat: '微信号', phone: '电话号码', viber: 'Viber 号码', sms: '短信号码',
+        email: '邮箱', messenger: 'm.me 链接', line: 'LINE 链接', skype: 'Skype 链接',
+        discord: 'Discord 邀请链接', whatsapp: 'wa.me 链接'
+    };
+    var SOCIAL_VALUE_HINT = {
+        wechat: 'my-wechat-id', phone: '+86 138…', viber: '+8613800138000', sms: '+8613800138000',
+        email: 'sales@example.com', messenger: 'https://m.me/yourpage',
+        line: 'https://line.me/ti/p/~yourid', skype: 'https://join.skype.com/invite/…',
+        discord: 'https://discord.gg/…', whatsapp: 'https://wa.me/8613800138000'
+    };
     PANELS.owner = function (host) {
         var owner = readJson('owner_json', { socials: [] });
         if (!Array.isArray(owner.socials)) owner.socials = [];
@@ -1410,14 +1527,14 @@
 
         var box = el('div', 'acs-a-sub');
         box.appendChild(el('h3', '', '社媒与联系方式'));
-        box.appendChild(el('p', 'acs-a-sub-note', '微信与电话按"点击复制/拨号"渲染，其余按链接渲染。名片卡与社媒卡共用这份数据。'));
+        box.appendChild(el('p', 'acs-a-sub-note', '微信按"点击复制"渲染，电话 / Viber / 短信按号码拼协议链接，其余按链接渲染。传了二维码图的渠道，访客在浮标旁把鼠标移上去（手机上点一下）就能看到扫码图。名片卡与社媒卡共用这份数据。'));
         box.appendChild(listEditor({
             items: function () { return owner.socials; },
             empty: '还没有联系方式。加一条微信或 WhatsApp，AI 就能在访客要联系方式时递过去。',
             addLabel: '加一条',
             add: function () {
                 if (owner.socials.length >= 12) { toast('最多 12 条', true); return; }
-                owner.socials.push({ network: 'wechat', label: '', url: '' });
+                owner.socials.push({ network: 'wechat', label: '', url: '', qr: '' });
                 save();
             },
             row: function (social, index, repaint) {
@@ -1429,10 +1546,11 @@
                 grid2.appendChild(textField('显示名', social.label, 40, function (v) { social.label = v; save(); },
                     BOOT.socialNetworks[social.network] ? BOOT.socialNetworks[social.network][0] : ''));
                 grid2.appendChild(textField(
-                    social.network === 'wechat' ? '微信号' : (social.network === 'phone' ? '电话号码' : (social.network === 'email' ? '邮箱' : '链接')),
+                    SOCIAL_VALUE_LABEL[social.network] || '链接',
                     social.url, 200, function (v) { social.url = v; save(); },
-                    social.network === 'wechat' ? 'my-wechat-id' : (social.network === 'phone' ? '+86 138…' : 'https://…')
+                    SOCIAL_VALUE_HINT[social.network] || 'https://…'
                 ));
+                grid2.appendChild(mediaField('二维码图（可选）', social.qr, function (v) { social.qr = v; save(); }));
                 row.appendChild(grid2);
                 var remove = el('button', 'acs-a-btn acs-a-btn--sm acs-a-btn--danger', '移除这条');
                 remove.type = 'button';

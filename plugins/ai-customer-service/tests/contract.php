@@ -53,7 +53,7 @@ $assert($total <= 96, "字段数已到 {$total}，离核心上限 100 只剩 " .
 // 分页归属：这几个字段挪页会让后台逐页保存的范围出错
 $expectPage = [
     'enabled' => 'conversation', 'url_rules' => 'trigger', 'greeting_json' => 'trigger',
-    'experience_json' => 'trigger',
+    'experience_json' => 'trigger', 'targeting_json' => 'trigger', 'consent_json' => 'conversation',
     'theme_json' => 'appearance', 'layout_json' => 'appearance', 'text_color' => 'appearance',
     'muted_color' => 'appearance', 'font_family' => 'appearance',
     'system_prompt' => 'ai', 'knowledge_json' => 'knowledge', 'knowledge_mode' => 'knowledge',
@@ -92,7 +92,8 @@ foreach ($fields as $key => $entry) {
     $assert($max * 3 <= 65535, $key . ' 的 max_length=' . $max . '，UTF-8 最坏 ' . ($max * 3) . ' 字节，会撑爆 settings.value(TEXT)');
 }
 $jsonKeys = ['theme_json', 'layout_json', 'greeting_json', 'knowledge_json', 'tools_json',
-    'cards_json', 'owner_json', 'guardrails_json', 'events_json', 'stickers_json', 'experience_json'];
+    'cards_json', 'owner_json', 'guardrails_json', 'events_json', 'stickers_json', 'experience_json',
+    'targeting_json', 'consent_json'];
 foreach ($jsonKeys as $key) {
     $assert(isset($fields[$key]), '缺少 JSON 型字段：' . $key);
     if (!isset($fields[$key])) continue;
@@ -371,8 +372,9 @@ $assert(str_contains($presetBlock, "'" . (string)($themeDefault['preset'] ?? '')
 $assert(str_contains($adminJs, 'PANELS.customtools') && str_contains($adminJs, 'PANELS.cards')
     && str_contains($adminJs, 'PANELS.owner') && str_contains($adminJs, 'PANELS.guardrails')
     && str_contains($adminJs, 'PANELS.events') && str_contains($adminJs, 'PANELS.stickers')
-    && str_contains($adminJs, 'PANELS.greeting') && str_contains($adminJs, 'PANELS.experience'),
-    '缺少工具/卡片/名片/约束/事件/表情/问候/体验面板');
+    && str_contains($adminJs, 'PANELS.greeting') && str_contains($adminJs, 'PANELS.experience')
+    && str_contains($adminJs, 'PANELS.targeting') && str_contains($adminJs, 'PANELS.consent'),
+    '缺少工具/卡片/名片/约束/事件/表情/问候/体验/定向/同意面板');
 // 后台给出的选项必须是 normalizeTheme() 真收的值，否则保存后被静默改回去，像是保存失败
 $assert(!str_contains($adminJs, "gradient: '渐变'"), '顶栏没有渐变档，后台不该提供这个选项');
 $assert(str_contains($service, "['solid', 'light'], 'light')"), '顶栏形态只有纯色与浅底两档');
@@ -381,6 +383,39 @@ $assert(str_contains($adminSrc, 'Auth::requirePermission'), '异步动作必须�
 $assert(str_contains($adminSrc, 'Storage::put'), '表情包上传应复用核心 Storage 的白名单与消毒');
 $assert(str_contains($knowledge, 'STORAGE_PATH'), '知识库文本必须落在 webroot 之外');
 $assert(!str_contains($knowledge, 'Storage::put'), '知识库原文不应进公开上传目录');
+
+/* 1.4.0 的定向 / 同意 / 二维码：这三件都是"要么两处同时在、要么就是静默故障"的接线。
+ * 只在后台能配、前台不生效，是最难被发现的一类回归，所以逐处钉住。 */
+$assert(str_contains($service, 'private static function targetingAllowed(')
+    && str_contains($service, '!self::targetingAllowed($config)'),
+    '定向判定必须真的串进 renderWidget() 的渲染门槛');
+$assert(str_contains($service, 'HTTP_CF_IPCOUNTRY'), '国家只从 CDN 的地区请求头读，插件不自带 IP 库');
+$assert(!preg_match('#https?://[^\s\'"]*(ipapi|ip-api|geoip|ipinfo|ipstack)#i', $service . $widgetJs . $adminJs),
+    '定向不得回源第三方 IP 库：那会把访客地址送出站（注释里提到 GeoIP 没问题，出现请求地址才是问题）');
+$assert(str_contains($service, "'geo' => ['country' => self::visitorCountry()") && str_contains($view, "'geo' => \$geo"),
+    '后台必须能自证这次读到的国家/语言，否则"浮标不见了"分不清是规则还是缺请求头');
+$assert(str_contains($service, 'function consentGiven(') && str_contains($chat, "'consent_required'"),
+    '同意门槛必须在服务端拦一道，前台被 CDN 缓存也要拦得住');
+$assert(str_contains($widgetJs, "'consent_required'"), '前台必须认得服务端的 consent_required 并重新升起门槛');
+$actionBody = '';
+if (preg_match('/function dispatchAction\(\): void\s*\{(.+?)\n    \}/s', $chat, $actionMatch)) {
+    $actionBody = $actionMatch[1];
+}
+$assert($actionBody !== '', '找不到 dispatchAction() 的定义');
+if ($actionBody !== '') {
+    $historyAt = strpos($actionBody, "'history'");
+    $gateAt = strpos($actionBody, 'consentGiven()');
+    $assert($historyAt !== false && $gateAt !== false && $historyAt < $gateAt,
+        'history 动作要排在同意门槛之前：刚打开面板还没勾同意的访客不该先吃一条错误');
+}
+$assert(str_contains($service, 'data-acs-qr') && str_contains($widgetJs, 'function showQr('),
+    '渠道二维码需要标记与悬浮层两处一起在');
+$assert(str_contains($cards, "'qr' =>") && str_contains($adminJs, '二维码图（可选）'),
+    '社媒条目要带二维码字段，后台也要能逐条上传');
+foreach (['messenger', 'line', 'viber', 'sms', 'skype', 'discord'] as $network) {
+    $assert(str_contains($service, "'" . $network . "' => ["), 'SOCIAL_NETWORKS 缺少渠道：' . $network);
+    $assert(str_contains($adminJs, $network . ':'), '后台名片面板缺少该渠道的"值"字段文案：' . $network);
+}
 
 // README 承诺
 foreach (['描述词', '资料', '工具', '卡片', '边界', '表情'] as $topic) {

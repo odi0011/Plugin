@@ -25,10 +25,18 @@
     var feedback = root.querySelector('.acs-feedback');
     var channels = root.querySelector('[data-acs-channels]');
     var channelsToggle = root.querySelector('[data-acs-channels-toggle]');
+    var consentBlock = root.querySelector('[data-acs-consent]');
+    var consentBox = root.querySelector('[data-acs-consent-box]');
+    var consentAccept = root.querySelector('[data-acs-consent-accept]');
     if (!panel || !chat || !quickReplies || !form || !input || !send || !feedback) return;
 
     // 体验增强开关。缺字段一律当关，老版本的注入配置也不会炸。
     var exp = (config.experience && typeof config.experience === 'object') ? config.experience : {};
+
+    // 聊天前的同意确认。服务端 session 里已经同意过时 accepted=true；万一页面被整页缓存
+    // 导致这里是过期的值也不会把人锁死：聊天接口会回 consent_required，前端据此重新拦。
+    var consentCfg = (config.consent && typeof config.consent === 'object') ? config.consent : {};
+    var consentRequired = !!consentCfg.enabled && !!consentBlock;
 
     // show_launcher=false 时不渲染浮标，但面板仍然保留，供 window.AiCustomerService 打开。
     var state = {
@@ -36,7 +44,8 @@
         userOpened: false, replied: false, conversationId: config.conversationId,
         // dead: 设备不匹配时整个节点已被移除，公开 API 不能再往一棵脱离文档的树上操作
         dead: false, nearBottom: true, unread: 0, lastFocus: null,
-        restored: false, restoring: false, opened: false
+        restored: false, restoring: false, opened: false,
+        consented: !consentRequired || !!consentCfg.accepted
     };
     var AUTO_KEY = 'acs_auto_shown';
     var TEASER_KEY = 'acs_teaser_dismissed';
@@ -220,7 +229,11 @@
             state.opened = true;
             track('acs_open', {});
         }
-        window.setTimeout(function () { input.focus(); }, 0);
+        window.setTimeout(function () {
+            // 还没勾同意时焦点给勾选框：输入框此刻是 disabled，focus() 会落空
+            if (consentRequired && !state.consented && consentBox) { consentBox.focus(); return; }
+            input.focus();
+        }, 0);
     }
 
     function scheduleAutoOpen() {
@@ -412,6 +425,8 @@
             row.appendChild(button);
         });
         quickReplies.appendChild(row);
+        // 刚建出来的按钮默认是可点的，同意还没勾时要跟着一起锁上
+        applyConsent();
     }
 
     /* ACS_MARKER_FJS_3 */
@@ -553,21 +568,9 @@
             button.appendChild(icon(item.icon || 'bi-link-45deg'));
             var label = el('span', '', item.label || item.value);
             button.appendChild(label);
-            button.addEventListener('click', function () {
-                var done = function () {
-                    label.textContent = '已复制：' + item.value;
-                    button.classList.add('acs-social-copied');
-                    window.setTimeout(function () {
-                        label.textContent = item.label || item.value;
-                        button.classList.remove('acs-social-copied');
-                    }, 2400);
-                };
-                if (navigator.clipboard && navigator.clipboard.writeText) {
-                    navigator.clipboard.writeText(item.value).then(done, function () { label.textContent = item.value; });
-                } else {
-                    label.textContent = item.value;
-                }
-            });
+            // 与名片上的按钮共用 copyValue()：复制失败时必须说实话，不能只把文字换掉。
+            button.addEventListener('click', function () { copyValue(item.value, button, label); });
+            markQr(button, item);
             return button;
         }
         var link = el('a', 'acs-social-item');
@@ -575,6 +578,7 @@
         if (item.mode === 'link') { link.target = '_blank'; link.rel = 'noopener'; }
         link.appendChild(icon(item.icon || 'bi-link-45deg'));
         link.appendChild(el('span', '', item.label || item.value));
+        markQr(link, item);
         return link;
     }
 
@@ -647,24 +651,112 @@
             node.href = item.href || item.value;
             if (item.mode === 'link') { node.target = '_blank'; node.rel = 'noopener'; }
         }
+        markQr(node, item);
         return node;
     }
 
-    function copyValue(value, node) {
-        var restore = node.getAttribute('title');
+    /* ---------------------------------------------------------------- 二维码浮层 */
+
+    /* 站长自己传的二维码图。整个挂件共用一个浮层节点，跟着触发元素定位：
+     * root 是 position: fixed，所以它就是绝对定位的包含块，视口坐标减掉 root 的
+     * rect 就能直接当 left/top 用（浮层可以越出 root 的盒子，root 没有 overflow 裁剪）。 */
+    var qrPop = null;
+    var qrSticky = null;
+
+    function markQr(node, item) {
+        if (!item || !item.qr) return node;
+        node.setAttribute('data-acs-qr', item.qr);
+        node.setAttribute('data-acs-qr-name', item.label || item.network || '');
+        bindQr(node);
+        return node;
+    }
+
+    function qrLayer() {
+        if (qrPop) return qrPop;
+        qrPop = el('div', 'acs-qr-pop');
+        qrPop.hidden = true;
+        var img = el('img', 'acs-qr-img');
+        img.alt = '';
+        img.loading = 'lazy';
+        qrPop.appendChild(img);
+        qrPop.appendChild(el('span', 'acs-qr-name', ''));
+        root.appendChild(qrPop);
+        return qrPop;
+    }
+
+    function showQr(node) {
+        var src = node.getAttribute('data-acs-qr');
+        if (!src) return;
+        var pop = qrLayer();
+        var img = pop.querySelector('.acs-qr-img');
+        if (img.getAttribute('src') !== src) img.setAttribute('src', src);
+        pop.querySelector('.acs-qr-name').textContent = node.getAttribute('data-acs-qr-name') || '扫码联系';
+        pop.hidden = false;
+
+        var rect = node.getBoundingClientRect();
+        var base = root.getBoundingClientRect();
+        var width = pop.offsetWidth;
+        var height = pop.offsetHeight;
+        var viewportW = window.innerWidth || document.documentElement.clientWidth || width;
+        var viewportH = window.innerHeight || document.documentElement.clientHeight || height;
+        // 默认摆在触发元素左侧（挂件通常贴右边）；左边放不下就翻到右侧
+        var left = rect.left - width - 10;
+        if (left < 8) left = Math.min(rect.right + 10, viewportW - width - 8);
+        var top = rect.top + rect.height / 2 - height / 2;
+        top = Math.max(8, Math.min(top, viewportH - height - 8));
+        pop.style.left = (left - base.left) + 'px';
+        pop.style.top = (top - base.top) + 'px';
+    }
+
+    function hideQr(force) {
+        if (!qrPop || (qrSticky && !force)) return;
+        qrSticky = null;
+        qrPop.hidden = true;
+    }
+
+    function bindQr(node) {
+        if (node.dataset.acsQrBound === '1') return;
+        node.dataset.acsQrBound = '1';
+        // 触屏没有 hover：链接类保持"点了就跳"，复制类（微信号）点一下把浮层钉住
+        node.addEventListener('pointerenter', function (event) {
+            if (event.pointerType === 'touch') return;
+            showQr(node);
+        });
+        node.addEventListener('pointerleave', function () { hideQr(false); });
+        node.addEventListener('focus', function () { showQr(node); });
+        node.addEventListener('blur', function () { hideQr(false); });
+        if (node.tagName === 'BUTTON') {
+            node.addEventListener('click', function () {
+                if (qrSticky === node) { hideQr(true); return; }
+                qrSticky = node;
+                showQr(node);
+            });
+        }
+    }
+
+    /* ACS_MARKER_FJS_QR */
+
+    /** value 落剪贴板；node 用来闪 title/高亮，label 是可选的按钮内文字节点。 */
+    function copyValue(value, node, label) {
+        var restoreTitle = node.getAttribute('title') || '';
+        var restoreLabel = label ? label.textContent : '';
+        var reset = function () {
+            node.classList.remove('acs-social-copied');
+            node.setAttribute('title', restoreTitle);
+            if (label) label.textContent = restoreLabel;
+        };
         var done = function () {
             node.classList.add('acs-social-copied');
             node.setAttribute('title', '已复制：' + value);
-            window.setTimeout(function () {
-                node.classList.remove('acs-social-copied');
-                node.setAttribute('title', restore);
-            }, 2400);
+            if (label) label.textContent = '已复制：' + value;
+            window.setTimeout(reset, 2400);
         };
         // 复制可能被拒（非 HTTPS、无用户手势、权限策略）。之前失败也走 done()，
         // 于是明明没复制上还提示"已复制"，访客粘出来是上一次的剪贴板内容。
         var fail = function () {
             node.setAttribute('title', value);
-            window.setTimeout(function () { node.setAttribute('title', restore); }, 4000);
+            if (label) label.textContent = value;
+            window.setTimeout(reset, 4000);
             showFeedback('浏览器不允许自动复制，请手动复制：' + value);
         };
         if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -819,9 +911,65 @@
         input.setAttribute('aria-busy', busy ? 'true' : 'false');
         send.disabled = busy;
         quickReplies.querySelectorAll('button').forEach(function (button) { button.disabled = busy; });
+        // 忙完了也不能把发送解锁给一个还没勾同意的访客
+        applyConsent();
     }
     function showFeedback(message) {
         feedback.textContent = message || '';
+    }
+
+    /* ---------------------------------------------------------------- 同意确认 */
+
+    /** 没勾同意之前输入框、发送、快捷提问全锁住；同意块本身照常可交互。 */
+    function applyConsent() {
+        if (!consentRequired) return;
+        var pending = !state.consented;
+        if (consentBlock) consentBlock.hidden = !pending;
+        input.disabled = pending;
+        send.disabled = pending || state.busy;
+        quickReplies.querySelectorAll('button').forEach(function (button) {
+            button.disabled = pending || state.busy;
+        });
+    }
+
+    /** 服务端说还没同意（比如页面是缓存的旧 HTML）：把门槛重新竖起来。 */
+    function requireConsent() {
+        if (!consentRequired) return;
+        state.consented = false;
+        if (consentBox) consentBox.checked = false;
+        if (consentAccept) consentAccept.disabled = true;
+        applyConsent();
+    }
+
+    function acceptConsent() {
+        if (!consentAccept || !consentBox || !consentBox.checked) return;
+        var body = new URLSearchParams();
+        body.set('_csrf', config.csrf);
+        body.set('conversation_id', state.conversationId);
+        body.set('action', 'consent');
+        consentAccept.disabled = true;
+        fetch(config.actionEndpoint, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            body: body
+        }).then(function (response) {
+            return response.json().catch(function () { return {}; });
+        }).then(function (data) {
+            if (!data || !data.ok) {
+                showFeedback((data && data.error) || '提交失败，请稍后重试。');
+                consentAccept.disabled = false;
+                return;
+            }
+            state.consented = true;
+            applyConsent();
+            showFeedback('');
+            input.focus();
+            track('acs_consent', {});
+        }).catch(function () {
+            showFeedback('网络似乎断开了，请检查连接后重试。');
+            consentAccept.disabled = false;
+        });
     }
 
     /* 25 秒还没回来就当超时。模型侧最长 30 秒（CUSTOM_TIMEOUT），但浏览器这边如果不设
@@ -851,6 +999,7 @@
                     var error = new Error((data && (data.error || (data.data && data.data.message)))
                         || config.unavailableMessage || '暂时无法回复，请稍后再试。');
                     error.payload = (data && data.data) || {};
+                    error.code = (data && data.code) || '';
                     throw error;
                 }
                 return data.data || {};
@@ -877,6 +1026,12 @@
         var message = String(rawMessage || '').trim();
         var max = Number(config.maxChars) || 2000;
         if (state.busy || message === '') return;
+        if (consentRequired && !state.consented) {
+            showFeedback('请先勾选同意后再开始对话');
+            applyConsent();
+            if (consentBox) consentBox.focus();
+            return;
+        }
         if (message.length > max) {
             showFeedback('消息不能超过 ' + max + ' 个字符');
             return;
@@ -920,6 +1075,8 @@
             typing.row.remove();
             showFeedback(error.message);
             mine.row.classList.add('is-failed');
+            // 服务端说同意还没记上（页面很可能是缓存的旧 HTML），把门槛重新竖起来
+            if (error.code === 'consent_required') requireConsent();
             // 别把访客打的字吞掉：原样放回输入框，重发只要再点一下发送。
             // 输入框里已经有新内容时不覆盖——那是访客正在打的下一句。
             if (input.value === '') {
@@ -1059,6 +1216,8 @@
         if (next) {
             dismissTeaser(false);
             track('acs_channels_open', {});
+        } else {
+            hideQr(true);
         }
     }
 
@@ -1130,6 +1289,8 @@
                 track('acs_channel_click', { network: node.getAttribute('data-acs-network') || '' });
             });
         });
+        // 服务端已经把二维码地址写在 data-acs-qr 上（卡片里的条目走 markQr()）
+        channels.querySelectorAll('[data-acs-qr]').forEach(bindQr);
     }
     if (closeBtn) closeBtn.addEventListener('click', function () { setOpen(false); });
     if (restartBtn) {
@@ -1185,6 +1346,10 @@
                 setFlag(RIBBON_KEY, '1');
             });
         }
+    }
+    if (consentBox && consentAccept) {
+        consentBox.addEventListener('change', function () { consentAccept.disabled = !consentBox.checked; });
+        consentAccept.addEventListener('click', acceptConsent);
     }
     root.querySelectorAll('[data-acs-pick]').forEach(function (button) {
         button.addEventListener('click', function () {
@@ -1242,10 +1407,23 @@
 
     document.addEventListener('keydown', function (event) {
         if (event.key !== 'Escape') return;
+        if (qrSticky) { hideQr(true); return; }
         if (channels && !channels.hidden) { setChannels(false); return; }
         if (picker && !picker.hidden) { closePicker(); return; }
         if (state.open) setOpen(false);
     });
+
+    // 钉住的二维码：点到别处就收起（浮层自身与其它触发点除外）
+    document.addEventListener('click', function (event) {
+        if (!qrSticky) return;
+        var node = event.target;
+        while (node && node !== document) {
+            if (node === qrPop || (node.getAttribute && node.getAttribute('data-acs-qr'))) return;
+            node = node.parentNode;
+        }
+        hideQr(true);
+    }, true);
+    window.addEventListener('resize', function () { hideQr(true); });
 
     window.AiCustomerService = {
         open: function () { state.userOpened = true; setOpen(true); },
@@ -1261,5 +1439,6 @@
     };
 
     renderCounter();
+    applyConsent();
     activateVisibilityRules();
 }());

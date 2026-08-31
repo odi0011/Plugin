@@ -27,6 +27,12 @@ final class AiCustomerServiceChat
             self::respond(false, ['message' => '会话已过期，请刷新页面后重试'], 422, 'conversation_expired');
         }
 
+        // 前端会把同意块挡在输入框前面，但那只是体验；真正的门槛在这里 —— 否则直接
+        // POST 一次就绕过去了，那这个开关对合规就毫无意义。
+        if (!empty($config['consent']['enabled']) && !AiCustomerService::consentGiven()) {
+            self::respond(false, ['message' => '请先勾选同意后再开始对话'], 403, 'consent_required');
+        }
+
         $messageRaw = $_POST['message'] ?? '';
         if (is_array($messageRaw) || is_object($messageRaw)) {
             self::respond(false, ['message' => '消息格式不合法'], 422, 'invalid_message');
@@ -367,8 +373,22 @@ final class AiCustomerServiceChat
         if ($action === 'reset') {
             self::respond(true, ['conversation_id' => AiCustomerService::newConversation()]);
         }
+        // 同意本身要能在没同意时提交，所以放在同意门槛之前。它只写一个 session 标记，
+        // 「重新开始」不会把它清掉：已经作出的同意不该因为换个会话就要再勾一遍。
+        if ($action === 'consent') {
+            if (empty($config['consent']['enabled'])) {
+                self::respond(false, ['message' => '当前未开启同意确认'], 422, 'consent_disabled');
+            }
+            AiCustomerService::grantConsent();
+            self::respond(true, ['conversation_id' => $conversationId, 'consent' => true]);
+        }
+        // history 只是把服务端已有的记录读回来，没有新提交，故意不拦 —— 拦了会让刚打开
+        // 面板还没勾同意的访客先吃一条错误提示。真正要拦的是往库里写的询盘。
         if ($action === 'history') {
             self::respondHistory($config, $conversationId, (array)$conversation);
+        }
+        if (!empty($config['consent']['enabled']) && !AiCustomerService::consentGiven()) {
+            self::respond(false, ['message' => '请先勾选同意后再开始对话'], 403, 'consent_required');
         }
         if ($action !== 'inquiry') {
             self::respond(false, ['message' => '不支持的动作'], 422, 'invalid_action');

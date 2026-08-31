@@ -7,7 +7,7 @@
  * 用一套 antd token 统一供给，插件不引 antd 运行时（后台是 PHP 渲染的服务端页面，
  * 为了几个控件拖一个 React 运行时不值得）。
  *
- * 复合配置（主题/布局/资料/工具/卡片/约束/事件/表情）以隐藏 textarea 承载 JSON，
+ * 复合配置（主题/布局/资料/工具/卡片/约束/事件/表情/定向/同意）以隐藏 textarea 承载 JSON，
  * 由 admin.js 里的面板读写；这样字段仍然是声明式 settings 的一员，保存、校验、
  * API/Agent 契约都不用另开一条路。
  *
@@ -30,6 +30,7 @@
  * @var array<string,array<string,string>> $builtinTools
  * @var list<array{kind:string,type:string,label:string}> $contentTypes
  * @var array{count:int,chars:int,missing:list<string>,limit:int} $knowledgeFiles
+ * @var array{country:string,languages:list<string>} $geo
  * @var string $version
  */
 $this->extend('admin/views/layouts/main');
@@ -39,7 +40,8 @@ $this->startSection('content');
 $values = (array)($form['values'] ?? []);
 $fields = (array)($section['fields'] ?? []);
 $jsonKeys = ['theme_json', 'layout_json', 'greeting_json', 'knowledge_json', 'tools_json',
-    'cards_json', 'owner_json', 'guardrails_json', 'events_json', 'stickers_json', 'experience_json'];
+    'cards_json', 'owner_json', 'guardrails_json', 'events_json', 'stickers_json', 'experience_json',
+    'targeting_json', 'consent_json'];
 
 $saveKeys = [];
 foreach ($fields as $field) {
@@ -62,6 +64,7 @@ $boot = [
     'builtinTools' => $builtinTools,
     'contentTypes' => $contentTypes,
     'knowledgeFiles' => $knowledgeFiles,
+    'geo' => $geo,
     'config' => $config,
 ];
 $jsonFlags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
