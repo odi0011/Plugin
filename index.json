@@ -4,7 +4,7 @@
     "source": {
         "type": "github-static",
         "repo": "odi0011/Plugin",
-        "commit": "c2e30e6"
+        "commit": "5ec7538"
     },
     "core_api": {
         "min": 1,
@@ -62,7 +62,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@c2e30e6/dist/agent-content-integrity-1.0.1.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@5ec7538/dist/agent-content-integrity-1.0.1.zip",
                 "sha256": "5741fcb46d4dcaf42982d6e7c2427e7a5950b938948a1ccbadf654b80d779d59",
                 "size_bytes": 3120
             },
@@ -118,7 +118,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@c2e30e6/dist/agent-hello-1.0.1.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@5ec7538/dist/agent-hello-1.0.1.zip",
                 "sha256": "265cec149d0fa7bc7e8d6b5eec48f177e3d8bf7b5e69b700bc5f917faa53bfaf",
                 "size_bytes": 4150
             },
@@ -180,7 +180,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@c2e30e6/dist/agent-link-auditor-1.0.0.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@5ec7538/dist/agent-link-auditor-1.0.0.zip",
                 "sha256": "f71de86290b0e40cafebfa016a132e0b25bba9013f1cad7df224f9b7f2e8a83b",
                 "size_bytes": 6225
             },
@@ -241,7 +241,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@c2e30e6/dist/agent-run-digest-1.0.0.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@5ec7538/dist/agent-run-digest-1.0.0.zip",
                 "sha256": "5e5a173a541d80ad1795935fd106f34412e0391b0265feac9b42574a21a1d933",
                 "size_bytes": 8151
             },
@@ -300,7 +300,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@c2e30e6/dist/agent-run-notifier-1.0.1.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@5ec7538/dist/agent-run-notifier-1.0.1.zip",
                 "sha256": "95349f75f5b0e3a41511596c8cb7a9e4faafe055dabb938aad784995b818eb4f",
                 "size_bytes": 3261
             },
@@ -362,7 +362,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@c2e30e6/dist/agent-seo-snapshot-1.0.0.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@5ec7538/dist/agent-seo-snapshot-1.0.0.zip",
                 "sha256": "b99b2fc9b4855262dac9597ea832d42f0354624466fdf21699cb9942985243f2",
                 "size_bytes": 4882
             },
@@ -445,7 +445,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@c2e30e6/dist/agent-task-ledger-1.0.1.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@5ec7538/dist/agent-task-ledger-1.0.1.zip",
                 "sha256": "bf013aedcc4610ad66b64929a35ea65f4750891489cbd67c1ca4a448ebdd4f5f",
                 "size_bytes": 4196
             },
@@ -497,7 +497,7 @@
             "published_at": "2026-09-01T06:31:30Z",
             "changelog": "1.4.4 修 RTL 站点上的两处错位。挂件是注进站点页面的，会继承 <html dir>；插件支持按语言定向，阿拉伯语、希伯来语这类站点本来就在射程内，但样式里有两处方向敏感的物理属性会翻错：①卡片右下角那个「查看详情」用 margin-left:auto 顶到行尾，RTL 下会被顶到错的一侧；②minimal 卡片那条主色竖线用的是 border-left，RTL 下应该在右边，圆角与内边距也跟着不对。两处都换成逻辑属性（margin-inline-start / border-inline-start / border-*-*-radius / padding-inline），LTR 下渲染结果一字不变。浮标贴哪个角是站长自己在后台选的，那些 .acs-widget--left/--right 的 left/right 是对的，没有动；消息气泡靠 flex-end 对齐，本身就跟着书写方向翻，也不用改。契约补了一条扫描：前台样式里不允许再出现 margin/padding/border 的 -left/-right 声明。",
             "download": {
-                "url": "",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@5ec7538/dist/ai-customer-service-1.4.4.zip",
                 "sha256": "3e0062386cc91b32d050b543293aaabebbc82b6d663070df7ccd9b18f9c4da92",
                 "size_bytes": 201736
             },
@@ -535,7 +535,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@c2e30e6/dist/analytics-snippet-1.0.1.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@5ec7538/dist/analytics-snippet-1.0.1.zip",
                 "sha256": "073f0905fb1d69a484860aa2ff0af9ef12b20f64b8e70f7a36d0803e44f4077d",
                 "size_bytes": 4014
             },
@@ -566,7 +566,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@c2e30e6/dist/hello-world-1.0.1.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@5ec7538/dist/hello-world-1.0.1.zip",
                 "sha256": "5895ac7fe49d0bab9f87a12b4fec00c61ecb30d6fbceca61936d6dab704230f2",
                 "size_bytes": 1696
             },
@@ -608,7 +608,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@c2e30e6/dist/maintenance-mode-1.0.0.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@5ec7538/dist/maintenance-mode-1.0.0.zip",
                 "sha256": "a9c2040049a98c7c811c1c625ba1997540eced940b4571d4cd0122003b18b2b4",
                 "size_bytes": 7991
             },
@@ -646,7 +646,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@c2e30e6/dist/preset-components-1.0.1.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@5ec7538/dist/preset-components-1.0.1.zip",
                 "sha256": "3ece951fa8f99332db1591cea876c832f755ba1976a4bcb04164c5c085ad70c9",
                 "size_bytes": 26934
             },
@@ -688,7 +688,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@c2e30e6/dist/reading-time-1.0.0.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@5ec7538/dist/reading-time-1.0.0.zip",
                 "sha256": "bb9daa5003bdde2bb7e985ffe1b1caf38cad25deffb62e56efa1966cae73f7bc",
                 "size_bytes": 6575
             },
@@ -726,7 +726,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@c2e30e6/dist/redirect-rules-1.0.1.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@5ec7538/dist/redirect-rules-1.0.1.zip",
                 "sha256": "8ac123892a303a95d758fd91507c7d10c0a3412b88b83c80c564b23a4e574a6b",
                 "size_bytes": 6023
             },
@@ -769,7 +769,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@c2e30e6/dist/sitemap-ping-1.0.0.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@5ec7538/dist/sitemap-ping-1.0.0.zip",
                 "sha256": "83f73524e696b030f498a7655d929865ec645aa35d3c61cd9e58985ece6a4bcc",
                 "size_bytes": 8383
             },
@@ -824,7 +824,7 @@
             "published_at": "2026-08-27T04:24:23Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@c2e30e6/dist/visual-editor-1.5.0.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@5ec7538/dist/visual-editor-1.5.0.zip",
                 "sha256": "1f3cad9be458aa0690715157c4bea769ee30d50708c743d6f3e248a3ef8fd248",
                 "size_bytes": 134377
             },
