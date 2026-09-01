@@ -70,6 +70,9 @@ $boot = [
     // 模型清单与上次保存的报错字段都只有 JS 用得上：前者判断「系统模型一个都没配」
     // 要不要出提示，后者把校验失败的控件标红。不进 $boot 这两个功能就是死的。
     'models' => $models,
+    // 密钥字段永不回显（_partials/secret.php 里 value 恒为空），所以"到底存过没有"
+    // 只能由服务端说。少了这一位，JS 的自检就只会在"值是空的"时报警——而它永远是空的。
+    'customKeySet' => $customKeySet,
     'saveErrors' => $saveErrors,
     'schedule' => $schedule,
     'config' => $config,

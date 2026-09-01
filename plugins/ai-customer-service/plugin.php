@@ -7,9 +7,10 @@ declare(strict_types=1);
  * 结构：
  * - 后台 8 个子页面（会话/触发/外观/AI/资料/工具/边界/输入），逐页保存；
  * - 后台异步动作（上传资料文件、检索站内内容、上传表情包、取预设）走同一组 POST 路由；
- * - 前台两个同源端点：/ai-customer-service/chat 与 /ai-customer-service/action。
- *   两者都不是 /api/v1 端点——访客没有后台账号，做成 API 会把匿名会话绑到管理员身上。
- *   CSRF 由核心 Router 对所有非 /api/ 的 POST 统一校验。
+ * - 前台三个同源端点：/ai-customer-service/chat、/action，以及只读的 /session。
+ *   前两个都不是 /api/v1 端点——访客没有后台账号，做成 API 会把匿名会话绑到管理员身上。
+ *   CSRF 由核心 Router 对所有非 /api/ 的 POST 统一校验；/session 是 GET，作用就是在
+ *   缓存页上换回一份属于访客自己的 token。
  */
 if (!defined('CODE_SCHEMA_VERSION')) exit;
 
@@ -94,6 +95,12 @@ add_action('routes.frontend.register', static function ($router): void {
     });
     $router->post('/ai-customer-service/action', static function (): void {
         AiCustomerServiceChat::dispatchAction();
+    });
+    /* 握手端点。整页缓存会把渲染期的 csrf 与会话 id 冻进 HTML 发给所有访客，
+     * 于是第二个访客的每次 POST 都被核心挡在 419 / 422 上。GET 才有意义：
+     * 要修的正是「手上那个 token 是错的」，而核心只对 POST 一类校验 CSRF。 */
+    $router->get('/ai-customer-service/session', static function (): void {
+        AiCustomerServiceChat::dispatchSession();
     });
 });
 

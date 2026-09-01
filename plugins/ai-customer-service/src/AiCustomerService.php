@@ -16,7 +16,7 @@ declare(strict_types=1);
 final class AiCustomerService
 {
     public const SLUG = 'ai-customer-service';
-    public const VERSION = '1.5.0';
+    public const VERSION = '1.5.1';
 
     private const SESSION_KEY = '_ai_customer_service';
     private const CONVERSATION_TTL = 21600;
@@ -1524,7 +1524,10 @@ final class AiCustomerService
             . '<span class="acs-counter" data-acs-counter aria-hidden="true">0/' . (int)$config['message_max_chars'] . '</span>'
             . '<button type="submit" class="acs-send" aria-label="发送消息"><i class="bi bi-arrow-up" aria-hidden="true"></i></button>'
             . '</div></div></div>'
-            . '<div class="acs-picker" data-acs-picker hidden></div>'
+            /* 有 id 与 role 才能被 aria-controls 指到：只给触发按钮 aria-expanded，
+             * 读屏会念「已展开」但不知道展开的是什么、也没有直达路径。
+             * aria-label 由 openPicker() 按 kind 现设 —— 这一个节点被表情与表情包共用。 */
+            . '<div class="acs-picker" id="acs-picker" data-acs-picker role="group" hidden></div>'
             . '</form>';
 
         if (!empty($config['show_powered_by'])) {
@@ -1576,12 +1579,12 @@ final class AiCustomerService
         // 只在 JS 里补的话，脚本还没跑起来时读屏看到的是一个"普通按钮"。
         if (!empty($config['emoji_enabled'])) {
             $html .= '<button type="button" class="acs-icon-btn acs-tool-btn" data-acs-pick="emoji"'
-                . ' aria-expanded="false" aria-label="插入表情" title="表情">'
+                . ' aria-expanded="false" aria-controls="acs-picker" aria-label="插入表情" title="表情">'
                 . '<i class="bi bi-emoji-smile" aria-hidden="true"></i></button>';
         }
         if (!empty($config['sticker_enabled']) && ($config['stickers']['packs'] ?? []) !== []) {
             $html .= '<button type="button" class="acs-icon-btn acs-tool-btn" data-acs-pick="sticker"'
-                . ' aria-expanded="false" aria-label="插入表情包" title="表情包">'
+                . ' aria-expanded="false" aria-controls="acs-picker" aria-label="插入表情包" title="表情包">'
                 . '<i class="bi bi-sticky" aria-hidden="true"></i></button>';
         }
         return $html;
@@ -1715,6 +1718,25 @@ final class AiCustomerService
 
 
     /**
+     * 浏览器等待一次回复的上限（毫秒）。
+     *
+     * 服务端最坏耗时是「轮次 × 出站超时」：开着工具时 converse() 先让模型决定调什么、
+     * 执行完再续写一轮，每一轮都可能各自跑满 CUSTOM_TIMEOUT。浏览器这边的上限比它短，
+     * 结果就是访客先看到「超时」、服务端随后照样把这轮问答写进会话 —— 下次刷新历史里
+     * 凭空多出一问一答，而访客早已把同一句又发了一遍。所以由服务端算好下发。
+     *
+     * 刻意不写在 publicWidgetConfig() 的函数体里：契约禁止那段代码出现 tools 字样
+     * （防的是把工具定义下发到前台），这里只读一个开关和一个轮次数。
+     */
+    private static function chatTimeoutMs(array $config): int
+    {
+        $rounds = empty($config['tools_enabled']) ? 1 : max(1, (int)$config['tool_max_rounds']) + 1;
+        $seconds = $rounds * AiCustomerServiceChat::CUSTOM_TIMEOUT + 5;
+        // 下限 30 秒（比任何单次出站都长），上限 180 秒（再久访客只会以为页面死了）
+        return min(180, max(30, $seconds)) * 1000;
+    }
+
+    /**
      * 注入前台的公开配置。
      *
      * 这里刻意只放「浏览器必须知道」的东西：描述词、资料正文、工具定义、约束清单、
@@ -1727,8 +1749,13 @@ final class AiCustomerService
         return [
             'endpoint' => url('ai-customer-service/chat'),
             'actionEndpoint' => url('ai-customer-service/action'),
+            /* 握手端点。csrf 与 conversationId 是渲染期铸造的，整页缓存会把它们冻进
+             * HTML 发给所有访客；前端撞到 419 / conversation_expired 时用这个 GET
+             * 端点换一份属于自己的，再把原请求重放一次。 */
+            'sessionEndpoint' => url('ai-customer-service/session'),
             'csrf' => \App\Core\Csrf::token(),
             'conversationId' => self::currentConversation(),
+            'timeoutMs' => self::chatTimeoutMs($config),
             'brandName' => $config['brand_name'],
             'welcomeMessage' => $config['welcome_message'],
             'quickRepliesTitle' => $config['quick_replies_title'],

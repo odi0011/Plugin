@@ -334,6 +334,15 @@
             var missing = [];
             if (val('custom_api_endpoint', '') === '') missing.push('接口地址');
             if (val('custom_model', '') === '') missing.push('模型名');
+            /* 密钥框永不回显，值恒为空——只看值就永远判断不出"没配过"，而它又不是声明式
+             * 字段（val() 找的是 setting_*），只能直接按 id 取。服务端下发的 customKeySet
+             * 才是"存过没有"的唯一依据；缺了这一条，独立接口少了密钥也一声不响，
+             * 站长只会在前台看到「暂时无法回复」。勾了"清除"等于这次保存后就没有了。 */
+            var keyInput = root.querySelector('#custom_api_key');
+            var clearKey = root.querySelector('#clear_custom_api_key');
+            var typedKey = keyInput ? String(keyInput.value || '').trim() !== '' : false;
+            var keptKey = BOOT.customKeySet && !(clearKey && clearKey.checked);
+            if (!keptKey && !typedKey) missing.push('密钥');
             if (missing.length) text = '独立接口还缺：' + missing.join('、') + '。填齐之前客服回答不了任何问题。';
         }
         if (text === '') return;
@@ -2530,7 +2539,10 @@
     /* 会影响「模型没配好」那条提示的字段。只盯 provider_mode 的话，站长把接口地址填上了
      * 提示还挂在那儿，得去拨一下模型来源才消失。 */
     var PROVIDER_KEYS = ['setting_provider_mode', 'setting_system_model_id',
-        'setting_custom_api_endpoint', 'setting_custom_model'];
+        'setting_custom_api_endpoint', 'setting_custom_model',
+        // 密钥与"清除密钥"不是声明式 settings（所以没有 setting_ 前缀），
+        // 不列进来，边填边看的提示就漏掉唯一一个能自己修好的缺项。
+        'custom_api_key', 'clear_custom_api_key'];
 
     // 表单里任何变化都重算预览。用事件委托，面板动态插入的控件也能覆盖到。
     root.addEventListener('input', function (event) {

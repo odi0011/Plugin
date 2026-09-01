@@ -170,8 +170,13 @@
     bottom: var(--acs-desktop-y);
     opacity: 0;
     pointer-events: none;
+    /* pointer-events 只挡鼠标。光 opacity:0 的话整个挂件仍在 Tab 序里：键盘用户会
+     * 一路 Tab 进一块看不见的面板，读屏也照念。visibility 才能同时摘掉焦点和无障碍树，
+     * 而且它可过渡（不像 display），淡入淡出照旧。 */
+    visibility: hidden;
     transform: translateY(8px);
-    transition: opacity var(--acs-dur-2) var(--acs-ease), transform var(--acs-dur-2) var(--acs-ease);
+    transition: opacity var(--acs-dur-2) var(--acs-ease), transform var(--acs-dur-2) var(--acs-ease),
+        visibility 0s linear var(--acs-dur-2);
 }
 
 #ai-customer-service-widget.acs-widget--right { right: var(--acs-desktop-x); }
@@ -179,6 +184,9 @@
 #ai-customer-service-widget.acs-widget[data-visible="true"] {
     opacity: 1;
     pointer-events: auto;
+    visibility: visible;
+    /* 出现时立刻可见，消失时等淡出结束再撤——延迟只加在隐藏那一侧 */
+    transition-delay: 0s, 0s, 0s;
     transform: translateY(0);
 }
 
@@ -980,6 +988,19 @@
     content: "未发送";
     padding: 0 2px;
     color: var(--acs-err);
+    font-size: calc(var(--acs-font) * .72);
+}
+
+/* 超时的那条：送到没送到还不知道，所以既不能标红说"未发送"，也不能装作已经回完。
+ * 用中性的虚线边框加一句"等待确认"，随后 recoverTimedOut() 捞回答案就把这个类摘掉。 */
+.acs-message.is-pending .acs-message-bubble {
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--acs-text) 22%, transparent);
+    opacity: .72;
+}
+.acs-message.is-pending .acs-message-stack::after {
+    content: "等待确认…";
+    padding: 0 2px;
+    color: color-mix(in srgb, var(--acs-text) 62%, transparent);
     font-size: calc(var(--acs-font) * .72);
 }
 

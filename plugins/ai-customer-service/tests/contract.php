@@ -299,9 +299,14 @@ $assert(str_contains($cards, "'eitherContact'") && str_contains($widgetJs, 'card
 $assert(str_contains($widgetJs, "status.setAttribute('aria-live'"), '询盘表单的校验/提交结果必须能被读屏播报');
 $assert(str_contains($widgetJs, "setAttribute('aria-invalid'"), '出错字段要写 aria-invalid，不能只靠红框');
 $assert(str_contains($widgetJs, 'retry_after'), '限流必须把服务端算好的等待时间写给访客，不能只说"稍后再试"');
-/* 表情/表情包按钮各自展开下面那块 picker，状态要能被读屏感知 */
-$assert(str_contains($service, 'aria-expanded="false" aria-label="插入表情"')
+/* 表情/表情包按钮各自展开下面那块 picker，状态要能被读屏感知。
+ * aria-controls 指向的那个 id 必须真的在标记里，否则读屏跟不过去。 */
+$assert(str_contains($service, 'aria-expanded="false" aria-controls="acs-picker" aria-label="插入表情"')
     && str_contains($widgetJs, "setAttribute('aria-expanded', 'true')"), 'picker 触发按钮必须同步 aria-expanded');
+$assert(str_contains($service, 'id="acs-picker"') && str_contains($service, 'role="group"'),
+    'picker 面板要有 id 与 role，才能被两个触发按钮的 aria-controls 指到');
+$assert(str_contains($widgetJs, "picker.setAttribute('aria-label', kind === 'emoji'"),
+    'picker 的 aria-label 只能由 openPicker() 按 kind 给：一个面板节点被两个按钮共用，写死在 HTML 里必有一半是错的');
 /* 保存失败：字段名只进消息文本的话，站长得在几十个控件里自己找 */
 $assert(str_contains($service, 'function stashSaveErrors(') && str_contains($service, 'function takeSaveErrors(')
     && str_contains($service, "'saveErrors' => self::takeSaveErrors()")
@@ -333,6 +338,11 @@ $assert($missingBoot === [], 'admin.js 读了这些 BOOT 键但 $boot 没有转�
     . implode('、', $missingBoot));
 $assert(isset($bootKeys['models']) && isset($bootKeys['saveErrors']),
     '$boot 必须转发 models 与 saveErrors：前者判断「一个对话模型都没配」，后者标红出错字段');
+/* customKeySet 是"缺密钥"这条自检的唯一依据：密钥字段永不回显（value 恒为空），
+ * 只看值就永远判不出"没配过"。上面的交叉核对已经能抓到漏转发，这里再点名一次
+ * 是因为它和另外两个键的失效方式不同——那两个是功能变空操作，这一个是提示恒不出现。 */
+$assert(isset($bootKeys['customKeySet']) && str_contains($adminJs, 'BOOT.customKeySet'),
+    '$boot 必须转发 customKeySet，否则独立接口少了密钥后台一声不响');
 
 /* 服务时段：判定必须在客户端。服务端判的话，整页缓存会把渲染那一刻的答案冻住 ——
  * 上午缓存的页面到晚上还带挂件，晚上缓存的第二天上午一整天都没有。Vary 救不了「时间」
@@ -743,6 +753,110 @@ foreach (['messenger', 'line', 'viber', 'sms', 'skype', 'discord'] as $network) 
     $assert(str_contains($adminJs, $network . ':'), '后台名片面板缺少该渠道的"值"字段文案：' . $network);
 }
 
+/* ------------------------------------------------------------ 1.5.1：缓存页上的会话
+ * 整页缓存会把渲染那一刻的 csrf 与会话 id 冻进 HTML 发给所有访客。核心对非 /api/ 的
+ * POST 统一校验 CSRF，失败时直接回 419 纯文本（请求根本到不了插件），会话 id 不属于
+ * 自己时是 422 conversation_expired —— 两条都不是"刷新页面"能修的，刷回来的还是同一份
+ * 缓存 HTML。所以必须有一条 GET 握手路由，加一条"撞到就自动换 token 重试一次"的通路。 */
+$assert(str_contains($plugin, "\$router->get('/ai-customer-service/session'"),
+    '缺少 GET 握手路由：CSRF 只对 POST 一类校验，用 POST 换 token 会被同一道门挡在外面');
+$assert(str_contains($chat, 'function dispatchSession('), '缺少握手端点的实现');
+$sessionBody = '';
+if (preg_match('/function dispatchSession\(\): void\s*\{(.+?)\n    \}/s', $chat, $sessionMatch)) {
+    $sessionBody = $sessionMatch[1];
+}
+$assert($sessionBody !== '', '找不到 dispatchSession() 的定义');
+$assert(str_contains($sessionBody, 'no-store'),
+    '握手响应必须 no-store：被任何一层缓存住，就等于继续把同一个访客的 token 发给所有人');
+$assert(str_contains($sessionBody, 'Csrf::token()') && str_contains($sessionBody, 'currentConversation()'),
+    '握手必须同时换回 csrf 与会话 id：只换一个，另一个照样是别人的');
+// 前台五处 POST 必须收在一个 postForm() 里。多一处裸 fetch 就多一处不会重握手的死路。
+$assert(str_contains($widgetJs, 'function postForm(') && str_contains($widgetJs, 'function handshake('),
+    '前台缺少统一的 postForm() / handshake()');
+$assert(substr_count($widgetJs, 'fetch(') === 2,
+    '前台只该有两处 fetch（handshake 的 GET 与 postForm 的 POST），当前 ' . substr_count($widgetJs, 'fetch(') . ' 处');
+$assert(!preg_match('/fetch\(config\.(actionEndpoint|endpoint)/', $widgetJs),
+    '聊天与动作端点不得再直接 fetch：绕过 postForm 就绕过了重握手与超时');
+$assert(str_contains($widgetJs, 'response.status === 419'),
+    '419 必须单独认：那是核心发的纯文本，response.json() 会抛，错误文案就变成"网络似乎断开了"');
+$assert(str_contains($widgetJs, "result.code === 'csrf_mismatch' || result.code === 'conversation_expired'")
+    && str_contains($widgetJs, 'if (isRetry || !stale) return result;'),
+    '过期只重试一次：不设这道闸，握手也失败时会变成无限重发');
+$assert(str_contains($publicBody, 'sessionEndpoint') && str_contains($publicBody, 'timeoutMs'),
+    '握手地址与等待上限必须下发给前台，否则前台只能写死一个数');
+/* 等待上限由服务端最坏耗时推出来。两边各写一个 25 / 30 秒早晚会漂：开了工具调用时
+ * 服务端要跑 (tool_max_rounds+1)×30 秒，浏览器 25 秒就放弃，于是访客看到"超时"，
+ * 服务端那边照样答完并存进了会话。 */
+$assert(str_contains($service, 'function chatTimeoutMs(')
+    && str_contains($service, 'AiCustomerServiceChat::CUSTOM_TIMEOUT'),
+    '前台等待上限必须由服务端按出站超时与工具轮次算出来，不能是另一个手写的数');
+$assert(!preg_match('/var TIMEOUT_MS = \d+;/', $widgetJs), '前台不得写死等待上限，必须读 config.timeoutMs');
+/* 超时 ≠ 没送到。标"未发送"并把原文塞回输入框，等于骗访客把同一句问第二遍，
+ * 还白占一次限流额度；正确的做法是标成中性态，再回头用 history 把答案捞回来。 */
+$assert(str_contains($widgetJs, 'function recoverTimedOut(')
+    && str_contains($widgetJs, "mine.row.classList.add('is-pending')"),
+    '超时的消息要标成"等待确认"并回头补答案，不能直接判"未发送"');
+$assert(preg_match('/\.acs-message\.is-pending\s/', $widgetCss) === 1,
+    'is-pending 必须有 CSS，否则超时的那条和正常消息看起来一模一样');
+/* 重新开始：先清屏后确认的话，失败时屏幕空了、服务端上下文还在，
+ * 接着问下一句会得到一段访客看不出来由的回答。 */
+if (preg_match('/restartBtn\.addEventListener\((.+?)\n    \}/s', $widgetJs, $restartMatch)) {
+    $guardAt = strpos($restartMatch[1], 'result.data.conversation_id');
+    $clearAt = strpos($restartMatch[1], "chat.innerHTML = ''");
+    $assert($guardAt !== false && $clearAt !== false && $guardAt < $clearAt,
+        '重新开始必须先确认服务端换了会话再清屏');
+} else {
+    $assert(false, '找不到重新开始的处理');
+}
+
+/* ------------------------------------------------------------ 1.5.1：焦点与读屏 */
+$assert(preg_match('/#ai-customer-service-widget\.acs-widget \{[^}]*visibility:\s*hidden/s', $widgetCss) === 1,
+    '挂件隐藏时必须 visibility:hidden：只有 opacity:0 的话整块面板仍在 Tab 序里，读屏也照念');
+$assert(preg_match('/\[data-visible="true"\] \{[^}]*visibility:\s*visible/s', $widgetCss) === 1,
+    '显示时要把 visibility 收回来，否则挂件永远不可见');
+$assert(str_contains($widgetJs, "el('span', 'acs-sr-only', '客服正在输入"),
+    '"正在输入"是纯 CSS 动画，读屏一个字都拿不到，必须补一条 sr-only 文本');
+$assert(str_contains($widgetJs, 'var hadFocus = !picker.hidden && picker.contains(document.activeElement);'),
+    '表情面板关闭前要先问焦点在不在里面（hidden 之后浏览器已经把焦点甩回 body 了），'
+    . '否则 innerHTML="" 会把焦点连根删掉');
+$assert(str_contains($widgetJs, "chat.setAttribute('aria-live', 'off')")
+    && str_contains($widgetJs, "chat.setAttribute('aria-live', 'polite')"),
+    '一次性回填历史要先关掉 role="log" 的播报再打开，否则读屏用户要听完整段旧对话才能开口');
+$assert(str_contains($widgetJs, "'以上是本次会话的早前记录'"),
+    '视觉上有时间戳能分辨新旧，读屏只有一串连续对话，得明说一句');
+$assert(str_contains($widgetJs, 'if (busy && !input.disabled && active'),
+    '禁用发送键之前要先把焦点挪走：disabled 的元素会把焦点丢回文档开头');
+
+/* ------------------------------------------------------------ 1.5.1：先算余量再落盘
+ * 上传的顺序是"文件先落盘、目录后写设置"。撞上限时目录写不进去，那些 .txt 在后台
+ * 既看不见也删不掉（只有卸载时的 purge() 会扫），所以余量必须在动手之前算。 */
+$assert(str_contains($adminSrc, 'private static function jsonLength('),
+    '缺少写入前的余量计算：撞上限时文件已经落盘了');
+$assert(preg_match('/function writeJsonSetting\(string \$key, array \$value, int \$limit\): array/', $adminSrc) === 1,
+    'writeJsonSetting 必须返回结果而不是就地 exit：调用方要先把已落盘的这一批撤回来');
+$assert(str_contains($adminSrc, '这一项已经占到 '),
+    '超限文案必须带数字（已占多少 / 上限多少 / 多了多少），"内容超出上限"说不出"我该删几条"');
+foreach (['knowledge_json' => 'KNOWLEDGE_LIMIT', 'stickers_json' => 'STICKERS_LIMIT'] as $limitField => $constName) {
+    $declared = (int)($fields[$limitField]['field']['max_length'] ?? 0);
+    $assert($declared > 0 && str_contains($adminSrc, $constName . ' = ' . $declared . ';'),
+        $constName . ' 必须等于 plugin.json 里 ' . $limitField . ' 的 max_length（' . $declared
+        . '）：小了白挡、大了写进去被核心截断成坏 JSON');
+}
+$uploadBody = '';
+if (preg_match('/function knowledgeUpload\(\): void\s*\{(.+?)\n    \}/s', $adminSrc, $uploadMatch)) {
+    $uploadBody = $uploadMatch[1];
+}
+$assert($uploadBody !== '', '找不到 knowledgeUpload() 的定义');
+if ($uploadBody !== '') {
+    $roomAt = strpos($uploadBody, 'self::jsonLength(');
+    $storeAt = strpos($uploadBody, 'Knowledge::storeUpload(');
+    $assert($roomAt !== false && $storeAt !== false && $roomAt < $storeAt,
+        '余量要在 storeUpload() 之前算：反过来就是"文件已经写进磁盘、再回一句超出上限"');
+    $assert(str_contains($uploadBody, 'AiCustomerServiceKnowledge::deleteFile('),
+        '目录没写成功时要把这一批文件原路撤回，否则它们在后台既看不见也删不掉');
+    $assert(str_contains($uploadBody, '$skipped'),
+        '因为余量/上限少收了几个文件必须说出来：静默少收只会被当成上传坏了');
+}
 // README 承诺
 foreach (['描述词', '资料', '工具', '卡片', '边界', '表情'] as $topic) {
     $assert(str_contains($readme, $topic), 'README 必须说明「' . $topic . '」');

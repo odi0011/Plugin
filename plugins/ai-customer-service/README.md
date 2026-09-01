@@ -99,7 +99,17 @@ Prompt Bar，产品卡是行式 Recommendation Card。配色全部来自后台�
 
 - 访客通道：同源 `POST /ai-customer-service/chat` 与 `/ai-customer-service/action`，
   CSRF 由核心 Router 统一校验。
+- 握手通道：`GET /ai-customer-service/session`（`no-store`）。整页缓存会把渲染那一刻的
+  CSRF token 与会话 id 冻进 HTML 发给所有访客，于是第一句话就撞 419（核心发的是**纯文本**，
+  不是 JSON）或 422 `conversation_expired`；两者都不是"刷新一下"能修的，刷回来的还是同一份
+  缓存。前台五处 POST 统一走一个 `postForm()`：认出这两种失败就用握手端点换一份属于自己的
+  token 与会话 id，把原请求重放一次——**只重放一次**，握手也失败就照实说。
 - 会话只存在 PHP session 里（同一 session 复用未过期会话，翻页不丢上下文），不建聊天记录表。
+- 等待上限由服务端算好下发（`timeoutMs`，30–180 秒）。开着工具调用时服务端最坏要跑
+  `(工具轮次 + 1) × 30` 秒，浏览器这边写死 25 秒就会先弹"超时"、服务端随后照样答完并写进
+  会话——下次刷新历史里凭空多出一问一答，而访客早已把同一句又发了一遍。超时的那条因此
+  标成中性的「等待确认」（不是红色的"未发送"，也不把原文塞回输入框），随后自动拉一次
+  `action=history`：末尾那一问确实就是刚超时的这句，就把答案补进对话。
 - 限流：每 IP 每分钟按配置、每会话每分钟 `min(20, max(2, 配置))`、询盘提交每 IP 每 10 分钟 3 条。
 
 ## 体验增强
@@ -225,6 +235,20 @@ php plugins/ai-customer-service/tests/contract.php
 错位把聊天区压塌）、聊天区必须关掉横轴溢出、引流气泡必须显式给宽度（否则塌成一列单字）、
 JS/PHP 输出的每个类名都必须有对应 CSS 规则（防"换了 DOM 忘了同步样式"）、照搬的设计稿
 签名值不得改动。
+
+1.5.1 添的一组都在盯"看不出来的失败"：**握手路由必须是 GET**（CSRF 只校验 POST 一类，用
+POST 去换 token 会被同一道门挡在外面）、握手响应必须 `no-store`、前台**只准有两处 `fetch(`**
+（握手的 GET 与 `postForm` 的 POST，多一处就多一条不会重握手的死路）、419 必须单独认
+（`response.json()` 会在纯文本上抛，错误文案就变成"网络似乎断开了"）、重放只能一次、
+等待上限必须由 `chatTimeoutMs()` 从 `CUSTOM_TIMEOUT` 推出来而不是前台再写一个数字。
+无障碍侧钉住：挂件隐藏时必须 `visibility: hidden`（只有 `opacity: 0` 的话整块面板仍在 Tab
+序里，读屏也照念）、"正在输入"必须另有 sr-only 文本（那三个点是纯 CSS 动画，读屏一个字都
+拿不到）、一次性回填历史前后必须 `aria-live` off→polite 并补一句分隔（不然读屏用户要听完
+整段旧对话才能开口）、禁用发送键之前先把焦点挪走。后台侧钉住：`KNOWLEDGE_LIMIT` /
+`STICKERS_LIMIT` 必须等于 `plugin.json` 里对应字段的 `max_length`（小了白挡、大了写进去
+被核心截断成坏 JSON）、余量必须在 `storeUpload()` **之前**算、目录写失败要把这一批文件
+原路撤回（否则那些 `.txt` 在后台既看不见也删不掉）、因为上限少收了几个必须报数
+（静默少收只会被当成上传坏了）。
 
 1.5.0 添的一条覆盖面最大：**七个主题轴（气泡形态 / 气泡动效 / 密度 / 顶栏 / 快捷问题 /
 边缘 / 字面）必须六处对齐** —— `normalizeTheme()` 的白名单、`defaultTheme()` 的兜底、

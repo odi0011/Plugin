@@ -14,7 +14,9 @@
 
     var config;
     try { config = JSON.parse(configNode.textContent || '{}'); } catch (error) { return; }
-    if (!config || !config.endpoint || !config.csrf || !config.conversationId) return;
+    /* csrf 与 conversationId 刻意不再是硬前提：整页缓存下它们可能是别人的，甚至（会话
+     * 还没起来时）是空的。真正不能缺的只有端点地址 —— 有端点就能握手换一份回来。 */
+    if (!config || !config.endpoint || !config.actionEndpoint) return;
 
     var launcher = root.querySelector('.acs-launcher');
     var panel = root.querySelector('.acs-panel');
@@ -48,10 +50,14 @@
     // show_launcher=false 时不渲染浮标，但面板仍然保留，供 window.AiCustomerService 打开。
     var state = {
         open: false, visible: false, greeted: false, busy: false,
-        userOpened: false, replied: false, conversationId: config.conversationId,
+        userOpened: false, replied: false, conversationId: String(config.conversationId || ''),
+        // csrf 与 conversationId 都是可变的：缓存页上要靠握手换成属于访客自己的那一份
+        csrf: String(config.csrf || ''),
         // dead: 设备不匹配时整个节点已被移除，公开 API 不能再往一棵脱离文档的树上操作
         dead: false, nearBottom: true, unread: 0, lastFocus: null,
         restored: false, restoring: false, opened: false,
+        // sent: 访客已经开口。历史恢复慢一步回来时不能再把聊天区推平重铺
+        sent: false,
         // modal: 这次打开是访客自己点的。只有这时候才圈住 Tab 并对读屏声明 aria-modal ——
         // 自动弹出的面板是「环境里多了一块东西」，把键盘用户锁在里面出不去是纯粹的伤害
         modal: false,
@@ -164,6 +170,95 @@
     }
 
     /* ACS_MARKER_FJS_1 */
+
+    /* ---------------------------------------------------------------- 同源请求
+     *
+     * 所有 POST 都走 postForm()。整页缓存 / CDN 会把渲染那一刻的 csrf 与 conversationId
+     * 冻进 HTML 发给所有访客：token 不属于访客自己的 session，核心 Router 在进插件之前
+     * 就回 419（纯文本，不是 JSON）；会话 id 也不在他的 session 里，接口恒回 422
+     * conversation_expired。这两种失败都不该丢给访客一句「请刷新页面」—— 刷新拿回来的
+     * 还是同一份缓存 HTML。所以撞上就去 GET 一次握手端点换新的 csrf + 会话 id，
+     * 然后把原请求重放一次（只重放一次：真的坏了要让错误浮出来，不能悄悄打转）。
+     */
+
+    function handshake() {
+        if (!config.sessionEndpoint) return Promise.resolve(false);
+        return fetch(config.sessionEndpoint, {
+            method: 'GET',
+            credentials: 'same-origin',
+            cache: 'no-store',
+            headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+        }).then(function (response) {
+            return response.json().catch(function () { return {}; });
+        }).then(function (data) {
+            var got = (data && data.ok && data.data) ? data.data : null;
+            if (!got || !got.csrf || !got.conversation_id) return false;
+            state.csrf = String(got.csrf);
+            state.conversationId = String(got.conversation_id);
+            return true;
+        }).catch(function () { return false; });
+    }
+
+    /**
+     * @param {Object} fields 除 _csrf / conversation_id 之外的表单字段
+     * @param {number} [timeoutMs] 0 或不给表示不设上限
+     * @return {Promise<{ok:boolean,error:string,code:string,data:Object,status:number}>}
+     *   只有网络失败与超时才 reject（Error 上带 aborted 标记）；HTTP 与业务错误一律
+     *   正常 resolve，由调用方决定怎么呈现。
+     */
+    function postForm(endpoint, fields, timeoutMs) {
+        function fire(isRetry) {
+            var body = new URLSearchParams();
+            if (state.csrf) body.set('_csrf', state.csrf);
+            if (state.conversationId) body.set('conversation_id', state.conversationId);
+            Object.keys(fields || {}).forEach(function (key) {
+                var value = fields[key];
+                if (value !== undefined && value !== null) body.set(key, String(value));
+            });
+            var controller = (timeoutMs > 0 && window.AbortController) ? new window.AbortController() : null;
+            var timer = null;
+            var init = {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                body: body
+            };
+            if (controller) {
+                init.signal = controller.signal;
+                timer = window.setTimeout(function () { controller.abort(); }, timeoutMs);
+            }
+            return fetch(endpoint, init).then(function (response) {
+                // 419 是核心在进插件之前拦下的 CSRF 失败，回的是纯文本；不特判就会被
+                // 当成「响应不是 JSON」，最后显示成一句莫名的"网络似乎断开了"
+                if (response.status === 419) {
+                    return { ok: false, error: '', code: 'csrf_mismatch', data: {}, status: 419 };
+                }
+                return response.json().catch(function () { return {}; }).then(function (raw) {
+                    var data = (raw && typeof raw === 'object') ? raw : {};
+                    var payload = (data.data && typeof data.data === 'object') ? data.data : {};
+                    return {
+                        ok: response.ok && !!data.ok,
+                        error: String(data.error || payload.message || ''),
+                        code: String(data.code || ''),
+                        data: payload,
+                        status: response.status
+                    };
+                });
+            }, function (error) {
+                var aborted = !!(error && error.name === 'AbortError');
+                var wrapped = new Error(aborted ? '请求超时' : '网络似乎断开了，请检查连接后重试。');
+                wrapped.aborted = aborted;
+                throw wrapped;
+            }).finally(function () {
+                if (timer !== null) window.clearTimeout(timer);
+            }).then(function (result) {
+                var stale = result.code === 'csrf_mismatch' || result.code === 'conversation_expired';
+                if (isRetry || !stale) return result;
+                return handshake().then(function (fresh) { return fresh ? fire(true) : result; });
+            });
+        }
+        return fire(false);
+    }
 
     /* ---------------------------------------------------------------- 转化事件与未读提醒 */
 
@@ -298,6 +393,15 @@
     function setOpen(open, silent) {
         if (state.dead) return;
         if (!state.visible && open) reveal();
+        /* 只在「关 → 开」这一次记录来源焦点，而且不记面板内部的节点。面板已经开着时再调一次
+         * setOpen(true)（站点自己的按钮走 window.AiCustomerService.ask()/open() 就是这条路）
+         * 会把 lastFocus 覆盖成输入框；之后 Esc 关闭，focus() 落在已隐藏的子树上是空操作，
+         * 焦点直接掉到 body —— 键盘用户要从整页开头重新 Tab 回来。 */
+        if (open && !state.open) {
+            var source = document.activeElement;
+            state.lastFocus = (source && source !== document.body && !panel.contains(source))
+                ? source : (launcher || null);
+        }
         state.open = !!open;
         state.modal = state.open && !silent;
         panel.hidden = !state.open;
@@ -319,9 +423,11 @@
             var last = state.lastFocus;
             state.lastFocus = null;
             if (last && typeof last.focus === 'function' && document.contains(last)) last.focus();
+            /* document.contains() 对隐藏子树里的节点仍然返回 true，而 focus() 对它是
+             * 空操作 —— 焦点会停在 body 上。兜一道回浮标，那是唯一一定能重新打开的入口。 */
+            if (launcher && (!document.activeElement || document.activeElement === document.body)) launcher.focus();
             return;
         }
-        state.lastFocus = document.activeElement;
         clearAttention();
         restoreTitle();
         dismissTeaser(false);
@@ -494,9 +600,28 @@
             bubble.appendChild(el('span', '', '正在查资料…'));
         } else {
             for (var i = 0; i < 3; i++) bubble.appendChild(el('i'));
+            /* 三个空 <i> 对读屏就是空的，而 ARIA 禁止给 generic 角色起名字 —— 挂在
+             * div 上的 aria-label 会被浏览器忽略。塞一句真的文本进去，聊天区本身就是
+             * role=log，会自然念出来：不然访客按下发送之后到回复到达之间毫无反馈。 */
+            bubble.appendChild(el('span', 'acs-sr-only', '客服正在输入…'));
         }
-        bubble.setAttribute('aria-label', '客服正在输入');
         entry.stack.appendChild(bubble);
+        scrollToEnd();
+        return entry;
+    }
+
+    /**
+     * 一条客服回复：工具 chip → 正文（含链接化）→ 时间戳 → 卡片。
+     * 正常回复与「超时后补回来的回复」共用，免得两处各写一遍渲染顺序。
+     */
+    function appendReply(text, at, cards, chips) {
+        var entry = messageRow('assistant');
+        (chips || []).forEach(function (label) { appendToolChip(entry.stack, label); });
+        var bubble = el('div', 'acs-message-bubble', text);
+        entry.stack.appendChild(bubble);
+        linkify(bubble, text);
+        stampTime(entry.stack, at);
+        renderCards(entry.stack, cards);
         scrollToEnd();
         return entry;
     }
@@ -532,7 +657,10 @@
             row.appendChild(button);
         });
         quickReplies.appendChild(row);
-        // 刚建出来的按钮默认是可点的，同意还没勾时要跟着一起锁上
+        /* 刚建出来的按钮默认可点。两种情况下必须跟着锁上：正在等回复（否则历史恢复或
+         * 主动问候重铺快捷问题时，访客能在 busy 中间再点一条，submit 的 busy 闸会把它
+         * 静默丢掉 —— 表现成"点了没反应"），以及同意还没勾。 */
+        quickReplies.querySelectorAll('button').forEach(function (button) { button.disabled = state.busy; });
         applyConsent();
     }
 
@@ -973,12 +1101,11 @@
 
         wrap.addEventListener('submit', function (event) {
             event.preventDefault();
-            var body = new URLSearchParams();
-            body.set('_csrf', config.csrf);
-            body.set('conversation_id', state.conversationId);
-            body.set('action', 'inquiry');
-            body.set('page_url', window.location.href.slice(0, 500));
-            body.set('page_title', String(document.title || '').slice(0, 255));
+            var fields = {
+                action: 'inquiry',
+                page_url: window.location.href.slice(0, 500),
+                page_title: String(document.title || '').slice(0, 255)
+            };
 
             var firstBad = null;
             Object.keys(inputs).forEach(function (name) {
@@ -987,7 +1114,7 @@
                 var bad = entry.required && value === '';
                 markInvalid(entry, bad);
                 if (bad && !firstBad) firstBad = entry;
-                body.set('field_' + name, value);
+                fields['field_' + name] = value;
             });
             if (firstBad) { fail('请把带 * 的字段填一下', firstBad); return; }
 
@@ -1013,23 +1140,16 @@
             submitBtn.disabled = true;
             status.textContent = '正在提交…';
             status.className = 'acs-form-status';
-            fetch(config.actionEndpoint, {
-                method: 'POST',
-                credentials: 'same-origin',
-                headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-                body: body
-            }).then(function (response) {
-                return response.json().catch(function () { return {}; }).then(function (data) {
-                    if (!response.ok || !data.ok) {
-                        var text = (data && (data.error || (data.data && data.data.message))) || '提交失败，请稍后再试';
-                        // 询盘限流是每 IP 每 10 分钟 3 条，不写出等待时间访客只能反复试
-                        var wait = data && data.data ? Math.round(Number(data.data.retry_after) || 0) : 0;
-                        if (wait > 0) text += wait >= 60 ? '（约 ' + Math.ceil(wait / 60) + ' 分钟后可再提交）'
-                            : '（约 ' + wait + ' 秒后可再提交）';
-                        throw new Error(text);
-                    }
-                    return data.data || {};
-                });
+            postForm(config.actionEndpoint, fields, 25000).then(function (result) {
+                if (!result.ok) {
+                    var text = result.error || '提交失败，请稍后再试';
+                    // 询盘限流是每 IP 每 10 分钟 3 条，不写出等待时间访客只能反复试
+                    var wait = Math.round(Number(result.data.retry_after) || 0);
+                    if (wait > 0) text += wait >= 60 ? '（约 ' + Math.ceil(wait / 60) + ' 分钟后可再提交）'
+                        : '（约 ' + wait + ' 秒后可再提交）';
+                    throw new Error(text);
+                }
+                return result.data;
             }).then(function (data) {
                 grid.remove();
                 actions.remove();
@@ -1078,6 +1198,12 @@
         // 刻意不 disable 输入框：等回复时访客往往正在把下一句打完，禁用会清掉输入法候选、
         // 还会把焦点弹到页面开头。挡住重复提交只需要 disable 发送按钮（submit() 也有 busy 闸）。
         input.setAttribute('aria-busy', busy ? 'true' : 'false');
+        /* 访客刚激活的正是发送键或某个快捷提问：直接禁用当前 activeElement，焦点会立刻
+         * 掉到 body，读屏的虚拟焦点跟着丢，要等回复到达才回来（最长可达等待上限）。
+         * 先把焦点搬到输入框 —— 它刻意不被禁用，也是访客接下来唯一要用的控件。 */
+        var active = document.activeElement;
+        if (busy && !input.disabled && active
+            && (active === send || quickReplies.contains(active))) input.focus();
         send.disabled = busy;
         quickReplies.querySelectorAll('button').forEach(function (button) { button.disabled = busy; });
         // 忙完了也不能把发送解锁给一个还没勾同意的访客
@@ -1112,21 +1238,10 @@
 
     function acceptConsent() {
         if (!consentAccept || !consentBox || !consentBox.checked) return;
-        var body = new URLSearchParams();
-        body.set('_csrf', config.csrf);
-        body.set('conversation_id', state.conversationId);
-        body.set('action', 'consent');
         consentAccept.disabled = true;
-        fetch(config.actionEndpoint, {
-            method: 'POST',
-            credentials: 'same-origin',
-            headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-            body: body
-        }).then(function (response) {
-            return response.json().catch(function () { return {}; });
-        }).then(function (data) {
-            if (!data || !data.ok) {
-                showFeedback((data && data.error) || '提交失败，请稍后重试。');
+        postForm(config.actionEndpoint, { action: 'consent' }, 15000).then(function (result) {
+            if (!result.ok) {
+                showFeedback(result.error || '提交失败，请稍后重试。');
                 consentAccept.disabled = false;
                 return;
             }
@@ -1135,57 +1250,32 @@
             showFeedback('');
             input.focus();
             track('acs_consent', {});
-        }).catch(function () {
-            showFeedback('网络似乎断开了，请检查连接后重试。');
+        }).catch(function (error) {
+            showFeedback(error && error.aborted ? '提交超时，请再试一次。' : error.message);
             consentAccept.disabled = false;
         });
     }
 
-    /* 25 秒还没回来就当超时。模型侧最长 30 秒（CUSTOM_TIMEOUT），但浏览器这边如果不设
-     * 上限，遇到连接被中间设备挂住的情况会永远停在"正在输入"，访客只能刷新页面。 */
-    var TIMEOUT_MS = 25000;
+    /* 浏览器这边的等待上限由服务端算好下发（rounds × 出站超时 + 余量，见 chatTimeoutMs）：
+     * 比服务端最坏耗时短，访客会先看到"超时"、而服务端随后照样把这轮存进会话；
+     * 完全不设上限，遇到被中间设备挂住的连接就永远停在"正在输入"，只能刷新页面。 */
+    var TIMEOUT_MS = Math.max(20000, Number(config.timeoutMs) || 40000);
+    // 等得比这个久就先说一句"还在处理"，免得访客以为已经断了
+    var SLOW_MS = Math.min(18000, Math.round(TIMEOUT_MS * 0.45));
 
     function request(message) {
-        var body = new URLSearchParams();
-        body.set('_csrf', config.csrf);
-        body.set('conversation_id', state.conversationId);
-        body.set('message', message);
-        var controller = window.AbortController ? new window.AbortController() : null;
-        var timer = null;
-        var options = {
-            method: 'POST',
-            credentials: 'same-origin',
-            headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-            body: body
-        };
-        if (controller) {
-            options.signal = controller.signal;
-            timer = window.setTimeout(function () { controller.abort(); }, TIMEOUT_MS);
-        }
-        return fetch(config.endpoint, options).then(function (response) {
-            return response.json().catch(function () { return {}; }).then(function (data) {
-                if (!response.ok || !data.ok) {
-                    var text = (data && (data.error || (data.data && data.data.message)))
-                        || config.unavailableMessage || '暂时无法回复，请稍后再试。';
-                    // 限流时服务端算好了还要等多久，不用上就等于让访客盲等——
-                    // "请稍后再试"是最没用的那种错误提示。
-                    var wait = data && data.data ? Math.round(Number(data.data.retry_after) || 0) : 0;
-                    if (wait > 0) text += wait >= 60 ? '（约 ' + Math.ceil(wait / 60) + ' 分钟后可继续）'
-                        : '（约 ' + wait + ' 秒后可继续）';
-                    var error = new Error(text);
-                    error.payload = (data && data.data) || {};
-                    error.code = (data && data.code) || '';
-                    throw error;
-                }
-                return data.data || {};
-            });
-        }, function (error) {
-            // 这一支只会是 fetch 本身失败：网络断了，或上面那个计时器 abort 了
-            throw new Error(error && error.name === 'AbortError'
-                ? '等待回复超时，消息还在输入框里，可以再发一次。'
-                : '网络似乎断开了，请检查连接后重发。');
-        }).finally(function () {
-            if (timer !== null) window.clearTimeout(timer);
+        return postForm(config.endpoint, { message: message }, TIMEOUT_MS).then(function (result) {
+            if (result.ok) return result.data;
+            var text = result.error || config.unavailableMessage || '暂时无法回复，请稍后再试。';
+            // 限流时服务端算好了还要等多久，不用上就等于让访客盲等——
+            // "请稍后再试"是最没用的那种错误提示。
+            var wait = Math.round(Number(result.data.retry_after) || 0);
+            if (wait > 0) text += wait >= 60 ? '（约 ' + Math.ceil(wait / 60) + ' 分钟后可继续）'
+                : '（约 ' + wait + ' 秒后可继续）';
+            var error = new Error(text);
+            error.payload = result.data;
+            error.code = result.code;
+            throw error;
         });
     }
 
@@ -1212,6 +1302,8 @@
             return;
         }
         state.replied = true;
+        // sent 只用来挡"历史记录回填"：这一轮已经开始对话，再把旧记录插到最前面就乱了
+        state.sent = true;
         cancelGreetings();
         showFeedback('');
         ensureGreeting();
@@ -1229,25 +1321,32 @@
         track('acs_message_sent', { length: message.length });
 
         var typing = appendTyping();
+        // 长回答（尤其开了工具轮次）能等上十几秒，中间一句话都不给就像是断了
+        var slow = window.setTimeout(function () {
+            if (state.busy) showFeedback('还在处理，稍等一下……');
+        }, SLOW_MS);
         request(message).then(function (data) {
             typing.row.remove();
-            var reply = String(data.reply || config.unavailableMessage || '');
-            var entry = messageRow('assistant');
-            if (data.event && EVENT_LABEL[data.event]) appendToolChip(entry.stack, EVENT_LABEL[data.event]);
+            var chips = [];
+            if (data.event && EVENT_LABEL[data.event]) chips.push(EVENT_LABEL[data.event]);
             if (Array.isArray(data.cards) && data.cards.length) {
-                appendToolChip(entry.stack, '已查站内数据 · ' + data.cards.length + ' 张卡片');
+                chips.push('已查站内数据 · ' + data.cards.length + ' 张卡片');
             }
-            var bubble = el('div', 'acs-message-bubble', reply);
-            entry.stack.appendChild(bubble);
-            linkify(bubble, reply);
-            stampTime(entry.stack, data.at);
-            renderCards(entry.stack, data.cards);
-            scrollToEnd();
-            if (!state.nearBottom) showFeedback('客服已回复，往下滚动查看');
+            appendReply(String(data.reply || config.unavailableMessage || ''), data.at, data.cards, chips);
+            // 到这儿要么换成"往下滚动查看"，要么清掉上面那句"还在处理"
+            showFeedback(state.nearBottom ? '' : '客服已回复，往下滚动查看');
             notifyReply();
             if (data.event) track('acs_intent_' + data.event, {});
         }).catch(function (error) {
             typing.row.remove();
+            if (error && error.aborted) {
+                /* 超时不等于没送到：服务端很可能已经答完、也写进了会话，只是回程没赶上。
+                 * 这时候标"未发送"并把原文塞回输入框，等于骗访客把同一句问第二遍。 */
+                showFeedback('等太久了，正在确认这条有没有送到……');
+                mine.row.classList.add('is-pending');
+                recoverTimedOut(message, mine);
+                return;
+            }
             showFeedback(error.message);
             mine.row.classList.add('is-failed');
             // 服务端说同意还没记上（页面很可能是缓存的旧 HTML），把门槛重新竖起来
@@ -1265,6 +1364,7 @@
                 renderCards(entry.stack, error.payload.cards);
             }
         }).finally(function () {
+            window.clearTimeout(slow);
             setBusy(false);
             // 同意门槛刚被重新竖起来时输入框是 disabled 的，focus() 对它是空操作：
             // 焦点会留在原地（或掉回文档开头），键盘用户找不到"接下来该点哪"。
@@ -1274,41 +1374,75 @@
     }
 
     /**
+     * 超时之后回头把答案捞回来。
+     *
+     * 浏览器这边的等待上限比服务端最坏耗时短，所以"超时"最常见的真相是：服务端答完了、
+     * 也存进会话了，只是那一份响应没赶上。不捞的话访客只能重问一遍，同一个问题问两次、
+     * 计一次限流额度，而屏幕上还留着一条永远解释不清的"未发送"。
+     */
+    function recoverTimedOut(message, mine) {
+        if (!exp.resume) return;
+        window.setTimeout(function () {
+            postForm(config.actionEndpoint, { action: 'history' }, 8000).then(function (result) {
+                var list = (result.ok && Array.isArray(result.data.messages)) ? result.data.messages : [];
+                if (list.length < 2) return;
+                var reply = list[list.length - 1];
+                var asked = list[list.length - 2];
+                if (!reply || reply.role !== 'assistant' || !asked || asked.role !== 'user') return;
+                // 末尾那一问必须就是刚超时的这句，否则捞回来的是别的轮次
+                if (String(asked.content || '') !== message) return;
+                mine.row.classList.remove('is-pending');
+                appendReply(String(reply.content || ''), reply.at, [], []);
+                showFeedback('刚才那条回复已经补上了。');
+                notifyReply();
+            }).catch(function () { /* 补不回来就让访客自己重发，别再多一条错误提示 */ });
+        }, 1500);
+    }
+
+    /**
      * 刷新页面后把本次会话的文字记录取回来重画。
      *
      * 上下文一直都存在服务端 session 里（每轮问答都要用），之前只是没人回传给浏览器，
      * 于是访客一刷新就看到空窗口、以为客服把话忘了。只在第一次打开面板时取一次：
      * 从不点开客服的访客不该为这个功能多付一次请求。卡片不存档，所以恢复的是纯文字。
      */
+    var RESTORE_MS = 6000;
+
     function maybeRestore() {
         if (state.restored) return;
         state.restored = true;
         if (!exp.resume) return;
         state.restoring = true;
-        var body = new URLSearchParams();
-        body.set('_csrf', config.csrf);
-        body.set('conversation_id', state.conversationId);
-        body.set('action', 'history');
-        fetch(config.actionEndpoint, {
-            method: 'POST',
-            credentials: 'same-origin',
-            headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-            body: body
-        }).then(function (response) {
-            return response.json().catch(function () { return {}; });
-        }).then(function (data) {
-            var list = (data && data.ok && data.data && Array.isArray(data.data.messages)) ? data.data.messages : [];
-            if (!list.length || state.greeted) return;
+        /* 兜底闸门。restoring 卡住的代价不是"少一句欢迎语"，而是 ensureGreeting() 再也不跑、
+         * 面板永远空着；AbortController 在老浏览器上可能不存在，那时 postForm 没有超时，
+         * 请求被挂住就一直不 settle。所以这里再压一道一定会响的计时器。 */
+        var gate = window.setTimeout(function () {
+            if (!state.restoring) return;
+            state.restoring = false;
+            if (state.open) ensureGreeting();
+        }, RESTORE_MS + 1500);
+        postForm(config.actionEndpoint, { action: 'history' }, RESTORE_MS).then(function (result) {
+            var list = (result.ok && Array.isArray(result.data.messages)) ? result.data.messages : [];
+            // chat.firstChild / state.sent：请求还在路上时访客可能已经开口了，
+            // 这时候把旧记录插进去会排在新消息后面，读起来像客服在自说自话。
+            if (!list.length || state.greeted || state.sent || chat.firstChild) return;
             state.greeted = true;
             state.replied = true;
+            /* 回填十几条历史会被 role="log" 逐条念出来，读屏用户要听完整段旧对话才能开口。
+             * 插期间先关掉播报，插完下一帧再打开——之后的新回复照常播报。 */
+            chat.setAttribute('aria-live', 'off');
             if (config.welcomeMessage) appendMessage('assistant', config.welcomeMessage);
             list.forEach(function (item) {
                 if (!item || (item.role !== 'user' && item.role !== 'assistant')) return;
                 appendMessage(item.role === 'user' ? 'visitor' : 'assistant', String(item.content || ''), item.at);
             });
+            // 视觉上有时间戳能分辨新旧，读屏只有一串连续的对话，得明说一句
+            chat.appendChild(el('div', 'acs-sr-only', '以上是本次会话的早前记录'));
             renderQuickReplies();
             scrollToEnd(true);
+            window.requestAnimationFrame(function () { chat.setAttribute('aria-live', 'polite'); });
         }).catch(function () { /* 取不回来就按新会话走，不打扰访客 */ }).finally(function () {
+            window.clearTimeout(gate);
             state.restoring = false;
             if (state.open) ensureGreeting();
         });
@@ -1318,7 +1452,15 @@
 
     function closePicker() {
         if (!picker) return;
+        /* 得在 hidden 之前问：一旦面板 display:none，浏览器已经把焦点甩回 <body> 了。
+         * 焦点正落在面板里的按钮上时，innerHTML='' 会把它连根删掉，键盘用户下一次 Tab
+         * 只能从文档开头重新走一遍。所以先交还给打开它的那个按钮。 */
+        var hadFocus = !picker.hidden && picker.contains(document.activeElement);
         picker.hidden = true;
+        if (hadFocus) {
+            var back = root.querySelector('[data-acs-pick="' + (picker.dataset.kind || '') + '"]');
+            if (back && typeof back.focus === 'function') back.focus(); else input.focus();
+        }
         picker.innerHTML = '';
         root.querySelectorAll('[data-acs-pick]').forEach(function (button) {
             button.classList.remove('is-active');
@@ -1332,6 +1474,8 @@
         if (!picker.hidden && picker.dataset.kind === kind) { closePicker(); return; }
         closePicker();
         picker.dataset.kind = kind;
+        // 一个面板节点被两个按钮共用，标签只能在这里按 kind 给，写死在 HTML 里必有一半是错的
+        picker.setAttribute('aria-label', kind === 'emoji' ? '表情' : '表情包');
         picker.hidden = false;
         trigger.classList.add('is-active');
         trigger.setAttribute('aria-expanded', 'true');
@@ -1491,33 +1635,30 @@
     if (closeBtn) closeBtn.addEventListener('click', function () { setOpen(false); });
     if (restartBtn) {
         restartBtn.addEventListener('click', function () {
-            if (state.busy) return;
-            var body = new URLSearchParams();
-            body.set('_csrf', config.csrf);
-            body.set('conversation_id', state.conversationId);
-            body.set('action', 'reset');
+            // 静默 return 会让访客以为按钮坏了：正在等回复时说清楚为什么点不动
+            if (state.busy) { showFeedback('正在等待回复，稍后再重新开始。'); return; }
             restartBtn.disabled = true;
-            fetch(config.actionEndpoint, {
-                method: 'POST',
-                credentials: 'same-origin',
-                headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-                body: body
-            }).then(function (response) {
-                return response.json().catch(function () { return {}; });
-            }).then(function (data) {
-                if (data && data.ok && data.data && data.data.conversation_id) {
-                    state.conversationId = data.data.conversation_id;
+            postForm(config.actionEndpoint, { action: 'reset' }, 15000).then(function (result) {
+                /* 清空必须只在服务端确认换了会话之后做。失败也清的话，屏幕上空了、
+                 * 服务端那份上下文还在，接着问下一句会得到一段访客看不见来由的回答。 */
+                if (!result.ok || !result.data.conversation_id) {
+                    showFeedback(result.error || '重新开始失败，请稍后再试。');
+                    return;
                 }
+                state.conversationId = String(result.data.conversation_id);
                 chat.innerHTML = '';
                 quickReplies.innerHTML = '';
                 state.greeted = false;
                 state.replied = false;
+                state.sent = false;
                 // 刚清空的会话没有历史可恢复，别让下一次打开又把旧记录拉回来
                 state.restored = true;
                 state.nearBottom = true;
                 showFeedback('');
                 closePicker();
                 ensureGreeting();
+            }).catch(function (error) {
+                showFeedback(error && error.aborted ? '重新开始超时，请再试一次。' : error.message);
             }).finally(function () { restartBtn.disabled = false; });
         });
     }

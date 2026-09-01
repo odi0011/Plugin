@@ -6,13 +6,46 @@ declare(strict_types=1);
  * 访客没有后台账号，把它做成 API 会把匿名对话错误地绑到某个管理员身上。
  *
  * CSRF 由核心 Router 在 POST 前统一校验（读 _csrf），这里不重复实现。
+ * 例外是 dispatchSession()：它是 GET，专门用来在缓存页上换回一份能用的 token。
  */
 final class AiCustomerServiceChat
 {
     /** 单次提问最多执行几个工具调用（与轮次上限共同封顶）。 */
     private const MAX_CALLS_PER_ROUND = 3;
-    private const CUSTOM_TIMEOUT = 30;
+    /* public 是给 AiCustomerService::chatTimeoutMs() 用的：浏览器那边的等待上限必须
+     * 由服务端最坏耗时推出来，两边各写一个 30 秒早晚会漂。 */
+    public const CUSTOM_TIMEOUT = 30;
     private const CUSTOM_MAX_BYTES = 262144;
+
+    /**
+     * 握手：换一份属于**当前访客 session** 的 csrf 与会话 id。
+     *
+     * 存在的唯一理由是整页缓存。渲染期铸造的这两个值会随 HTML 一起被 CDN / 缓存插件
+     * 存下来发给所有人：token 不属于访客自己的 session，核心 Router 在进插件之前就
+     * 回 419（纯文本 CSRF token mismatch）；会话 id 也不在他的 session 里，接口恒回
+     * 422 conversation_expired。而那句「请刷新页面」拿回来的还是同一份缓存 HTML ——
+     * 访客怎么试都发不出话，站长这边看到的是「插件坏了」。
+     *
+     * 必须是 GET：核心只对 POST/PUT/DELETE/PATCH 校验 CSRF，而这里要解决的恰恰是
+     * 「手上那个 token 是错的」。下发 token 本身不构成新的 CSRF 面 —— 跨站发得出请求
+     * 但读不到响应（同源策略；JSON 也不能当脚本执行）。
+     */
+    public static function dispatchSession(): void
+    {
+        /* no-store 是这条路由的全部前提：被任何一层缓存住，就等于继续发别人的 token。 */
+        if (!headers_sent()) {
+            header('Cache-Control: no-store, no-cache, must-revalidate, private');
+            header('Pragma: no-cache');
+        }
+        $config = AiCustomerService::config();
+        if (empty($config['enabled'])) {
+            self::respond(false, ['message' => 'AI客服当前未启用'], 404, 'chat_disabled');
+        }
+        self::respond(true, [
+            'csrf' => \App\Core\Csrf::token(),
+            'conversation_id' => AiCustomerService::currentConversation(),
+        ]);
+    }
 
     public static function dispatch(): void
     {
