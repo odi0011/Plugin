@@ -1,6 +1,6 @@
 {
     "schema_version": 1,
-    "generated_at": "2026-09-01T06:31:30Z",
+    "generated_at": "2026-09-01T11:20:51Z",
     "source": {
         "type": "github-static",
         "repo": "odi0011/Plugin",
@@ -457,7 +457,7 @@
             "slug": "ai-customer-service",
             "namespace": "",
             "name": "AI客服",
-            "version": "1.4.4",
+            "version": "1.5.0",
             "description": "为前台站点提供一个会办事的悬浮 AI 客服：描述词与资料分离管理（站内产品/文章/页面 + 上传知识库文件），可调用工具回一张能点击跳转的站内卡片，支持询盘转化与转人工的自然语言识别、话题边界约束、拖拽布局与预设主题、emoji 与自定义表情包。浮标旁还能直接摊开 19 种联系渠道（微信 / WhatsApp / Messenger / LINE / Viber / 短信 / 电话等，每个渠道可挂二维码），并按国家与浏览器语言决定要不要出现、可要求访客先勾选同意再开始对话。",
             "category": "other",
             "tags": [
@@ -494,12 +494,12 @@
                 }
             ],
             "agent": [],
-            "published_at": "2026-09-01T06:31:30Z",
-            "changelog": "1.4.4 修 RTL 站点上的两处错位。挂件是注进站点页面的，会继承 <html dir>；插件支持按语言定向，阿拉伯语、希伯来语这类站点本来就在射程内，但样式里有两处方向敏感的物理属性会翻错：①卡片右下角那个「查看详情」用 margin-left:auto 顶到行尾，RTL 下会被顶到错的一侧；②minimal 卡片那条主色竖线用的是 border-left，RTL 下应该在右边，圆角与内边距也跟着不对。两处都换成逻辑属性（margin-inline-start / border-inline-start / border-*-*-radius / padding-inline），LTR 下渲染结果一字不变。浮标贴哪个角是站长自己在后台选的，那些 .acs-widget--left/--right 的 left/right 是对的，没有动；消息气泡靠 flex-end 对齐，本身就跟着书写方向翻，也不用改。契约补了一条扫描：前台样式里不允许再出现 margin/padding/border 的 -left/-right 声明。",
+            "published_at": "2026-09-01T11:20:51Z",
+            "changelog": "1.5.0 把「六套预设」做成真的六种形态，顺手补三处会被当成「没坏」的故障。①预设过去基本只换颜色：顶栏只有纯色 / 浅底两档，density 只管两个 gap，圆角只落在面板那一个角上。现在圆角从 --acs-panel-radius 推出一条五级阶梯，带动全窗 27 处圆角（气泡尾巴换成 border-end-start-radius 这类逻辑属性，RTL 站点跟着翻）；新增 theme.edge 六档（描边 / 全平 / 玻璃 / 发光 / 硬偏移 / 内斜面）与 theme.type 三档（字重 + 字距 + 行高，不依赖任何内嵌字体 —— 中文站上 Inter、Quicksand 基本都没装）；density 扩成一整组间距变量（面板 / 轮次 / 行内 / 气泡 / 顶栏 / 聊天区顶部）；顶栏补 accent 与 slim 两档；五套预设各有一条独占签名（墨黑拍平胶囊、午夜顶栏一条两端淡出的主色光线、薄荷把卡片列表变成表格行、陶土给气泡一道内压痕、手账铺纸的横线），素白故意没有 —— 它的定位就是不抢站点风格。两个新轴都寄生在 theme_json 里，声明字段数一个没加。②可读性：六处压在强调色实心底上的前景色写死了 #fff，站长把强调色调成薄荷、柠檬这类浅色时对比度只剩 1.6:1，等于看不见；全部改走 --acs-on-accent，也就是站长自己按「铺在强调色上」挑过的那个值。③手机软键盘：iOS 的 100dvh 只跟随浏览器工具条，软键盘是覆盖层、一点都不影响它，于是键盘弹起时输入框正好被压在下面 —— 打字时看不见自己打了什么。改成从 visualViewport 量出键盘高度写进 --acs-kb，把挂件抬起来、面板同步矮下去；顺带手机上打开面板不再自动聚焦（否则键盘立刻占半屏，问候语和快捷问题全被顶出视口）。④重复渲染：主题若把 body_end 钩子跑两遍，页面上会出现两个同 id 的挂件，第二个永远不响应；脚本被缓存插件合并加载两遍时会在同一批节点上挂两套监听，点一次开一次又关一次。PHP 侧加 static $rendered、JS 侧在 DOM 上打 dataset 标记，两半各挡一边。契约新增：七个主题轴的白名单 / defaultTheme / plugin.json 默认值 / CSS 规则 / 后台选项 / 中文名六处逐个比对（多一条 CSS 也算失败 —— .acs-head--gradient 就是这么留下来的死代码，这次删了），TONE_DARK_MAX 两处必须相等，以及上面三处守卫。",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@5ec7538/dist/ai-customer-service-1.4.4.zip",
-                "sha256": "3e0062386cc91b32d050b543293aaabebbc82b6d663070df7ccd9b18f9c4da92",
-                "size_bytes": 201736
+                "url": "",
+                "sha256": "aca64084d762b9598eb01d24dbc228105e518edc61a857d908f452c4c8723f53",
+                "size_bytes": 224301
             },
             "license": {
                 "type": "free"
