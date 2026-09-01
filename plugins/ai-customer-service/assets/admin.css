@@ -199,6 +199,17 @@
 .acs-a-item.is-wide { grid-column: 1 / -1; }
 .acs-a-item.is-color { max-width: 260px; }
 
+/* 上一次保存里校验失败的字段。保存走 POST→302，出错字段名原本只能出现在顶部那句
+ * 提示里，站长得自己在几十个控件里对着标签找是哪一个。改动这个控件就撤掉标记。 */
+.acs-a-item.has-error > label,
+.acs-a-item.has-error > .acs-a-label { color: var(--acs-danger); }
+.acs-a-item.has-error input,
+.acs-a-item.has-error select,
+.acs-a-item.has-error textarea {
+    border-color: var(--acs-danger);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--acs-danger) 16%, transparent);
+}
+
 .acs-a-label {
     display: block;
     margin-bottom: 6px;

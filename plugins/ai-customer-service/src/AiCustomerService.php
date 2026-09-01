@@ -16,7 +16,7 @@ declare(strict_types=1);
 final class AiCustomerService
 {
     public const SLUG = 'ai-customer-service';
-    public const VERSION = '1.4.1';
+    public const VERSION = '1.4.2';
 
     private const SESSION_KEY = '_ai_customer_service';
     private const CONVERSATION_TTL = 21600;
@@ -898,6 +898,11 @@ final class AiCustomerService
         $result = \App\Core\PluginSettingsService::save(self::SLUG, $input, $userId);
         if (empty($result['ok'])) {
             $errors = is_array($result['errors'] ?? null) ? $result['errors'] : [];
+            // 保存走的是 POST → flash → 302，出错字段名只能进消息文本。光有一句话，
+            // 后台还得自己在三十个控件里找是哪一个，所以把出错的 key 存一次性会话键，
+            // 下一次 GET 由 admin.js 取走并把那些控件标红、滚到第一个。
+            // 只存 key，不存值：提交里可能带着独立接口密钥，值一律不落会话。
+            self::stashSaveErrors(array_keys($errors));
             return [
                 'ok' => false,
                 // 核心只给「有 N 个设置项校验失败」，不带字段名。后台看不到是哪一项就没法修，
@@ -1193,6 +1198,43 @@ final class AiCustomerService
         $_SESSION[self::SESSION_KEY]['consent'] = time();
     }
 
+    /**
+     * 记下这次保存里校验失败的字段 key，供紧接着那一次 GET 标红。
+     *
+     * 只存 key。提交里可能带着独立接口密钥，把值写进会话等于给它多开一个落地点；
+     * 而标红只需要知道是哪几个控件。上限 40 个，够覆盖任何一页（最大的一页 31 个字段）。
+     *
+     * @param list<string> $keys
+     */
+    private static function stashSaveErrors(array $keys): void
+    {
+        if ($keys === []) return;
+        if (!isset($_SESSION[self::SESSION_KEY]) || !is_array($_SESSION[self::SESSION_KEY])) {
+            $_SESSION[self::SESSION_KEY] = [];
+        }
+        $clean = [];
+        foreach ($keys as $key) {
+            $key = (string)$key;
+            // 只收自己声明过的字段名，不把任意 POST key 写进会话
+            if (preg_match('/^[a-z0-9_]{1,64}$/', $key) === 1) $clean[] = $key;
+            if (count($clean) >= 40) break;
+        }
+        $_SESSION[self::SESSION_KEY]['save_errors'] = $clean;
+    }
+
+    /**
+     * 取出并清掉上一次保存的出错字段（一次性，语义与核心 flash() 一致）。
+     *
+     * @return list<string>
+     */
+    public static function takeSaveErrors(): array
+    {
+        $stashed = $_SESSION[self::SESSION_KEY]['save_errors'] ?? null;
+        unset($_SESSION[self::SESSION_KEY]['save_errors']);
+        if (!is_array($stashed)) return [];
+        return array_values(array_filter($stashed, static fn ($k): bool => is_string($k) && $k !== ''));
+    }
+
     // ACS_MARKER_RENDER
 
     // ---------------------------------------------------------------- 前台渲染
@@ -1356,7 +1398,8 @@ final class AiCustomerService
     private static function panelMarkup(array $config, string $chat = '', string $quick = '', bool $open = false): string
     {
         $brand = self::escape((string)$config['brand_name']);
-        // role="dialog"：面板是浮层，键盘用户在里面 Tab 循环、Esc 关闭并把焦点还回浮标
+        // role="dialog"：面板是浮层，Esc 关闭并把焦点还回浮标。aria-modal 与「圈住 Tab」
+        // 由 JS 按「是不是访客自己点开的」成对开关，自动弹出的不圈也不声明（见 setOpen）
         $html = '<section ' . ($open ? '' : 'id="acs-panel" ') . 'class="acs-panel" role="dialog" aria-label="' . $brand . '对话"'
             . ($open ? '>' : ' aria-hidden="true" hidden>');
 
@@ -1450,12 +1493,16 @@ final class AiCustomerService
     private static function composerToolsMarkup(array $config): string
     {
         $html = '';
+        // aria-expanded 从服务端就给上：这两个按钮各自展开下面那块 .acs-picker，
+        // 只在 JS 里补的话，脚本还没跑起来时读屏看到的是一个"普通按钮"。
         if (!empty($config['emoji_enabled'])) {
-            $html .= '<button type="button" class="acs-icon-btn acs-tool-btn" data-acs-pick="emoji" aria-label="插入表情" title="表情">'
+            $html .= '<button type="button" class="acs-icon-btn acs-tool-btn" data-acs-pick="emoji"'
+                . ' aria-expanded="false" aria-label="插入表情" title="表情">'
                 . '<i class="bi bi-emoji-smile" aria-hidden="true"></i></button>';
         }
         if (!empty($config['sticker_enabled']) && ($config['stickers']['packs'] ?? []) !== []) {
-            $html .= '<button type="button" class="acs-icon-btn acs-tool-btn" data-acs-pick="sticker" aria-label="插入表情包" title="表情包">'
+            $html .= '<button type="button" class="acs-icon-btn acs-tool-btn" data-acs-pick="sticker"'
+                . ' aria-expanded="false" aria-label="插入表情包" title="表情包">'
                 . '<i class="bi bi-sticky" aria-hidden="true"></i></button>';
         }
         return $html;
@@ -1741,6 +1788,9 @@ final class AiCustomerService
             // 定向面板要能自证：把服务端在「这一次后台请求」里读到的国家/语言给它，
             // 否则站长配完 allow 名单挂件消失了，也分不清是规则生效还是缺请求头。
             'geo' => ['country' => self::visitorCountry(), 'languages' => self::visitorLanguages()],
+            // 上一次保存校验失败的字段。保存是 POST→302，消息里只能写字段名，
+            // 有了这个列表才能把对应控件标红并滚过去。取一次就清掉。
+            'saveErrors' => self::takeSaveErrors(),
             'version' => self::VERSION,
         ];
     }

@@ -303,6 +303,38 @@
             .forEach(function (node) { node.hidden = mode !== 'custom'; });
         var systemField = root.querySelector('[data-acs-field="system_model_id"]');
         if (systemField) systemField.hidden = mode !== 'system';
+        warnModelUnset(mode);
+    }
+
+    /* 挂件开着但模型没配好，访客每一句都会撞到「暂时无法回复」，而后台原来一点提示都没有 ——
+     * 站点没有启用的对话模型时那个下拉框直接是空的，看起来就像"没什么要选"。
+     * 这条提示挂在模型字段下面，只在真的会出问题时出现。 */
+    function warnModelUnset(mode) {
+        var anchor = root.querySelector('[data-acs-field="provider_mode"]');
+        if (!anchor) return;
+        var old = root.querySelector('[data-acs-model-warn]');
+        if (old) old.remove();
+
+        var text = '';
+        if (mode === 'system') {
+            var models = Array.isArray(BOOT.models) ? BOOT.models : [];
+            if (!models.length) {
+                text = '这个站点还没有启用任何支持对话的 AI 模型，客服现在回答不了任何问题。'
+                    + '请先去「AI 设置」里启用一个服务商与对话模型，或把上面的模型来源改成「独立接口」。';
+            } else if (Math.round(num('system_model_id', 0)) <= 0) {
+                text = '还没有选择系统模型，客服现在回答不了任何问题。';
+            }
+        } else if (mode === 'custom') {
+            var missing = [];
+            if (val('custom_api_endpoint', '') === '') missing.push('接口地址');
+            if (val('custom_model', '') === '') missing.push('模型名');
+            if (missing.length) text = '独立接口还缺：' + missing.join('、') + '。填齐之前客服回答不了任何问题。';
+        }
+        if (text === '') return;
+
+        var bar = el('div', 'acs-a-alert acs-a-alert--warn', text);
+        bar.setAttribute('data-acs-model-warn', '');
+        if (anchor.parentNode) anchor.parentNode.insertBefore(bar, anchor.nextSibling);
     }
 
     /* ---------------------------------------------------------------- 面板注册 */
@@ -525,7 +557,16 @@
         return host;
     }
 
-    function rowShell(title, meta, iconName, onRemove) {
+    /**
+     * 列表行 + 一个移除按钮。
+     *
+     * confirmText 给了就挂宿主后台的 data-confirm：它有一个捕获阶段的委托监听器，会先
+     * 弹 popconfirm、确认后再把这次点击原样重放回来（运行时没起来时退回原生 confirm）。
+     * 复用它而不是自己写一个，破坏性操作的观感才和后台其余部分一致。
+     * 大多数行删掉就是少一条配置，随手能加回来，不值得多一步；真正会丢东西的（知识库
+     * 文件：抽取出的文本在服务端删掉，原文件本来就没留）才传。
+     */
+    function rowShell(title, meta, iconName, onRemove, confirmText) {
         var row = el('div', 'acs-a-row');
         var badge = el('div', 'acs-a-row-icon');
         badge.appendChild(icon(iconName));
@@ -538,6 +579,10 @@
         remove.type = 'button';
         remove.title = '移除';
         remove.setAttribute('aria-label', '移除 ' + title);
+        if (confirmText) {
+            remove.setAttribute('data-confirm', confirmText);
+            remove.setAttribute('data-confirm-danger', '');
+        }
         remove.appendChild(icon('bi-trash3'));
         remove.addEventListener('click', onRemove);
         row.appendChild(remove);
@@ -814,6 +859,9 @@
         side.appendChild(folderCard(knowledge));
         var dropzone = el('div', 'acs-a-dropzone', '把文件拖到这里，或点上面的文件夹选择');
         side.appendChild(dropzone);
+        // 三条限制写在这里，不然只能靠撞上去才知道（单个 4MB 是服务端的硬上限）
+        side.appendChild(el('p', 'acs-a-help', '支持 txt / md / csv / tsv / json / html / xml / docx / pdf，'
+            + '单个文件 4 MB 以内，一次最多 10 个，资料柜共 60 个。只保留抽取出来的纯文本，原文件不留。'));
         side.appendChild(el('p', 'acs-a-help', '支持 txt / md / csv / json / html / xml / docx / pdf，单个 ≤ 4 MB。系统只保留抽取出的纯文本，原文件不入库、也不对外可下载。'));
         wrap.appendChild(side);
 
@@ -1019,9 +1067,35 @@
         return (bytes / 1048576).toFixed(2) + ' MB';
     }
 
+    /* 与 AiCustomerServiceKnowledge 的三条限制保持一致（单文件 4MB / 共 60 个 /
+     * 白名单后缀）。文件选择框有 accept 挡着，但拖放完全绕过它——不在这儿先筛一遍，
+     * 拖进来一个 200MB 的压缩包会整包传完才被服务端拒掉。 */
+    var KNOWLEDGE_MAX_BYTES = 4 * 1024 * 1024;
+    var KNOWLEDGE_EXT = ['txt', 'md', 'markdown', 'csv', 'tsv', 'json', 'html', 'htm', 'xml', 'docx', 'pdf'];
+
     function uploadKnowledge(files, knowledge, host) {
+        var picked = Array.prototype.slice.call(files, 0, 10);
+        var rejected = [];
+        var accepted = picked.filter(function (file) {
+            var name = String(file.name || '');
+            var ext = name.indexOf('.') === -1 ? '' : name.split('.').pop().toLowerCase();
+            if (KNOWLEDGE_EXT.indexOf(ext) === -1) { rejected.push(name + '：不支持的格式'); return false; }
+            if (file.size > KNOWLEDGE_MAX_BYTES) { rejected.push(name + '：超过 4 MB'); return false; }
+            return true;
+        });
+        var room = Math.max(0, 60 - (knowledge.files || []).length);
+        if (accepted.length > room) {
+            rejected.push('资料柜最多 60 个文件，这次只收前 ' + room + ' 个');
+            accepted = accepted.slice(0, room);
+        }
+        if (!accepted.length) {
+            toast(rejected.length ? rejected.join('；') : '没有可上传的文件', true);
+            return;
+        }
+        if (rejected.length) toast(rejected.join('；'), true);
+
         var form = new FormData();
-        Array.prototype.slice.call(files, 0, 10).forEach(function (file) { form.append('file[]', file); });
+        accepted.forEach(function (file) { form.append('file[]', file); });
         toast('正在上传并抽取文本…');
         post('knowledge-upload', form).then(function (data) {
             knowledge.files = data.files || knowledge.files;
@@ -1052,7 +1126,9 @@
                         row.remove();
                         toast('已删除 ' + file.name);
                     }).catch(function (error) { toast(error.message, true); });
-                }
+                },
+                // 抽出来的文本删了就没了，原文件插件从来不留，只能重新上传一次
+                '删除「' + file.name + '」？插件只存抽取后的文本、不留原文件，删掉要重新上传。'
             );
             row.setAttribute('data-acs-file-row', '');
             row.setAttribute('data-acs-file-name', file.name);
@@ -1745,8 +1821,16 @@
         packButton.addEventListener('click', function () { packFile.click(); });
         packFile.addEventListener('change', function () {
             if (!packFile.files || !packFile.files.length) return;
+            // accept 只挡类型不挡大小，服务端上限 2 MB；先筛掉省一次整包上传
+            var tooBig = [];
+            var ok = Array.prototype.slice.call(packFile.files, 0, 10).filter(function (file) {
+                if (file.size > 2 * 1024 * 1024) { tooBig.push(String(file.name || '') + '：超过 2 MB'); return false; }
+                return true;
+            });
+            if (tooBig.length) toast(tooBig.join('；'), true);
+            if (!ok.length) { packFile.value = ''; return; }
             var form = new FormData();
-            Array.prototype.slice.call(packFile.files, 0, 10).forEach(function (file) { form.append('file[]', file); });
+            ok.forEach(function (file) { form.append('file[]', file); });
             form.append('pack', packName.value.trim() || '表情包');
             post('sticker-upload', form).then(function (data) {
                 jsonCache.stickers_json = data.stickers || stickers;
@@ -2255,16 +2339,21 @@
 
     ['avatar_url', 'launcher_image_url'].forEach(function (key) { attachMediaPicker(key, 'image', '选图'); });
 
+    /* 会影响「模型没配好」那条提示的字段。只盯 provider_mode 的话，站长把接口地址填上了
+     * 提示还挂在那儿，得去拨一下模型来源才消失。 */
+    var PROVIDER_KEYS = ['setting_provider_mode', 'setting_system_model_id',
+        'setting_custom_api_endpoint', 'setting_custom_model'];
+
     // 表单里任何变化都重算预览。用事件委托，面板动态插入的控件也能覆盖到。
     root.addEventListener('input', function (event) {
         if (event.target.closest('.acs-a-preview')) return;
         sync();
-        if (event.target.name === 'setting_provider_mode') syncProvider();
+        if (PROVIDER_KEYS.indexOf(event.target.name) !== -1) syncProvider();
     });
     root.addEventListener('change', function (event) {
         if (event.target.closest('.acs-a-preview')) return;
         sync();
-        if (event.target.name === 'setting_provider_mode') syncProvider();
+        if (PROVIDER_KEYS.indexOf(event.target.name) !== -1) syncProvider();
     });
 
     if (window.ResizeObserver && pv.stage) {
@@ -2283,9 +2372,39 @@
         });
     }
 
+    /* 上一次保存校验失败的字段：把控件标红并滚到第一个。
+     * 保存是 POST → flash → 302，字段名原本只能出现在那句话里，站长得自己在几十个
+     * 控件里对着标签找。改动任意一个就把它的标记撤掉。 */
+    function paintSaveErrors() {
+        var keys = Array.isArray(BOOT.saveErrors) ? BOOT.saveErrors : [];
+        if (!keys.length) return;
+        var first = null;
+        keys.forEach(function (key) {
+            var node = ctrl(key);
+            if (!node) return;                       // 出错字段不在本页（跨页回填），跳过
+            var field = node.closest('[data-acs-field]') || node.parentNode;
+            if (field && field.classList) field.classList.add('has-error');
+            node.setAttribute('aria-invalid', 'true');
+            if (!first) first = node;
+            var clear = function () {
+                if (field && field.classList) field.classList.remove('has-error');
+                node.removeAttribute('aria-invalid');
+                node.removeEventListener('input', clear);
+                node.removeEventListener('change', clear);
+            };
+            node.addEventListener('input', clear);
+            node.addEventListener('change', clear);
+        });
+        if (first) {
+            // 不抢焦点：站长可能已经在改别的东西了，滚过去看得到就够
+            if (first.scrollIntoView) first.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        }
+    }
+
     mountAll();
     markDragTargets();
     initDrag();
     syncProvider();
     sync();
+    paintSaveErrors();
 }());

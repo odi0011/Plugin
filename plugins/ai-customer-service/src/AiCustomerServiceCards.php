@@ -93,12 +93,19 @@ final class AiCustomerServiceCards
                 'required' => in_array($key, ['message'], true) || ($key === 'email' && !in_array('phone', (array)$settings['fields'], true)),
             ];
         }
+        /* 服务端还有一条"邮箱和电话至少留一个"的规则（submitInquiry）。两个字段都配上时
+         * 谁都不是 required，前台按 required 校验就会放过只填了姓名+需求的提交，
+         * 让访客白跑一趟服务端才被拒。把这条规则显式告诉前台，让它自己先拦。 */
+        $names = array_column($fields, 'name');
+        $eitherContact = in_array('email', $names, true) && in_array('phone', $names, true);
+
         return [
             'type' => 'inquiry',
             'preset' => (string)$settings['preset'],
             'title' => '留个联系方式',
             'note' => $reason !== '' ? $reason : (string)$config['events']['inquiry']['message'],
             'fields' => $fields,
+            'eitherContact' => $eitherContact,
             'submit' => (string)$settings['submit'],
             'success' => (string)$settings['success'],
             'handoffUrl' => (string)$config['handoff_url'],

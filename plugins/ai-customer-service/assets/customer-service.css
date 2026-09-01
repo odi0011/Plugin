@@ -905,6 +905,14 @@
 .acs-form-card.is-compact .acs-form-grid { grid-template-columns: minmax(0, 1fr); }
 .acs-field { display: grid; gap: 4px; min-width: 0; }
 .acs-field.is-wide { grid-column: 1 / -1; }
+/* 「邮箱和电话至少留一个」那句：跨满两列，跟在字段后面 */
+.acs-form-hint {
+    grid-column: 1 / -1;
+    margin: 0;
+    color: var(--acs-muted);
+    font-size: calc(var(--acs-font) * .76);
+    line-height: 1.5;
+}
 .acs-field > span { color: var(--acs-muted); font-size: calc(var(--acs-font) * .78); }
 .acs-field input,
 .acs-field textarea {
@@ -926,8 +934,17 @@
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--acs-accent) 18%, transparent);
     outline: 0;
 }
-/* 只在访客真正动过之后才标红。用 :invalid 会让一个必填但还没填的空框一上来就是红的
- * （没有 placeholder 属性时 :placeholder-shown 永远不成立，兜不住）。 */
+/* 校验失败的字段。JS 提交时会给 .acs-field 挂 has-error（并写 aria-invalid），
+ * 这条是主路径：确定、跨浏览器一致、由我们自己的规则决定（表单是 noValidate 的，
+ * "至少留一个邮箱或电话"这种约束浏览器根本不知道）。 */
+.acs-field.has-error input,
+.acs-field.has-error textarea {
+    border-color: #ef4444;
+    box-shadow: 0 0 0 3px color-mix(in srgb, #ef4444 16%, transparent);
+}
+.acs-field.has-error > span { color: #ef4444; }
+/* :user-invalid 作为增强：访客动过之后浏览器自己能判的（type=email 格式）先红起来，
+ * 不用等点提交。用 :invalid 会让必填空框一上来就是红的，所以只用 user- 这一版。 */
 .acs-field input:user-invalid,
 .acs-field textarea:user-invalid {
     border-color: #ef4444;
@@ -1022,7 +1039,14 @@
 .acs-owner-photo img { width: 100%; height: 100%; object-fit: cover; }
 .acs-owner-name { font-size: calc(var(--acs-font) * .98); font-weight: 700; }
 .acs-owner-title { color: var(--acs-muted); font-size: calc(var(--acs-font) * .82); }
-.acs-owner-bio { color: var(--acs-muted); font-size: calc(var(--acs-font) * .84); line-height: 1.55; }
+.acs-owner-bio {
+    /* 简介收 300 字，站长往里粘一条长链接就会撑出去（聊天区是 overflow-x:hidden，
+     * 结果是被切掉一半而不是出滚动条，看起来更像坏了）。 */
+    overflow-wrap: anywhere;
+    color: var(--acs-muted);
+    font-size: calc(var(--acs-font) * .84);
+    line-height: 1.55;
+}
 
 /* ACS_MARKER_W9 */
 
@@ -1098,7 +1122,13 @@
 #ai-customer-service-widget .acs-qr-pop[hidden] { display: none !important; }
 @keyframes acs-qr-in { from { opacity: 0; transform: scale(.94); } }
 .acs-qr-img { display: block; width: 132px; height: 132px; border-radius: 6px; object-fit: contain; }
-.acs-qr-name { max-width: 132px; color: var(--acs-muted); font-size: calc(var(--acs-font) * .78); text-align: center; }
+.acs-qr-name {
+    max-width: 132px;
+    overflow-wrap: anywhere;
+    color: var(--acs-muted);
+    font-size: calc(var(--acs-font) * .78);
+    text-align: center;
+}
 
 /* ------------------------------------------------------------------ 快捷问题
  * 单行横滑。面板高度是固定的，标题行 + 换行的胶囊要吃掉近 60px，

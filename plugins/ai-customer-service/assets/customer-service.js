@@ -45,6 +45,9 @@
         // dead: 设备不匹配时整个节点已被移除，公开 API 不能再往一棵脱离文档的树上操作
         dead: false, nearBottom: true, unread: 0, lastFocus: null,
         restored: false, restoring: false, opened: false,
+        // modal: 这次打开是访客自己点的。只有这时候才圈住 Tab 并对读屏声明 aria-modal ——
+        // 自动弹出的面板是「环境里多了一块东西」，把键盘用户锁在里面出不去是纯粹的伤害
+        modal: false,
         consented: !consentRequired || !!consentCfg.accepted
     };
     var AUTO_KEY = 'acs_auto_shown';
@@ -197,12 +200,18 @@
         }
     }
 
-    function setOpen(open) {
+    /* silent=true 表示这次打开不是访客点的（目前只有延时自动弹出）。这种情况下绝不能抢焦点：
+     * 访客可能正在填站点自己的搜索框或结账表单，几秒后光标被挪进聊天框，输入会打到别处去。 */
+    function setOpen(open, silent) {
         if (state.dead) return;
         if (!state.visible && open) reveal();
         state.open = !!open;
+        state.modal = state.open && !silent;
         panel.hidden = !state.open;
         panel.setAttribute('aria-hidden', state.open ? 'false' : 'true');
+        // 圈 Tab 和 aria-modal 必须同时成立：只圈不声明，读屏会说页面还能去，键盘却出不去
+        if (state.modal) panel.setAttribute('aria-modal', 'true');
+        else panel.removeAttribute('aria-modal');
         // 供 CSS 用：打开时要收起引流气泡与悬停提示，否则它们和浮标叠在一起
         root.dataset.acsOpen = state.open ? 'true' : 'false';
         if (launcher) {
@@ -229,6 +238,7 @@
             state.opened = true;
             track('acs_open', {});
         }
+        if (silent) return;
         window.setTimeout(function () {
             // 还没勾同意时焦点给勾选框：输入框此刻是 disabled，focus() 会落空
             if (consentRequired && !state.consented && consentBox) { consentBox.focus(); return; }
@@ -241,7 +251,7 @@
         var delay = Math.max(0, Number(config.initialOpenDelay) || 0);
         timers.auto = window.setTimeout(function () {
             timers.auto = null;
-            if (!state.userOpened) setOpen(true);
+            if (!state.userOpened) setOpen(true, true);
         }, delay * 1000);
     }
 
@@ -829,13 +839,40 @@
         });
         wrap.appendChild(grid);
 
+        // 「邮箱和电话至少留一个」是服务端的硬规则，两个都配上时谁都不是 required，
+        // 不在这儿写一句，访客只会在提交被拒之后才知道。
+        if (card.eitherContact && inputs.email && inputs.phone) {
+            grid.appendChild(el('p', 'acs-form-hint', '邮箱和电话至少留一个，方便我们回复您。'));
+        }
+
         var actions = el('div', 'acs-form-actions');
         var submitBtn = el('button', 'acs-btn', card.submit || '提交询盘');
         submitBtn.type = 'submit';
         actions.appendChild(submitBtn);
         var status = el('span', 'acs-form-status');
+        // 校验失败与提交结果都只写在这里，不给 aria-live 读屏就完全不知道发生了什么
+        status.setAttribute('role', 'status');
+        status.setAttribute('aria-live', 'polite');
         actions.appendChild(status);
         wrap.appendChild(actions);
+
+        /** 标错一个字段：视觉类名 + aria-invalid，两者要一起动。 */
+        function markInvalid(entry, bad) {
+            entry.box.classList.toggle('has-error', bad);
+            if (bad) entry.control.setAttribute('aria-invalid', 'true');
+            else entry.control.removeAttribute('aria-invalid');
+        }
+        // 改动就把错误标记撤掉，别让访客改完了还盯着一个红框
+        Object.keys(inputs).forEach(function (name) {
+            inputs[name].control.addEventListener('input', function () { markInvalid(inputs[name], false); });
+        });
+
+        function fail(message, focusEntry) {
+            status.textContent = message;
+            status.className = 'acs-form-status is-error';
+            // 焦点跟着错误走：只写一句"请把带 * 的字段填一下"，访客还得自己找是哪个
+            if (focusEntry) focusEntry.control.focus();
+        }
 
         wrap.addEventListener('submit', function (event) {
             event.preventDefault();
@@ -846,18 +883,34 @@
             body.set('page_url', window.location.href.slice(0, 500));
             body.set('page_title', String(document.title || '').slice(0, 255));
 
-            var invalid = false;
+            var firstBad = null;
             Object.keys(inputs).forEach(function (name) {
                 var entry = inputs[name];
                 var value = String(entry.control.value || '').trim();
-                entry.box.classList.toggle('has-error', entry.required && value === '');
-                if (entry.required && value === '') invalid = true;
+                var bad = entry.required && value === '';
+                markInvalid(entry, bad);
+                if (bad && !firstBad) firstBad = entry;
                 body.set('field_' + name, value);
             });
-            if (invalid) {
-                status.textContent = '请把带 * 的字段填一下';
-                status.className = 'acs-form-status is-error';
+            if (firstBad) { fail('请把带 * 的字段填一下', firstBad); return; }
+
+            // 邮箱格式：表单是 noValidate 的（要自己的文案），浏览器不会替我们拦
+            var emailEntry = inputs.email;
+            var emailValue = emailEntry ? String(emailEntry.control.value || '').trim() : '';
+            if (emailValue !== '' && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(emailValue)) {
+                markInvalid(emailEntry, true);
+                fail('邮箱格式不正确', emailEntry);
                 return;
+            }
+            // 服务端的"至少留一个"规则，前台先拦一道，省一次往返
+            if (card.eitherContact && emailEntry && inputs.phone) {
+                var phoneValue = String(inputs.phone.control.value || '').trim();
+                if (emailValue === '' && phoneValue === '') {
+                    markInvalid(emailEntry, true);
+                    markInvalid(inputs.phone, true);
+                    fail('邮箱和电话至少留一个', emailEntry);
+                    return;
+                }
             }
 
             submitBtn.disabled = true;
@@ -870,18 +923,37 @@
                 body: body
             }).then(function (response) {
                 return response.json().catch(function () { return {}; }).then(function (data) {
-                    if (!response.ok || !data.ok) throw new Error((data && data.error) || '提交失败，请稍后再试');
+                    if (!response.ok || !data.ok) {
+                        var text = (data && (data.error || (data.data && data.data.message))) || '提交失败，请稍后再试';
+                        // 询盘限流是每 IP 每 10 分钟 3 条，不写出等待时间访客只能反复试
+                        var wait = data && data.data ? Math.round(Number(data.data.retry_after) || 0) : 0;
+                        if (wait > 0) text += wait >= 60 ? '（约 ' + Math.ceil(wait / 60) + ' 分钟后可再提交）'
+                            : '（约 ' + wait + ' 秒后可再提交）';
+                        throw new Error(text);
+                    }
                     return data.data || {};
                 });
             }).then(function (data) {
                 grid.remove();
                 actions.remove();
+                // actions 里就有刚才那个提交按钮，移除它焦点会掉回文档开头。
+                // 成功文案给 role=status + tabindex=-1，把焦点交给它，读屏也会念出来。
                 var done = el('div', 'acs-form-status is-done', data.message || card.success || '已收到，我们会尽快联系您。');
+                done.setAttribute('role', 'status');
+                done.tabIndex = -1;
                 wrap.appendChild(done);
+                done.focus();
                 track('acs_inquiry_submitted', {});
             }).catch(function (error) {
-                status.textContent = error.message;
-                status.className = 'acs-form-status is-error';
+                // 服务端也会回"请填写需求描述"/"邮箱格式不正确"/"请至少留一个邮箱或电话"，
+                // 尽量把它落到对应字段上，别只丢一句话让访客自己猜。
+                var map = { 邮箱: inputs.email, 电话: inputs.phone, 需求: inputs.message };
+                var target = null;
+                Object.keys(map).forEach(function (word) {
+                    if (!target && map[word] && error.message.indexOf(word) !== -1) target = map[word];
+                });
+                if (target) markInvalid(target, true);
+                fail(error.message, target);
                 submitBtn.disabled = false;
             });
         });
@@ -996,8 +1068,14 @@
         return fetch(config.endpoint, options).then(function (response) {
             return response.json().catch(function () { return {}; }).then(function (data) {
                 if (!response.ok || !data.ok) {
-                    var error = new Error((data && (data.error || (data.data && data.data.message)))
-                        || config.unavailableMessage || '暂时无法回复，请稍后再试。');
+                    var text = (data && (data.error || (data.data && data.data.message)))
+                        || config.unavailableMessage || '暂时无法回复，请稍后再试。';
+                    // 限流时服务端算好了还要等多久，不用上就等于让访客盲等——
+                    // "请稍后再试"是最没用的那种错误提示。
+                    var wait = data && data.data ? Math.round(Number(data.data.retry_after) || 0) : 0;
+                    if (wait > 0) text += wait >= 60 ? '（约 ' + Math.ceil(wait / 60) + ' 分钟后可继续）'
+                        : '（约 ' + wait + ' 秒后可继续）';
+                    var error = new Error(text);
                     error.payload = (data && data.data) || {};
                     error.code = (data && data.code) || '';
                     throw error;
@@ -1145,7 +1223,11 @@
         if (!picker) return;
         picker.hidden = true;
         picker.innerHTML = '';
-        root.querySelectorAll('[data-acs-pick]').forEach(function (button) { button.classList.remove('is-active'); });
+        root.querySelectorAll('[data-acs-pick]').forEach(function (button) {
+            button.classList.remove('is-active');
+            // is-active 只是观感；不同步 aria-expanded 读屏就不知道这个按钮展开了一块面板
+            button.setAttribute('aria-expanded', 'false');
+        });
     }
 
     function openPicker(kind, trigger) {
@@ -1155,6 +1237,7 @@
         picker.dataset.kind = kind;
         picker.hidden = false;
         trigger.classList.add('is-active');
+        trigger.setAttribute('aria-expanded', 'true');
 
         function insert(text) {
             var start = input.selectionStart == null ? input.value.length : input.selectionStart;
@@ -1393,9 +1476,10 @@
         }
     });
 
-    /* 面板打开时把 Tab 圈在面板里：不然一个 Tab 就跳到页面正文，键盘用户很难再回来。 */
+    /* 访客自己打开的面板把 Tab 圈在里面：不然一个 Tab 就跳到页面正文，键盘用户很难再回来，
+     * 而 Esc 会关闭并把焦点还回浮标，出得去。自动弹出的不圈（见 state.modal）。 */
     panel.addEventListener('keydown', function (event) {
-        if (event.key !== 'Tab' || !state.open) return;
+        if (event.key !== 'Tab' || !state.open || !state.modal) return;
         var focusable = panel.querySelectorAll('a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])');
         var list = Array.prototype.filter.call(focusable, function (node) {
             return node.offsetWidth > 0 || node.offsetHeight > 0 || node === document.activeElement;

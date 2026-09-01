@@ -265,6 +265,84 @@ foreach (array_keys($emitted) as $name) {
 $assert($emitted !== [], '类名提取失败，检查测试自身的正则');
 $assert($orphans === [], '这些类名前台会输出但没有任何 CSS 规则：' . implode('、', array_slice($orphans, 0, 8)));
 
+/* 上面那轮只认 ^acs-，不带前缀的状态类（is-*、has-*）会整批漏过去 —— has-error 就是
+ * 这么在询盘表单里挂了很久却没有任何样式的：校验失败时字段根本不变红。这里补一轮。
+ * bi 是 Bootstrap Icons 的基类，active 是宿主后台左侧菜单自己的高亮类，都由外部提供样式。 */
+$stateStyles = $widgetCss . $presetCss . $adminCss;
+$stateOrphans = [];
+foreach ([$widgetJs, $adminJs] as $source) {
+    foreach ([
+        "/classList\.(?:add|toggle|remove)\('([^']+)'/",
+        "/className = '([^']+)'/",
+        "/el\('[a-zA-Z0-9]+',\s*'([^']+)'/",
+    ] as $pattern) {
+        if (!preg_match_all($pattern, $source, $matches)) continue;
+        foreach ($matches[count($matches) - 1] as $blob) {
+            foreach (preg_split('/\s+/', $blob) ?: [] as $name) {
+                if ($name === '' || str_starts_with($name, 'acs-')) continue;
+                if (in_array($name, ['bi', 'active'], true)) continue;
+                if (!preg_match('/^[a-z][a-z0-9-]*$/', $name)) continue;
+                if (!str_contains($stateStyles, '.' . $name)) $stateOrphans[$name] = true;
+            }
+        }
+    }
+}
+$assert($stateOrphans === [], '这些状态类被 JS 挂上却没有任何 CSS 规则：'
+    . implode('、', array_slice(array_keys($stateOrphans), 0, 8)));
+$assert(str_contains($widgetCss, '.acs-field.has-error input'), '询盘表单校验失败必须真的看得出来');
+
+/* 询盘：服务端有「邮箱和电话至少留一个」的硬规则，两个字段都配上时谁都不是 required，
+ * 前台不认这条就会放过一次注定被拒的提交。 */
+$assert(str_contains($cards, "'eitherContact'") && str_contains($widgetJs, 'card.eitherContact'),
+    '「邮箱和电话至少留一个」必须在前台也拦一道，别让访客白跑一趟服务端');
+$assert(str_contains($widgetJs, "status.setAttribute('aria-live'"), '询盘表单的校验/提交结果必须能被读屏播报');
+$assert(str_contains($widgetJs, "setAttribute('aria-invalid'"), '出错字段要写 aria-invalid，不能只靠红框');
+$assert(str_contains($widgetJs, 'retry_after'), '限流必须把服务端算好的等待时间写给访客，不能只说"稍后再试"');
+/* 表情/表情包按钮各自展开下面那块 picker，状态要能被读屏感知 */
+$assert(str_contains($service, 'aria-expanded="false" aria-label="插入表情"')
+    && str_contains($widgetJs, "setAttribute('aria-expanded', 'true')"), 'picker 触发按钮必须同步 aria-expanded');
+/* 保存失败：字段名只进消息文本的话，站长得在几十个控件里自己找 */
+$assert(str_contains($service, 'function stashSaveErrors(') && str_contains($service, 'function takeSaveErrors(')
+    && str_contains($service, "'saveErrors' => self::takeSaveErrors()")
+    && str_contains($adminJs, 'function paintSaveErrors('),
+    '保存校验失败要把出错控件标出来，不能只在顶部丢一句话');
+$assert(!str_contains($service, "'save_values'") && !str_contains($service, "\$_SESSION[self::SESSION_KEY]['save_input']"),
+    '出错字段只存 key：提交里可能带独立接口密钥，值不能落会话');
+$assert(str_contains($adminCss, '.acs-a-item.has-error input'), '后台出错字段要有可见样式');
+
+/* adminPageData() 备好了值、视图的 $boot 却忘了转发，是这套引导数据特有的一类静默故障：
+ * JS 侧一律写成 Array.isArray(BOOT.x) ? ... : [] 这种安全兜底，所以读到 undefined 时
+ * 功能直接变成空操作，页面不报错、契约也不响。warnModelUnset / paintSaveErrors 两个
+ * 都这么哑过一轮。这里把 admin.js 实际读的 BOOT 键与 $boot 声明的键做交叉核对。 */
+preg_match('/\$boot = \[(.*?)\n\];/s', $view, $bootMatch);
+$assert(!empty($bootMatch[1]), '找不到 views/admin.php 里的 $boot 定义');
+$bootKeys = [];
+// 只认行首缩进四格的顶层键，否则 presets 那行 array_map 闭包里的 label/note/values
+// 会混进来，真漏了同名键反而查不出
+if (preg_match_all("/^    '([a-zA-Z][a-zA-Z0-9_]*)'\s*=>/m", $bootMatch[1], $km)) {
+    foreach ($km[1] as $k) $bootKeys[$k] = true;
+}
+$readKeys = [];
+if (preg_match_all('/\bBOOT\.([a-zA-Z][a-zA-Z0-9_]*)/', $adminJs, $rm)) {
+    foreach ($rm[1] as $k) $readKeys[$k] = true;
+}
+$assert(count($bootKeys) > 10 && $readKeys !== [], '$boot / BOOT 键提取失败，检查测试自身的正则');
+$missingBoot = array_diff(array_keys($readKeys), array_keys($bootKeys));
+$assert($missingBoot === [], 'admin.js 读了这些 BOOT 键但 $boot 没有转发（功能会静默失效）：'
+    . implode('、', $missingBoot));
+$assert(isset($bootKeys['models']) && isset($bootKeys['saveErrors']),
+    '$boot 必须转发 models 与 saveErrors：前者判断「一个对话模型都没配」，后者标红出错字段');
+
+/* 自动弹出不是访客点的：抢焦点会把光标从站点自己的搜索框/结账表单里挪走，
+ * 圈 Tab 会把键盘用户锁在一块他没要求打开的面板里。两件事都只在 !silent 时做。 */
+$assert(str_contains($widgetJs, 'function setOpen(open, silent)') && str_contains($widgetJs, 'setOpen(true, true)'),
+    '自动弹出必须走静默通道，不能和访客点开走同一条路');
+$assert(str_contains($widgetJs, 'if (silent) return;'), '自动弹出不得把焦点挪进输入框');
+$assert(str_contains($widgetJs, '!state.open || !state.modal) return;'), '自动弹出的面板不得圈住 Tab');
+$assert(str_contains($widgetJs, "panel.setAttribute('aria-modal', 'true')")
+    && str_contains($widgetJs, "panel.removeAttribute('aria-modal')"),
+    '圈 Tab 与 aria-modal 必须成对：只圈不声明，读屏会说页面还能去而键盘出不去');
+
 /* 站长指定「原样照搬」的三段设计稿：留住签名值，防止后人当成魔法数字优化掉。 */
 foreach ([
     'perspective(905px)' => '叠卡的 905px 透视',

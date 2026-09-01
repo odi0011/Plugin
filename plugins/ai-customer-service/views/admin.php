@@ -31,6 +31,7 @@
  * @var list<array{kind:string,type:string,label:string}> $contentTypes
  * @var array{count:int,chars:int,missing:list<string>,limit:int} $knowledgeFiles
  * @var array{country:string,languages:list<string>} $geo
+ * @var list<string> $saveErrors
  * @var string $version
  */
 $this->extend('admin/views/layouts/main');
@@ -65,6 +66,10 @@ $boot = [
     'contentTypes' => $contentTypes,
     'knowledgeFiles' => $knowledgeFiles,
     'geo' => $geo,
+    // 模型清单与上次保存的报错字段都只有 JS 用得上：前者判断「系统模型一个都没配」
+    // 要不要出提示，后者把校验失败的控件标红。不进 $boot 这两个功能就是死的。
+    'models' => $models,
+    'saveErrors' => $saveErrors,
     'config' => $config,
 ];
 $jsonFlags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
