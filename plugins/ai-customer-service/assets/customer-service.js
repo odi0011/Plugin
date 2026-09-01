@@ -1091,7 +1091,10 @@
             }
         }).finally(function () {
             setBusy(false);
-            input.focus();
+            // 同意门槛刚被重新竖起来时输入框是 disabled 的，focus() 对它是空操作：
+            // 焦点会留在原地（或掉回文档开头），键盘用户找不到"接下来该点哪"。
+            // 这种情况下把焦点交给勾选框——那才是唯一能往下走的控件。
+            if (input.disabled) { if (consentBox) consentBox.focus(); } else { input.focus(); }
         });
     }
 
@@ -1376,6 +1379,10 @@
         state.nearBottom = atBottom();
         // 自己滚回底部就算把"有新回复"这条提示看过了
         if (state.nearBottom && feedback.textContent === '客服已回复，往下滚动查看') showFeedback('');
+        // 二维码浮层是按触发元素的视口坐标摆的，聊天区一滚坐标就过期了。hover 触发的
+        // 那份会因为 pointerleave 自己收掉，但点钉住的（微信这类复制按钮）不会——
+        // 不强制收就会看见一张二维码浮在跟它无关的消息上面。
+        hideQr(true);
     }, { passive: true });
 
     // 回到这个标签页就把标题上的未读计数擦掉，别让 "(3) 站点名" 一直挂着

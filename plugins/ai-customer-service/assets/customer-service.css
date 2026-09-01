@@ -328,10 +328,22 @@
 .acs-widget[data-acs-open="true"] .acs-channels,
 .acs-widget[data-acs-open="true"] .acs-channels-toggle { display: none !important; }
 
+/* 12 个渠道 × 最大浮标（96px → chip 59.5px）叠起来有 700px 多，比很多笔记本的
+ * 视口还高，顶上几个会飘到屏幕外点不着。给一个按视口算的上限 + 纵向滚动兜住：
+ * 减掉的是浮标本身、展开按钮和上下各 12px 的余量。 */
+.acs-channels {
+    max-height: calc(100dvh - var(--acs-size) - var(--acs-chip) - 48px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
 /* fan：一列圆形图标，从按钮往上长。column-reverse 让第一个渠道贴着按钮。 */
 .acs-channels--fan {
     flex-direction: column-reverse;
     align-items: flex-end;
+    /* 圆形 chip 自带投影，overflow 会把它切掉一圈，留 4px 内边距让投影完整 */
+    padding: 4px;
+    margin: -4px;
 }
 .acs-widget--left .acs-channels--fan { align-items: flex-start; }
 .acs-channels--fan .acs-channel {
@@ -1038,7 +1050,16 @@
     margin: 2px 0 0;
     accent-color: var(--acs-accent);
 }
-.acs-consent-text { color: var(--acs-muted); font-size: calc(var(--acs-font) * .82); line-height: 1.55; }
+/* 正文上限 600 字，按 .82em 排能到十几行——面板高度是固定的，
+ * 不封顶就会把聊天区挤到只剩一条缝。封顶后正文自己滚。 */
+.acs-consent-text {
+    max-height: 7.5em;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    color: var(--acs-muted);
+    font-size: calc(var(--acs-font) * .82);
+    line-height: 1.55;
+}
 .acs-consent-link { color: var(--acs-accent); text-decoration: underline; }
 .acs-consent-accept {
     justify-self: start;

@@ -97,6 +97,15 @@ add_action('routes.frontend.register', static function ($router): void {
     });
 });
 
+/* 开了按国家 / 语言定向以后，同一个 URL 的 HTML 会随请求头变化。不声明 Vary，
+ * 任何整页缓存（CDN、反代、缓存插件）都会把第一个访客的那一份存下来发给所有人——
+ * 规则看起来配好了，实际上随机生效。所以在 head 阶段补一条 Vary。
+ * 挂 frontend.head 而不是 body_end：视图是 ob_start 缓冲渲染的（core View::render），
+ * 这时候响应头还没发出去；仍然用 headers_sent() 兜一道，免得主题提前 flush。 */
+add_action('frontend.head', static function (): void {
+    AiCustomerService::sendTargetingVary();
+});
+
 add_action('frontend.body_end', static function (): void {
     AiCustomerService::renderWidget();
 });

@@ -408,6 +408,34 @@ if ($actionBody !== '') {
     $assert($historyAt !== false && $gateAt !== false && $historyAt < $gateAt,
         'history 动作要排在同意门槛之前：刚打开面板还没勾同意的访客不该先吃一条错误');
 }
+/* 定向 + 整页缓存：不声明 Vary，第一个访客的那一份会被发给所有人，
+ * 规则看起来配好了其实随机生效。挂 frontend.head 是因为视图还在 ob 缓冲里、头还没发出去。 */
+$assert(str_contains($service, 'function sendTargetingVary(') && str_contains($plugin, "add_action('frontend.head'")
+    && str_contains($plugin, 'sendTargetingVary'), '开了定向必须声明 Vary，否则整页缓存会把规则打乱');
+$assert(str_contains($service, 'headers_sent()'), 'Vary 必须先问 headers_sent()，主题提前 flush 时不能抛 warning');
+$assert(str_contains($service, "header('Vary: "), 'Vary 头必须真的发出去');
+
+/* 二维码浮层是按触发元素的视口坐标摆的，聊天区一滚坐标就过期；
+ * 钉住的那份不会自己收，必须显式收掉。 */
+$assert(preg_match('/chat\.addEventListener\(\'scroll\'.{0,600}?hideQr\(true\)/s', $widgetJs) === 1,
+    '聊天区滚动时必须收掉二维码浮层，否则它会停在跟自己无关的消息上面');
+/* 同意门槛竖起来时输入框是 disabled 的，focus() 对它是空操作 —— 焦点必须交给勾选框 */
+$assert(str_contains($widgetJs, 'if (input.disabled) { if (consentBox) consentBox.focus(); }'),
+    '同意门槛重新升起后焦点要落到勾选框，不能 focus 一个 disabled 的输入框');
+$assert(str_contains($service, 'aria-describedby="acs-consent-text"') && str_contains($service, 'id="acs-consent-text"'),
+    '锁住的输入框要用 aria-describedby 指到同意正文，读屏才知道为什么不可用');
+/* 12 个渠道 × 最大浮标叠起来比视口还高，顶上几个会点不着 */
+$assert(preg_match('/\.acs-channels\s*\{[^}]*max-height:[^}]*overflow-y:\s*auto/s', $widgetCss) === 1,
+    '浮标渠道竖排必须有高度上限与滚动，否则渠道一多就顶出屏幕');
+$assert(preg_match('/\.acs-consent-text\s*\{[^}]*max-height:/s', $widgetCss) === 1,
+    '同意正文要封顶，600 字的正文会把聊天区挤没');
+/* 同意门槛是「会话内容」页唯一的新增可视元素，必须和飘带/引流气泡一样在预览里当场生效：
+ * 预览节点常在（服务端 $preview 分支），显隐与文案由 admin.js 拨。 */
+$assert(str_contains($adminJs, 'function syncConsent(') && str_contains($adminJs, "show('[data-acs-consent]'"),
+    '同意门槛要接进预览：拨开关、改文案都得当场看到，不能保存刷新才知道长什么样');
+$assert(str_contains($service, "empty(\$consent['enabled']) && !\$preview"),
+    '预览里即使关着也要输出同意节点，前台仍然一个字节都不输出');
+
 $assert(str_contains($service, 'data-acs-qr') && str_contains($widgetJs, 'function showQr('),
     '渠道二维码需要标记与悬浮层两处一起在');
 $assert(str_contains($cards, "'qr' =>") && str_contains($adminJs, '二维码图（可选）'),

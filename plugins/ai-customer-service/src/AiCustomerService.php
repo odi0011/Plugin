@@ -16,7 +16,7 @@ declare(strict_types=1);
 final class AiCustomerService
 {
     public const SLUG = 'ai-customer-service';
-    public const VERSION = '1.4.0';
+    public const VERSION = '1.4.1';
 
     private const SESSION_KEY = '_ai_customer_service';
     private const CONVERSATION_TTL = 21600;
@@ -1384,13 +1384,18 @@ final class AiCustomerService
                 . self::escape((string)$config['handoff_label']) . '</span></a>';
         }
 
-        $html .= self::consentMarkup($config, $open);
+        $consentHtml = self::consentMarkup($config, $open);
+        $html .= $consentHtml;
+
+        /* 门槛开着时把输入框和同意块关联起来：没勾同意的输入框是 disabled 的，
+         * 读屏软件只会念"不可用"，不说为什么。aria-describedby 让它把同意正文一起念出来。 */
+        $describedBy = $consentHtml !== '' ? ' aria-describedby="acs-consent-text"' : '';
 
         $html .= '<form class="acs-composer" novalidate>'
             . '<label class="acs-sr-only" for="acs-message">输入消息</label>'
             . '<div class="acs-composer-shell">'
             . '<textarea id="acs-message" name="message" rows="1" maxlength="' . (int)$config['message_max_chars']
-            . '" placeholder="' . self::escape((string)$config['input_placeholder']) . '"></textarea>'
+            . '"' . $describedBy . ' placeholder="' . self::escape((string)$config['input_placeholder']) . '"></textarea>'
             . '<div class="acs-composer-bar">'
             . '<div class="acs-composer-tools">' . self::composerToolsMarkup($config) . '</div>'
             . '<div class="acs-composer-right">'
@@ -1414,7 +1419,9 @@ final class AiCustomerService
     private static function consentMarkup(array $config, bool $preview = false): string
     {
         $consent = is_array($config['consent'] ?? null) ? $config['consent'] : [];
-        if (empty($consent['enabled'])) return '';
+        // 预览里即使开关是关的也把节点画出来（带 hidden）：后台拨开关、改文案都要能当场看到，
+        // 否则得先保存再刷新才知道这道门槛长什么样。前台维持"关了就一个字节都不输出"。
+        if (empty($consent['enabled']) && !$preview) return '';
 
         $accepted = !$preview && self::consentGiven();
         $text = self::escape((string)$consent['text']);
@@ -1425,13 +1432,17 @@ final class AiCustomerService
                 . self::escape($linkLabel) . '</a>';
         }
 
-        $html = '<div class="acs-consent" data-acs-consent' . ($accepted ? ' hidden' : '') . '>';
-        if ((string)$consent['title'] !== '') {
-            $html .= '<strong class="acs-consent-title">' . self::escape((string)$consent['title']) . '</strong>';
+        // 预览里开关关着就先 hidden，交给后台 JS 拨；前台则是"已经同意过"才 hidden
+        $startHidden = $preview ? empty($consent['enabled']) : $accepted;
+        $html = '<div class="acs-consent" data-acs-consent' . ($startHidden ? ' hidden' : '') . '>';
+        // 标题为空时前台不输出这个节点；预览里始终留着，改文案才有地方写
+        if ((string)$consent['title'] !== '' || $preview) {
+            $html .= '<strong class="acs-consent-title"' . ((string)$consent['title'] === '' ? ' hidden' : '') . '>'
+                . self::escape((string)$consent['title']) . '</strong>';
         }
         return $html
             . '<label class="acs-consent-row"><input type="checkbox" class="acs-consent-box" data-acs-consent-box>'
-            . '<span class="acs-consent-text">' . $text . '</span></label>'
+            . '<span class="acs-consent-text" id="acs-consent-text">' . $text . '</span></label>'
             . '<button type="button" class="acs-consent-accept" data-acs-consent-accept disabled>'
             . self::escape((string)$consent['button']) . '</button></div>';
     }
@@ -1810,6 +1821,51 @@ final class AiCustomerService
         'HTTP_X_GEO_COUNTRY',
         'HTTP_X_APPENGINE_COUNTRY',       // Google App Engine
     ];
+
+    /** COUNTRY_HEADERS 的 HTTP_ 形式还原成真实头名，用来拼 Vary。 */
+    private const COUNTRY_HEADER_NAMES = [
+        'CF-IPCountry',
+        'CloudFront-Viewer-Country',
+        'X-Country-Code',
+        'X-Geo-Country',
+        'X-Appengine-Country',
+    ];
+
+    /**
+     * 定向开着时声明 Vary：同一个 URL 的 HTML 会随地区 / 语言请求头变化，不说清楚
+     * 缓存就会把第一个访客的那一份发给所有人（规则看着配好了其实随机生效）。
+     *
+     * 只在真的开了定向时发：没开定向的站点不该因为装了这个插件就让整站缓存按语言分片。
+     * 国家维度只列"这次实际出现过的"那些头 —— 把五个候选头全写进 Vary 会让缓存键
+     * 无谓地散开，而没有任何 CDN 会同时发这五个。
+     */
+    public static function sendTargetingVary(): void
+    {
+        if (headers_sent()) return;
+        $config = self::config();
+        // 这个页面本来就不出挂件（关掉了 / 路径规则排除了），输出就不随地区头变化，
+        // 没必要让它的缓存按国家分片。服务时段不看：那是随时间变的，与请求头无关。
+        if (empty($config['enabled']) || !self::pathAllowed($config)) return;
+        $targeting = is_array($config['targeting'] ?? null) ? $config['targeting'] : [];
+
+        $vary = [];
+        if ((string)($targeting['country_mode'] ?? 'off') !== 'off') {
+            foreach (self::COUNTRY_HEADERS as $index => $header) {
+                if (trim((string)($_SERVER[$header] ?? '')) !== '') {
+                    $vary[] = self::COUNTRY_HEADER_NAMES[$index];
+                }
+            }
+            // 一个地区头都没有：仍然要声明一个，否则"缺头 → 不显示"这个结果会被缓存下来，
+            // 等 CDN 恢复发头了还继续发缓存里那份没有挂件的页面。
+            if ($vary === []) $vary[] = self::COUNTRY_HEADER_NAMES[0];
+        }
+        if ((string)($targeting['language_mode'] ?? 'off') !== 'off') {
+            $vary[] = 'Accept-Language';
+        }
+        if ($vary === []) return;
+
+        header('Vary: ' . implode(', ', $vary), false);
+    }
 
     /** 访客国家（ISO-3166-1 alpha-2 大写）；取不到返回空串。 */
     public static function visitorCountry(): string

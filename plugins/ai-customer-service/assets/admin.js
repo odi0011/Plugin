@@ -1929,6 +1929,36 @@
         if (target) target.textContent = text;
     }
 
+    /* 同意门槛：文案与开关都要在预览里当场生效。服务端对空值有回落（清空标题会回到
+     * 「开始对话前」），这里照抄同一组默认值，不然后台看到的是空的、保存后又冒出文字。
+     * 链接用 DOM API 拼，不碰 innerHTML——预览里的文案同样来自用户输入。 */
+    function syncConsent(w) {
+        var block = w.querySelector('[data-acs-consent]');
+        if (!block) return;
+        var c = readJson('consent_json', {});
+        var title = String(c.title || '') || '开始对话前';
+        var body = String(c.text || '') || '我同意本站按隐私政策处理我在对话中提交的信息。';
+        var titleNode = block.querySelector('.acs-consent-title');
+        if (titleNode) {
+            titleNode.textContent = title;
+            titleNode.hidden = false;
+        }
+        var textNode = block.querySelector('.acs-consent-text');
+        if (textNode) {
+            textNode.textContent = body;
+            var linkLabel = String(c.link_label || '');
+            var linkUrl = String(c.link_url || '');
+            // 两个都填才渲染链接，和服务端一致（只填一个当没填）
+            if (linkLabel !== '' && linkUrl !== '') {
+                textNode.appendChild(document.createTextNode(' '));
+                var a = el('a', 'acs-consent-link', linkLabel);
+                a.href = linkUrl;
+                textNode.appendChild(a);
+            }
+        }
+        setTextIn(w, '.acs-consent-accept', String(c.button || '') || '同意并开始');
+    }
+
     function syncText(w) {
         setTextIn(w, '.acs-agent-copy strong', val('brand_name', 'AI客服'));
         var status = w.querySelector('.acs-agent-status');
@@ -1952,6 +1982,7 @@
         setTextIn(w, '.acs-powered', val('brand_name', 'AI客服'));
         var label = w.querySelector('.acs-launcher-label');
         if (label) label.textContent = val('brand_name', 'AI客服');
+        syncConsent(w);
 
         // 快捷问题：整行重建，跟着输入框实时变
         var quickRow = w.querySelector('.acs-quick-row');
@@ -2006,6 +2037,8 @@
         var chan = (experience && experience.channels) || {};
         show('[data-acs-channels]', !!chan.enabled && pv.state === 'closed');
         show('[data-acs-channels-toggle]', !!chan.enabled && pv.state === 'closed');
+        // 同意门槛：拨开关就能看到效果（面板关着时整块面板都不可见，不必额外判断）
+        show('[data-acs-consent]', !!(readJson('consent_json', {}) || {}).enabled);
         show('.acs-powered', on('show_powered_by'));
         show('.acs-avatar', on('show_avatar'));
         w.querySelectorAll('.acs-message-avatar').forEach(function (n) { n.hidden = !on('show_avatar'); });
