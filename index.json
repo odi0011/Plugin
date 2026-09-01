@@ -4,7 +4,7 @@
     "source": {
         "type": "github-static",
         "repo": "odi0011/Plugin",
-        "commit": "5ec7538"
+        "commit": "eb5a88c"
     },
     "core_api": {
         "min": 1,
@@ -62,7 +62,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@5ec7538/dist/agent-content-integrity-1.0.1.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@eb5a88c/dist/agent-content-integrity-1.0.1.zip",
                 "sha256": "5741fcb46d4dcaf42982d6e7c2427e7a5950b938948a1ccbadf654b80d779d59",
                 "size_bytes": 3120
             },
@@ -118,7 +118,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@5ec7538/dist/agent-hello-1.0.1.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@eb5a88c/dist/agent-hello-1.0.1.zip",
                 "sha256": "265cec149d0fa7bc7e8d6b5eec48f177e3d8bf7b5e69b700bc5f917faa53bfaf",
                 "size_bytes": 4150
             },
@@ -180,7 +180,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@5ec7538/dist/agent-link-auditor-1.0.0.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@eb5a88c/dist/agent-link-auditor-1.0.0.zip",
                 "sha256": "f71de86290b0e40cafebfa016a132e0b25bba9013f1cad7df224f9b7f2e8a83b",
                 "size_bytes": 6225
             },
@@ -241,7 +241,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@5ec7538/dist/agent-run-digest-1.0.0.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@eb5a88c/dist/agent-run-digest-1.0.0.zip",
                 "sha256": "5e5a173a541d80ad1795935fd106f34412e0391b0265feac9b42574a21a1d933",
                 "size_bytes": 8151
             },
@@ -300,7 +300,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@5ec7538/dist/agent-run-notifier-1.0.1.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@eb5a88c/dist/agent-run-notifier-1.0.1.zip",
                 "sha256": "95349f75f5b0e3a41511596c8cb7a9e4faafe055dabb938aad784995b818eb4f",
                 "size_bytes": 3261
             },
@@ -362,7 +362,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@5ec7538/dist/agent-seo-snapshot-1.0.0.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@eb5a88c/dist/agent-seo-snapshot-1.0.0.zip",
                 "sha256": "b99b2fc9b4855262dac9597ea832d42f0354624466fdf21699cb9942985243f2",
                 "size_bytes": 4882
             },
@@ -445,7 +445,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@5ec7538/dist/agent-task-ledger-1.0.1.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@eb5a88c/dist/agent-task-ledger-1.0.1.zip",
                 "sha256": "bf013aedcc4610ad66b64929a35ea65f4750891489cbd67c1ca4a448ebdd4f5f",
                 "size_bytes": 4196
             },
@@ -497,7 +497,7 @@
             "published_at": "2026-09-01T11:20:51Z",
             "changelog": "1.5.0 把「六套预设」做成真的六种形态，顺手补三处会被当成「没坏」的故障。①预设过去基本只换颜色：顶栏只有纯色 / 浅底两档，density 只管两个 gap，圆角只落在面板那一个角上。现在圆角从 --acs-panel-radius 推出一条五级阶梯，带动全窗 27 处圆角（气泡尾巴换成 border-end-start-radius 这类逻辑属性，RTL 站点跟着翻）；新增 theme.edge 六档（描边 / 全平 / 玻璃 / 发光 / 硬偏移 / 内斜面）与 theme.type 三档（字重 + 字距 + 行高，不依赖任何内嵌字体 —— 中文站上 Inter、Quicksand 基本都没装）；density 扩成一整组间距变量（面板 / 轮次 / 行内 / 气泡 / 顶栏 / 聊天区顶部）；顶栏补 accent 与 slim 两档；五套预设各有一条独占签名（墨黑拍平胶囊、午夜顶栏一条两端淡出的主色光线、薄荷把卡片列表变成表格行、陶土给气泡一道内压痕、手账铺纸的横线），素白故意没有 —— 它的定位就是不抢站点风格。两个新轴都寄生在 theme_json 里，声明字段数一个没加。②可读性：六处压在强调色实心底上的前景色写死了 #fff，站长把强调色调成薄荷、柠檬这类浅色时对比度只剩 1.6:1，等于看不见；全部改走 --acs-on-accent，也就是站长自己按「铺在强调色上」挑过的那个值。③手机软键盘：iOS 的 100dvh 只跟随浏览器工具条，软键盘是覆盖层、一点都不影响它，于是键盘弹起时输入框正好被压在下面 —— 打字时看不见自己打了什么。改成从 visualViewport 量出键盘高度写进 --acs-kb，把挂件抬起来、面板同步矮下去；顺带手机上打开面板不再自动聚焦（否则键盘立刻占半屏，问候语和快捷问题全被顶出视口）。④重复渲染：主题若把 body_end 钩子跑两遍，页面上会出现两个同 id 的挂件，第二个永远不响应；脚本被缓存插件合并加载两遍时会在同一批节点上挂两套监听，点一次开一次又关一次。PHP 侧加 static $rendered、JS 侧在 DOM 上打 dataset 标记，两半各挡一边。契约新增：七个主题轴的白名单 / defaultTheme / plugin.json 默认值 / CSS 规则 / 后台选项 / 中文名六处逐个比对（多一条 CSS 也算失败 —— .acs-head--gradient 就是这么留下来的死代码，这次删了），TONE_DARK_MAX 两处必须相等，以及上面三处守卫。",
             "download": {
-                "url": "",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@eb5a88c/dist/ai-customer-service-1.5.0.zip",
                 "sha256": "aca64084d762b9598eb01d24dbc228105e518edc61a857d908f452c4c8723f53",
                 "size_bytes": 224301
             },
@@ -535,7 +535,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@5ec7538/dist/analytics-snippet-1.0.1.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@eb5a88c/dist/analytics-snippet-1.0.1.zip",
                 "sha256": "073f0905fb1d69a484860aa2ff0af9ef12b20f64b8e70f7a36d0803e44f4077d",
                 "size_bytes": 4014
             },
@@ -566,7 +566,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@5ec7538/dist/hello-world-1.0.1.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@eb5a88c/dist/hello-world-1.0.1.zip",
                 "sha256": "5895ac7fe49d0bab9f87a12b4fec00c61ecb30d6fbceca61936d6dab704230f2",
                 "size_bytes": 1696
             },
@@ -608,7 +608,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@5ec7538/dist/maintenance-mode-1.0.0.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@eb5a88c/dist/maintenance-mode-1.0.0.zip",
                 "sha256": "a9c2040049a98c7c811c1c625ba1997540eced940b4571d4cd0122003b18b2b4",
                 "size_bytes": 7991
             },
@@ -646,7 +646,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@5ec7538/dist/preset-components-1.0.1.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@eb5a88c/dist/preset-components-1.0.1.zip",
                 "sha256": "3ece951fa8f99332db1591cea876c832f755ba1976a4bcb04164c5c085ad70c9",
                 "size_bytes": 26934
             },
@@ -688,7 +688,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@5ec7538/dist/reading-time-1.0.0.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@eb5a88c/dist/reading-time-1.0.0.zip",
                 "sha256": "bb9daa5003bdde2bb7e985ffe1b1caf38cad25deffb62e56efa1966cae73f7bc",
                 "size_bytes": 6575
             },
@@ -726,7 +726,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@5ec7538/dist/redirect-rules-1.0.1.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@eb5a88c/dist/redirect-rules-1.0.1.zip",
                 "sha256": "8ac123892a303a95d758fd91507c7d10c0a3412b88b83c80c564b23a4e574a6b",
                 "size_bytes": 6023
             },
@@ -769,7 +769,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@5ec7538/dist/sitemap-ping-1.0.0.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@eb5a88c/dist/sitemap-ping-1.0.0.zip",
                 "sha256": "83f73524e696b030f498a7655d929865ec645aa35d3c61cd9e58985ece6a4bcc",
                 "size_bytes": 8383
             },
@@ -824,7 +824,7 @@
             "published_at": "2026-08-27T04:24:23Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@5ec7538/dist/visual-editor-1.5.0.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@eb5a88c/dist/visual-editor-1.5.0.zip",
                 "sha256": "1f3cad9be458aa0690715157c4bea769ee30d50708c743d6f3e248a3ef8fd248",
                 "size_bytes": 134377
             },
