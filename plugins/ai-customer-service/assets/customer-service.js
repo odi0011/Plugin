@@ -5,6 +5,13 @@
     var configNode = document.getElementById('acs-widget-config');
     if (!root || !configNode) return;
 
+    /* 同一份脚本被加载两次时（主题把 footer 钩子渲染了两遍、或站长同时用了缓存插件的
+     * 合并脚本），第二遍会在同一批节点上再挂一整套监听：点一次浮标开一次又关一次，
+     * 发一条消息发两遍。DOM 上打一个标记，第二遍直接退出。
+     * 用 dataset 而不是模块内变量，因为两次加载是两个独立的 IIFE 作用域。 */
+    if (root.dataset.acsBound === '1') return;
+    root.dataset.acsBound = '1';
+
     var config;
     try { config = JSON.parse(configNode.textContent || '{}'); } catch (error) { return; }
     if (!config || !config.endpoint || !config.csrf || !config.conversationId) return;
@@ -260,6 +267,34 @@
 
     /* silent=true 表示这次打开不是访客点的（目前只有延时自动弹出）。这种情况下绝不能抢焦点：
      * 访客可能正在填站点自己的搜索框或结账表单，几秒后光标被挪进聊天框，输入会打到别处去。 */
+    /* 软键盘让面板抬起来 + 矮下去。iOS Safari 的 100dvh 只跟随浏览器工具条，
+     * 软键盘是覆盖层、不改变布局视口，所以键盘弹起时面板既没变矮也没上移，
+     * 输入框和发送键正好被压在键盘下面 —— 访客打字时看不见自己打了什么。
+     * 只能自己量：visualViewport.height 是去掉键盘之后真正可见的那块。
+     * 只在"我们的面板开着且是手机"时才跟：页面上别的输入框弹键盘时，
+     * 没有理由去挪一个关着的浮标。 */
+    var kbBound = false;
+    function applyKeyboardInset() {
+        var vv = window.visualViewport;
+        if (!vv || !state.open || !isMobile()) {
+            root.style.setProperty('--acs-kb', '0px');
+            return;
+        }
+        var inset = Math.round(window.innerHeight - vv.height - vv.offsetTop);
+        // 12px 以下当抖动丢掉：地址栏收放、橡皮筋滚动都会让这个差值出现个位数毛刺，
+        // 照搬会让面板在滚动时一直轻微跳动。
+        root.style.setProperty('--acs-kb', (inset > 12 ? inset : 0) + 'px');
+    }
+    function trackKeyboard() {
+        var vv = window.visualViewport;
+        if (vv && !kbBound) {
+            kbBound = true;
+            vv.addEventListener('resize', applyKeyboardInset);
+            vv.addEventListener('scroll', applyKeyboardInset);
+        }
+        applyKeyboardInset();
+    }
+
     function setOpen(open, silent) {
         if (state.dead) return;
         if (!state.visible && open) reveal();
@@ -272,6 +307,7 @@
         else panel.removeAttribute('aria-modal');
         // 供 CSS 用：打开时要收起引流气泡与悬停提示，否则它们和浮标叠在一起
         root.dataset.acsOpen = state.open ? 'true' : 'false';
+        trackKeyboard();
         if (launcher) {
             launcher.setAttribute('aria-expanded', state.open ? 'true' : 'false');
             launcher.classList.toggle('is-open', state.open);
@@ -300,7 +336,10 @@
         window.setTimeout(function () {
             // 还没勾同意时焦点给勾选框：输入框此刻是 disabled，focus() 会落空
             if (consentRequired && !state.consented && consentBox) { consentBox.focus(); return; }
-            input.focus();
+            /* 手机上不自动聚焦：focus() 会立刻弹起软键盘，占掉半屏，
+             * 访客刚点开就只看得见输入框，问候语和快捷问题全被顶到视口外。
+             * 桌面端相反 —— 打开即能打字是基本预期。 */
+            if (!isMobile()) input.focus();
         }, 0);
     }
 

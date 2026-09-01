@@ -16,7 +16,7 @@ declare(strict_types=1);
 final class AiCustomerService
 {
     public const SLUG = 'ai-customer-service';
-    public const VERSION = '1.4.4';
+    public const VERSION = '1.5.0';
 
     private const SESSION_KEY = '_ai_customer_service';
     private const CONVERSATION_TTL = 21600;
@@ -226,61 +226,88 @@ final class AiCustomerService
      * 预设主题。切换预设 = 一次性覆盖一组具体字段值（不是运行时的第二套配置），
      * 所以预设改完之后用户仍然能逐项微调，预览与前台看到的永远是同一份字段。
      *
-     * 六套都是**平色**：不用渐变顶栏、默认不打投影，分层只靠 1px 描边。
-     * 渐变和大面积投影在真实站点上几乎总是显脏，也压不住站点自己的配色。
+     * 六套是六种**形态**而不是六组配色。判断标准是可证伪的：任意两套至少在三个
+     * 非颜色维度上不同，其中至少一个在**闭合态**（访客只看见一颗浮标的那 90% 时间）
+     * 就能看出来 —— 否则换预设等于什么都没换。落点分别是
+     *   闭合态：launcher_style / launcher_icon / launcher_corner / widget_size
+     *   轮廓：  panel_radius（经 --acs-r-* 阶梯带动全窗 20 处圆角，不只是面板那一个角）
+     *   边缘：  theme.edge，六套各占一档（描边 / 全平 / 玻璃 / 暖发光 / 硬偏移 / 内斜面）
+     *   排版：  theme.type（字重 + 字距 + 行高，不依赖任何内嵌字体）
+     *   密度：  theme.density 三档，驱动一整组间距变量而不只是两个 gap
+     *
+     * panel_shadow 六套仍然一律 none：那是站长自己的开关，预设不该替他按下去。
+     * 海拔差异走 theme.edge，两者可以叠加。
      *
      * @return array<string,array{label:string,note:string,values:array<string,mixed>}>
      */
     public static function themePresets(): array
     {
         return [
-            'plain' => ['label' => '素白 Plain', 'note' => '白底 + 靛蓝重点色，最不抢站点风格', 'values' => [
+            'plain' => ['label' => '素白 Plain', 'note' => '白底 + 靛蓝重点色，中性底线，最不抢站点风格', 'values' => [
                 'accent_color' => '#4F46E5', 'header_color' => '#FFFFFF', 'header_text_color' => '#111827',
                 'surface_color' => '#FFFFFF', 'text_color' => '#111827', 'muted_color' => '#6B7280',
                 'bot_bubble_color' => '#F4F4F5', 'bot_bubble_text_color' => '#111827',
                 'visitor_bubble_color' => '#4F46E5', 'visitor_bubble_text_color' => '#FFFFFF',
                 'panel_radius' => 14, 'panel_shadow' => 'none', 'font_family' => 'system',
-                'theme' => ['bubble_style' => 'soft', 'bubble_anim' => 'rise', 'header_style' => 'light', 'quick_style' => 'capsule', 'density' => 'cozy', 'typing' => 'dots'],
+                'launcher_style' => 'bubble', 'launcher_icon' => 'chat', 'launcher_corner' => 10, 'widget_size' => 56,
+                'theme' => ['bubble_style' => 'soft', 'bubble_anim' => 'rise', 'header_style' => 'light',
+                    'quick_style' => 'capsule', 'density' => 'cozy', 'typing' => 'dots',
+                    'edge' => 'hairline', 'type' => 'neutral'],
             ]],
-            'ink' => ['label' => '墨黑 Ink', 'note' => '近黑顶栏 + 中性灰气泡，克制', 'values' => [
+            'ink' => ['label' => '墨黑 Ink', 'note' => '近黑顶栏 + 方角 + 等宽数字，开发者工具的信息密度', 'values' => [
                 'accent_color' => '#18181B', 'header_color' => '#18181B', 'header_text_color' => '#FAFAFA',
                 'surface_color' => '#FFFFFF', 'text_color' => '#18181B', 'muted_color' => '#71717A',
                 'bot_bubble_color' => '#F4F4F5', 'bot_bubble_text_color' => '#18181B',
                 'visitor_bubble_color' => '#18181B', 'visitor_bubble_text_color' => '#FAFAFA',
-                'panel_radius' => 12, 'panel_shadow' => 'none', 'font_family' => 'inter',
-                'theme' => ['bubble_style' => 'flat', 'bubble_anim' => 'fade', 'header_style' => 'solid', 'quick_style' => 'ghost', 'density' => 'compact', 'typing' => 'dots'],
+                'panel_radius' => 4, 'panel_shadow' => 'none', 'font_family' => 'mono',
+                'launcher_style' => 'pill', 'launcher_icon' => 'chat', 'launcher_corner' => 4, 'widget_size' => 52,
+                'theme' => ['bubble_style' => 'flat', 'bubble_anim' => 'none', 'header_style' => 'solid',
+                    'quick_style' => 'ghost', 'density' => 'compact', 'typing' => 'dots',
+                    'edge' => 'flat', 'type' => 'tight'],
             ]],
-            'midnight' => ['label' => '午夜 Midnight', 'note' => '深色面板，配深色站点', 'values' => [
+            'midnight' => ['label' => '午夜 Midnight', 'note' => '深色玻璃面板，重点色靠发光而非面积', 'values' => [
                 'accent_color' => '#6366F1', 'header_color' => '#0F172A', 'header_text_color' => '#F1F5F9',
                 'surface_color' => '#0F172A', 'text_color' => '#E2E8F0', 'muted_color' => '#94A3B8',
                 'bot_bubble_color' => '#1E293B', 'bot_bubble_text_color' => '#E2E8F0',
                 'visitor_bubble_color' => '#6366F1', 'visitor_bubble_text_color' => '#FFFFFF',
-                'panel_radius' => 14, 'panel_shadow' => 'none', 'font_family' => 'inter',
-                'theme' => ['bubble_style' => 'flat', 'bubble_anim' => 'fade', 'header_style' => 'solid', 'quick_style' => 'ghost', 'density' => 'cozy', 'typing' => 'wave'],
+                'panel_radius' => 18, 'panel_shadow' => 'none', 'font_family' => 'system',
+                'launcher_style' => 'bubble', 'launcher_icon' => 'sparkles', 'launcher_corner' => 10, 'widget_size' => 56,
+                'theme' => ['bubble_style' => 'flat', 'bubble_anim' => 'fade', 'header_style' => 'solid',
+                    'quick_style' => 'ghost', 'density' => 'cozy', 'typing' => 'wave',
+                    'edge' => 'glass', 'type' => 'neutral'],
             ]],
-            'mint' => ['label' => '薄荷 Mint', 'note' => '浅底描边气泡，B2B 常用', 'values' => [
+            'mint' => ['label' => '薄荷 Mint', 'note' => '单行顶栏 + 行分隔 + 内斜面，B2B 目录的表格感', 'values' => [
                 'accent_color' => '#0E9F8F', 'header_color' => '#FFFFFF', 'header_text_color' => '#0F172A',
                 'surface_color' => '#FFFFFF', 'text_color' => '#0F172A', 'muted_color' => '#64748B',
                 'bot_bubble_color' => '#F0FDFA', 'bot_bubble_text_color' => '#0F172A',
                 'visitor_bubble_color' => '#0E9F8F', 'visitor_bubble_text_color' => '#FFFFFF',
-                'panel_radius' => 10, 'panel_shadow' => 'none', 'font_family' => 'pingfang',
-                'theme' => ['bubble_style' => 'outline', 'bubble_anim' => 'rise', 'header_style' => 'light', 'quick_style' => 'ghost', 'density' => 'compact', 'typing' => 'dots'],
+                'panel_radius' => 8, 'panel_shadow' => 'none', 'font_family' => 'pingfang',
+                'launcher_style' => 'pill', 'launcher_icon' => 'headset', 'launcher_corner' => 28, 'widget_size' => 56,
+                'theme' => ['bubble_style' => 'outline', 'bubble_anim' => 'rise', 'header_style' => 'slim',
+                    'quick_style' => 'ghost', 'density' => 'compact', 'typing' => 'dots',
+                    'edge' => 'bevel', 'type' => 'neutral'],
             ]],
-            'clay' => ['label' => '陶土 Clay', 'note' => '暖米底 + 砖红重点色，零售气质', 'values' => [
+            'clay' => ['label' => '陶土 Clay', 'note' => '大圆角 + 主色顶栏 + 暖发光，零售快消的圆弹质感', 'values' => [
                 'accent_color' => '#C2410C', 'header_color' => '#FFFBF7', 'header_text_color' => '#431407',
                 'surface_color' => '#FFFBF7', 'text_color' => '#431407', 'muted_color' => '#92766A',
                 'bot_bubble_color' => '#FBF0E8', 'bot_bubble_text_color' => '#431407',
                 'visitor_bubble_color' => '#C2410C', 'visitor_bubble_text_color' => '#FFFFFF',
-                'panel_radius' => 16, 'panel_shadow' => 'none', 'font_family' => 'rounded',
-                'theme' => ['bubble_style' => 'soft', 'bubble_anim' => 'pop', 'header_style' => 'light', 'quick_style' => 'capsule', 'density' => 'cozy', 'typing' => 'dots'],
+                'panel_radius' => 26, 'panel_shadow' => 'none', 'font_family' => 'rounded',
+                'launcher_style' => 'pill', 'launcher_icon' => 'chat', 'launcher_corner' => 30, 'widget_size' => 64,
+                'theme' => ['bubble_style' => 'soft', 'bubble_anim' => 'pop', 'header_style' => 'accent',
+                    'quick_style' => 'capsule', 'density' => 'roomy', 'typing' => 'dots',
+                    'edge' => 'glow', 'type' => 'loose'],
             ]],
-            'paper' => ['label' => '手账 Paper', 'note' => '手绘描边，配涂鸦名片', 'values' => [
-                'accent_color' => '#E86A8A', 'header_color' => '#FDFBF7', 'header_text_color' => '#2C2C2C',
+            'paper' => ['label' => '手账 Paper', 'note' => '宋体 + 手绘描边 + 硬投影，个人站与手作的纸感', 'values' => [
+                'accent_color' => '#D65478', 'header_color' => '#FDFBF7', 'header_text_color' => '#2C2C2C',
                 'surface_color' => '#FDFBF7', 'text_color' => '#2C2C2C', 'muted_color' => '#8A8378',
                 'bot_bubble_color' => '#FFFFFF', 'bot_bubble_text_color' => '#2C2C2C',
                 'visitor_bubble_color' => '#C0BBFE', 'visitor_bubble_text_color' => '#20203A',
-                'panel_radius' => 12, 'panel_shadow' => 'none', 'font_family' => 'rounded',
-                'theme' => ['bubble_style' => 'sketch', 'bubble_anim' => 'pop', 'header_style' => 'light', 'quick_style' => 'sketch', 'density' => 'cozy', 'typing' => 'text'],
+                'panel_radius' => 16, 'panel_shadow' => 'none', 'font_family' => 'serif',
+                'launcher_style' => 'bubble', 'launcher_icon' => 'question', 'launcher_corner' => 10, 'widget_size' => 58,
+                'theme' => ['bubble_style' => 'sketch', 'bubble_anim' => 'pop', 'header_style' => 'light',
+                    'quick_style' => 'sketch', 'density' => 'cozy', 'typing' => 'text',
+                    'edge' => 'offset', 'type' => 'loose'],
             ]],
         ];
     }
@@ -292,7 +319,8 @@ final class AiCustomerService
     public static function defaultTheme(): array
     {
         return ['preset' => 'plain', 'bubble_style' => 'soft', 'bubble_anim' => 'rise',
-            'typing' => 'dots', 'density' => 'cozy', 'header_style' => 'light', 'quick_style' => 'capsule'];
+            'typing' => 'dots', 'density' => 'cozy', 'header_style' => 'light', 'quick_style' => 'capsule',
+            'edge' => 'hairline', 'type' => 'neutral'];
     }
 
     public static function defaultLayout(): array
@@ -445,9 +473,15 @@ final class AiCustomerService
             'bubble_style' => self::choice($theme['bubble_style'] ?? '', ['soft', 'flat', 'outline', 'glass', 'sketch'], 'soft'),
             'bubble_anim' => self::choice($theme['bubble_anim'] ?? '', ['none', 'rise', 'pop', 'fade'], 'rise'),
             'typing' => self::choice($theme['typing'] ?? '', ['dots', 'wave', 'text'], 'dots'),
-            'density' => self::choice($theme['density'] ?? '', ['cozy', 'compact'], 'cozy'),
-            'header_style' => self::choice($theme['header_style'] ?? '', ['solid', 'light'], 'light'),
+            'density' => self::choice($theme['density'] ?? '', ['compact', 'cozy', 'roomy'], 'cozy'),
+            'header_style' => self::choice($theme['header_style'] ?? '', ['solid', 'light', 'accent', 'slim'], 'light'),
             'quick_style' => self::choice($theme['quick_style'] ?? '', ['capsule', 'ghost', 'sketch'], 'capsule'),
+            // 边缘语言：面板靠什么和站点分开。这是差异带宽最大的一维，
+            // 但它不能借用 panel_shadow —— 那个字段是站长自己的开关，预设不该替他按下去。
+            'edge' => self::choice($theme['edge'] ?? '', ['hairline', 'flat', 'glass', 'glow', 'offset', 'bevel'], 'hairline'),
+            // 字面：不带内嵌字体时字族在中文站点上基本塌成同一种（Inter/Quicksand 都没装），
+            // 所以排版差异只能压在字重 / 字距 / 行高这三个一定生效的量上。
+            'type' => self::choice($theme['type'] ?? '', ['neutral', 'tight', 'loose'], 'neutral'),
         ];
     }
 
@@ -1254,6 +1288,13 @@ final class AiCustomerService
 
     public static function renderWidget(): void
     {
+        /* 主题只要在 footer 钩子上把这个回调挂了两次（或者模板里既走钩子又手写了一遍），
+         * 页面上就会出现两个 id="ai-customer-service-widget" —— id 重复本身就不合法，
+         * 而且前端脚本只 getElementById 到第一个，第二个是永远不响应的死挂件。
+         * 挡在这里而不是只靠 JS 侧的 dataset 标记：那个只能防重复绑定，防不了重复输出。 */
+        static $rendered = false;
+        if ($rendered) return;
+
         $config = self::config();
         // 服务时段故意不在这儿判：它是随时间变的，而整页缓存会把渲染那一刻的结果冻住 ——
         // 上午缓存的页面到了晚上还带着挂件，晚上缓存的页面第二天上午一整天都没有挂件。
@@ -1266,6 +1307,9 @@ final class AiCustomerService
             JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
         );
         if (!is_string($json)) return;
+        // 到这里才算真的输出了一个挂件：前面几个 return 都没打印任何东西，
+        // 提前置位会让"第一次因为路径不匹配而跳过"变成"整站再也不渲染"。
+        $rendered = true;
 
         echo '<div id="ai-customer-service-widget" class="' . self::escape(implode(' ', self::rootClasses($config)))
             . '" data-visible="false" style="' . self::escape(self::styleVars($config)) . '">';
@@ -1292,7 +1336,12 @@ final class AiCustomerService
             'acs-head--' . $theme['header_style'],
             'acs-quick--' . $theme['quick_style'],
             'acs-density--' . $theme['density'],
+            'acs-edge--' . $theme['edge'],
+            'acs-type--' . $theme['type'],
             'acs-theme--' . $theme['preset'],
+            // 深底/浅底是**算出来的**而不是配出来的：站长把窗口背景调成 #0F172A 之后，
+            // 投影和 1px 描边就该自动换成外发光与顶部高光，不该再多一个开关问他。
+            'acs-tone--' . (self::isDarkColor((string)$config['surface_color']) ? 'dark' : 'light'),
         ];
         if (empty($config['show_launcher'])) $classes[] = 'acs-widget--bare';
         return $classes;
@@ -2134,6 +2183,30 @@ final class AiCustomerService
     public static function color(string $value, string $fallback): string
     {
         return preg_match('/^#[0-9a-f]{6}$/i', trim($value)) === 1 ? strtoupper(trim($value)) : $fallback;
+    }
+
+    /**
+     * 深底判定的阈值。与 assets/admin.js 的 TONE_DARK_MAX 必须相同，
+     * 否则后台预览与前台会在同一个配色下判成不同色调（契约测试会比对）。
+     */
+    public const TONE_DARK_MAX = 0.18;
+
+    /**
+     * 面板底色算不算深色。用 WCAG 的相对亮度，不是 (r+g+b)/3 ——
+     * #0F172A 和 #1E293B 的算术均值差不多，但人眼看到的深浅差一档。
+     *
+     * 为什么需要它：投影、1px 描边、color-mix 半透明这三样在深底上全部近乎失效
+     * （rgba(15,23,42,.1) 打在 #0F172A 上等于什么都没打）。深底要换成外发光 + 顶部高光。
+     */
+    public static function isDarkColor(string $hex): bool
+    {
+        if (preg_match('/^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i', trim($hex), $m) !== 1) return false;
+        $lin = static function (string $pair): float {
+            $c = (int)hexdec($pair) / 255;
+            return $c <= 0.03928 ? $c / 12.92 : (($c + 0.055) / 1.055) ** 2.4;
+        };
+        $luminance = 0.2126 * $lin($m[1]) + 0.7152 * $lin($m[2]) + 0.0722 * $lin($m[3]);
+        return $luminance < self::TONE_DARK_MAX;
     }
 
     public static function httpUrl(string $value): string

@@ -10,11 +10,15 @@
  */
 $knowledge = (array)($status['knowledge'] ?? []);
 $tools = (array)($status['tools'] ?? []);
+// 芯片上显示预设的中文名而不是键：键是给代码看的，站长看到「主题 plain」并不知道那是素白。
+// 兜底用键本身，不要写死某个键名——早先这里兜底写的是一个已经改名掉的预设键，成了假信息。
+$presetKey = (string)(($status['display'] ?? [])['theme_preset'] ?? '');
+$presetLabel = (string)((AiCustomerService::themePresets()[$presetKey]['label'] ?? '') ?: $presetKey);
 $chips = [
     ['icon' => 'bi-cpu', 'label' => ($status['provider_mode'] ?? '') === 'custom' ? '独立接口' : '系统模型'],
     ['icon' => 'bi-journal-richtext', 'label' => '资料 ' . (int)($knowledge['source_count'] ?? 0) . ' 项 / ' . (int)($knowledge['file_count'] ?? 0) . ' 文件'],
     ['icon' => 'bi-tools', 'label' => empty($tools['enabled']) ? '工具已关闭' : '工具 ' . count((array)($tools['active'] ?? [])) . ' 个'],
-    ['icon' => 'bi-palette', 'label' => '主题 ' . (string)(($status['display'] ?? [])['theme_preset'] ?? 'aurora')],
+    ['icon' => 'bi-palette', 'label' => '主题 ' . $presetLabel],
 ];
 ?>
 <header class="acs-a-header">

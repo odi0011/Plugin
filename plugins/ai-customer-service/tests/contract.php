@@ -136,6 +136,7 @@ $widgetCss = $read('assets/customer-service.css');
 $widgetJs = $read('assets/customer-service.js');
 $presetCss = $read('assets/preset-cards.css');
 $preview = $read('views/_partials/preview.php');
+$header = $read('views/_partials/header.php');
 $readme = $read('README.md');
 
 foreach ($expectedPages as $page) {
@@ -530,7 +531,101 @@ $assert(str_contains($adminJs, 'PANELS.customtools') && str_contains($adminJs, '
     '缺少工具/卡片/名片/约束/事件/表情/问候/体验/定向/同意面板');
 // 后台给出的选项必须是 normalizeTheme() 真收的值，否则保存后被静默改回去，像是保存失败
 $assert(!str_contains($adminJs, "gradient: '渐变'"), '顶栏没有渐变档，后台不该提供这个选项');
-$assert(str_contains($service, "['solid', 'light'], 'light')"), '顶栏形态只有纯色与浅底两档');
+
+/* 主题各轴是"一处定义、三处消费"：normalizeTheme() 收值、后台给选项与中文名、CSS 给规则。
+ * 漏掉任一处，站长看到的都不是报错而是"选了没反应"或"像保存失败"——上一版 mint / clay
+ * 就是预设里写了 header_style=slim、density=roomy，CSS 里却没这两条规则，
+ * 于是"换预设"退化成"换颜色"。下面把四处钉在一起，加一档必须同时补齐才过。
+ *
+ * bare 列的是**故意不写 CSS 规则**的那一档：它就是组件的基准态（solid 顶栏就是
+ * .acs-header 本身，none 动效就是不动，cozy / neutral / soft / capsule 同理）。
+ * 把它显式列出来，是为了让"缺规则"和"这一档本就不需要规则"在测试里可区分。 */
+$axes = [
+    'bubble_style' => ['values' => ['soft', 'flat', 'outline', 'glass', 'sketch'], 'default' => 'soft', 'prefix' => 'acs-bubble--', 'bare' => ['soft']],
+    'bubble_anim' => ['values' => ['none', 'rise', 'pop', 'fade'], 'default' => 'rise', 'prefix' => 'acs-anim--', 'bare' => ['none']],
+    'density' => ['values' => ['compact', 'cozy', 'roomy'], 'default' => 'cozy', 'prefix' => 'acs-density--', 'bare' => ['cozy']],
+    'header_style' => ['values' => ['solid', 'light', 'accent', 'slim'], 'default' => 'light', 'prefix' => 'acs-head--', 'bare' => ['solid']],
+    'quick_style' => ['values' => ['capsule', 'ghost', 'sketch'], 'default' => 'capsule', 'prefix' => 'acs-quick--', 'bare' => ['capsule']],
+    'edge' => ['values' => ['hairline', 'flat', 'glass', 'glow', 'offset', 'bevel'], 'default' => 'hairline', 'prefix' => 'acs-edge--', 'bare' => []],
+    'type' => ['values' => ['neutral', 'tight', 'loose'], 'default' => 'neutral', 'prefix' => 'acs-type--', 'bare' => ['neutral']],
+];
+$defaultThemeBlock = '';
+if (preg_match('/function defaultTheme\(\): array\s*\{(.+?)\n    \}/s', $service, $dtMatch)) {
+    $defaultThemeBlock = $dtMatch[1];
+}
+$assert($defaultThemeBlock !== '', '找不到 defaultTheme() 的定义');
+foreach ($axes as $axis => $spec) {
+    $list = "['" . implode("', '", $spec['values']) . "'], '" . $spec['default'] . "')";
+    $assert(str_contains($service, "'" . $axis . "' => self::choice(\$theme['" . $axis . "'] ?? '', " . $list),
+        'normalizeTheme() 里 ' . $axis . ' 的白名单应为 ' . $list);
+    /* defaultTheme() 的值必须就是 choice() 的兜底值。不一致时"没配过 theme_json 的站点"
+     * 和"配了但某个键缺失的站点"会看到两套观感，而两条路径都不报错。 */
+    $assert(str_contains($defaultThemeBlock, "'" . $axis . "' => '" . $spec['default'] . "'"),
+        'defaultTheme() 里 ' . $axis . ' 应为 ' . $spec['default'] . '，要与 normalizeTheme() 的兜底一致');
+    /* plugin.json 声明的 theme_json 默认值同样要对齐：核心用它渲染表单，
+     * 新装站点第一眼看到的是这份 JSON，而不是 PHP 里的 defaultTheme()。 */
+    $assert(($themeDefault[$axis] ?? null) === $spec['default'],
+        'plugin.json 的 theme_json 默认里 ' . $axis . ' 应为 ' . $spec['default']
+        . '，当前 ' . var_export($themeDefault[$axis] ?? null, true));
+
+    /* CSS 侧双向比对：少一条 = 站长选了没反应；多一条 = 永远命不中的死代码
+     * （.acs-head--gradient 就是这么留下来的，白名单里早就没有 gradient 了）。 */
+    $want = array_values(array_diff($spec['values'], $spec['bare']));
+    $have = preg_match_all('/\.' . preg_quote($spec['prefix'], '/') . '([a-z]+)/', $widgetCss, $found)
+        ? array_values(array_unique($found[1])) : [];
+    sort($want);
+    sort($have);
+    $assert($want === $have, $axis . ' 的档位与 CSS 规则不匹配：应有 .' . $spec['prefix']
+        . '{' . implode('|', $want) . '}，实际 {' . implode('|', $have) . '}');
+
+    // 后台分档控件的选项键必须与白名单逐个相等，缺一个那一档就永远选不到
+    $assert(preg_match("/segmented\('theme_json', '" . $axis . "',[^{]*\{(.*?)\}\)/s", $adminJs, $seg) === 1,
+        '后台缺少 ' . $axis . ' 的分档控件');
+    if (isset($seg[1])) {
+        preg_match_all('/([a-z_]+):/', $seg[1], $segKeys);
+        $optKeys = array_values(array_unique($segKeys[1]));
+        sort($optKeys);
+        $expect = $spec['values'];
+        sort($expect);
+        $assert($optKeys === $expect, '后台 ' . $axis . ' 的选项应为 {' . implode('|', $expect)
+            . '}，实际 {' . implode('|', $optKeys) . '}');
+    }
+    // 预设画廊的芯片要说中文；缺标签时 presetAxisChips() 会静默跳过那一档
+    if (preg_match('/\n\s+' . $axis . ': \{([^}]*)\}/', $adminJs, $lab)) {
+        foreach ($spec['values'] as $value) {
+            $assert(preg_match('/\b' . $value . ':/', $lab[1]) === 1,
+                'AXIS_LABEL.' . $axis . ' 缺 ' . $value . ' 的中文名，画廊里这一档不会显示');
+        }
+    } else {
+        $assert(false, 'AXIS_LABEL 里没有 ' . $axis);
+    }
+    // 预设只能引用白名单内的值——越界值会被 choice() 静默收成默认档
+    if (preg_match_all("/'" . $axis . "' => '([a-z_]+)'/", $presetBlock, $used)) {
+        foreach (array_unique($used[1]) as $value) {
+            $assert(in_array($value, $spec['values'], true),
+                '预设用了白名单外的 ' . $axis . ' = ' . $value . '，会被静默收成 ' . $spec['default']);
+        }
+    }
+}
+
+/* 深底阈值两处各写一份（PHP 渲染前台、JS 渲染后台预览），两个注释都写了"契约测试会比对"，
+ * 那就真的比对：不一致时同一套配色会在预览里判浅底、在前台判深底，投影与描边全错。 */
+if (preg_match('/TONE_DARK_MAX = ([0-9.]+);/', $service, $tonePhp)
+    && preg_match('/TONE_DARK_MAX = ([0-9.]+);/', $adminJs, $toneJs)) {
+    $assert($tonePhp[1] === $toneJs[1],
+        'TONE_DARK_MAX 两处必须相同：PHP ' . $tonePhp[1] . ' / JS ' . $toneJs[1]);
+} else {
+    $assert(false, '找不到 TONE_DARK_MAX 的两处定义');
+}
+
+/* 预设签名（.acs-theme--*）：note 里对站长承诺过的形态必须真有 CSS。
+ * plain 故意没有签名（定位是"最不抢站点风格"），其余五套各自至少一条规则。 */
+foreach (['ink', 'midnight', 'mint', 'clay', 'paper'] as $presetKey) {
+    $assert(str_contains($widgetCss, '.acs-theme--' . $presetKey . ' '),
+        $presetKey . ' 的 note 承诺了独占形态，CSS 里却没有 .acs-theme--' . $presetKey . ' 规则');
+}
+$assert(!str_contains($widgetCss, '.acs-theme--plain'), '素白是基准档，不该有签名规则');
+
 $assert(str_contains($adminJs, '.admin-sidebar-nav a'), 'admin.js 需要为左侧菜单补高亮');
 $assert(str_contains($adminSrc, 'Auth::requirePermission'), '异步动作必须各自重新校验权限');
 $assert(str_contains($adminSrc, 'Storage::put'), '表情包上传应复用核心 Storage 的白名单与消毒');
@@ -588,6 +683,56 @@ $assert(str_contains($adminJs, 'function syncConsent(') && str_contains($adminJs
     '同意门槛要接进预览：拨开关、改文案都得当场看到，不能保存刷新才知道长什么样');
 $assert(str_contains($service, "empty(\$consent['enabled']) && !\$preview"),
     '预览里即使关着也要输出同意节点，前台仍然一个字节都不输出');
+
+/* 重复渲染 / 重复绑定。两处各挡一半，缺哪半都是"看起来正常、点起来发两条"：
+ *   PHP 侧挡的是主题把 body_end 钩子跑了两遍 —— 页面上出现两个同 id 的挂件，
+ *     id 重复不合法，而 getElementById 只认第一个，第二个是死的。
+ *   JS 侧挡的是脚本被加载两遍（缓存插件合并脚本很常见）—— 两个独立 IIFE 作用域，
+ *     模块内变量互相看不见，只能在 DOM 上留标记。 */
+$assert(preg_match('/function renderWidget\(\): void\s*\{(?:[^}]|\n)*?static \$rendered = false;\s*\n\s*if \(\$rendered\) return;/', $service) === 1,
+    'renderWidget() 需要 static $rendered 守卫，防主题重复触发 body_end');
+$assert(str_contains($service, '$rendered = true;'), '$rendered 必须在真的输出之后置位');
+$assert(str_contains($widgetJs, "if (root.dataset.acsBound === '1') return;")
+    && str_contains($widgetJs, "root.dataset.acsBound = '1';"),
+    '前端脚本需要 dataset 标记防二次绑定，否则点一次开一次又关一次');
+
+/* 手机软键盘。iOS 上 100dvh 不受软键盘影响（键盘是覆盖层），不自己量就等于
+ * 输入框被键盘压住 —— 打字时看不见自己打了什么。三处必须同时在。 */
+$assert(str_contains($widgetCss, '--acs-kb: 0px;'), 'CSS 需要 --acs-kb 兜底，JS 没跑时也要能算');
+$assert(preg_match('/#ai-customer-service-widget\.acs-widget \{ bottom: calc\([^;]*var\(--acs-kb\)/', $widgetCss) === 1,
+    '手机断点要用 --acs-kb 把挂件抬到键盘上方');
+$assert(preg_match('/\.acs-panel \{(?:[^}]|\n)*?height: min\([^;]*var\(--acs-kb\)/', $widgetCss) === 1,
+    '抬起多少就要矮多少，否则面板顶端被顶出视口');
+$assert(str_contains($widgetJs, 'window.visualViewport') && str_contains($widgetJs, "setProperty('--acs-kb'"),
+    '键盘高度只能从 visualViewport 量，量完写回 --acs-kb');
+$assert(str_contains($widgetJs, 'if (!isMobile()) input.focus();'),
+    '手机上打开面板不该自动聚焦：键盘立刻占半屏，问候语和快捷问题全被顶出视口');
+
+/* 预设键的引用完整性。themePresets() 曾把 aurora 改名成 plain，admin.js 里
+ * 「恢复浅色默认」和后台头部芯片的兜底文案都还写着 aurora —— 前者 BOOT.presets.aurora
+ * 是 undefined，再读 .values 直接抛 TypeError，整块配色面板的按钮全哑；后者只是显示假信息。
+ * 两处都编译通过、都不报错，所以只能靠这条断言：代码里写死的预设键必须真的存在。 */
+if (preg_match_all("/'([a-z]+)' => \['label' => '/", $service, $presetMatch)) {
+    $presetKeys = $presetMatch[1];
+    $assert(count($presetKeys) >= 6, 'themePresets() 至少要有六套预设，当前 ' . count($presetKeys));
+    $assert(preg_match("/var DEFAULT_PRESET = '([a-z]+)';/", $adminJs, $dp) === 1,
+        'admin.js 必须把默认预设键提成 DEFAULT_PRESET 常量，不要散落字面量');
+    $defaultPreset = $dp[1] ?? '';
+    $assert(in_array($defaultPreset, $presetKeys, true),
+        'admin.js 的 DEFAULT_PRESET（' . $defaultPreset . '）不在 themePresets() 里');
+    $assert(preg_match("/'preset' => '" . preg_quote($defaultPreset, '/') . "'/", $service) === 1,
+        'DEFAULT_PRESET 必须与 PHP defaultTheme()[\'preset\'] 一致：' . $defaultPreset);
+    // BOOT.presets.<键> 这种点号取值最容易在改名后留下 undefined
+    if (preg_match_all('/BOOT\.presets\.([a-zA-Z_]+)/', $adminJs, $dot)) {
+        foreach (array_unique($dot[1]) as $used) {
+            $assert(in_array($used, $presetKeys, true), 'admin.js 引用了不存在的预设：BOOT.presets.' . $used);
+        }
+    }
+    $assert(!preg_match('/theme_preset\'\] \?\? \'[a-z]+\'/', $header),
+        '后台头部不要给预设键写死字面量兜底，改名后会显示不存在的预设名');
+    $assert(str_contains($header, 'AiCustomerService::themePresets()'),
+        '后台头部芯片要显示预设的中文名，而不是给代码看的键');
+}
 
 $assert(str_contains($service, 'data-acs-qr') && str_contains($widgetJs, 'function showQr('),
     '渠道二维码需要标记与悬浮层两处一起在');

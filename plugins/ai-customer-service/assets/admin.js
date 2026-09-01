@@ -69,6 +69,12 @@
         var v = parseFloat(val(key, fallback));
         return isNaN(v) ? fallback : v;
     }
+    /** 直接给数（不是字段键）时的兜底转换。预设值里 0 是合法的（方角、无圆角浮标），
+     * 所以只能判 undefined/NaN，不能用 `|| fallback`。 */
+    function numOr(raw, fallback) {
+        var v = parseFloat(raw);
+        return isNaN(v) ? fallback : v;
+    }
     function on(key) {
         var node = ctrl(key);
         if (node) return !!node.checked;
@@ -356,6 +362,107 @@
     /* ACS_MARKER_JS_3 */
 
     /* ---- 预设主题：点一下把一整组字段值写进表单（保存才落库） ---- */
+
+    /* 默认预设的键，必须与 PHP defaultTheme()['preset'] 一致（契约测试会比对）。
+     * themePresets() 早先改过预设的键名，这里漏改了一处，于是取到 undefined
+     * 再读它的 .values，「恢复浅色默认」直接抛 TypeError。 */
+    var DEFAULT_PRESET = 'plain';
+
+    /* 缩略图上要说人话的轴。之前缩略图只画了「一条顶栏 + 两个固定圆角的色块」，
+     * 于是六套预设在后台看起来只有颜色不同 —— 而实际上圆角、投影、气泡形态、
+     * 密度、字体全都不一样。差异不摆出来等于没做。 */
+    var AXIS_LABEL = {
+        bubble_style: { soft: '柔和气泡', flat: '直角气泡', outline: '描边气泡', glass: '毛玻璃气泡', sketch: '手绘气泡' },
+        density: { compact: '紧凑', cozy: '舒适', roomy: '宽松' },
+        header_style: { solid: '实色顶栏', light: '浅色顶栏', accent: '强调色顶栏', slim: '无顶栏' },
+        quick_style: { capsule: '胶囊快捷', ghost: '幽灵快捷', sketch: '手绘快捷' },
+        bubble_anim: { none: '无动效', rise: '上浮', pop: '弹入', fade: '淡入' },
+        typing: { dots: '三点等待', wave: '波浪等待', text: '文字等待' },
+        edge: { hairline: '细线边缘', flat: '全平', glass: '玻璃质感', glow: '强调色发光', offset: '硬偏移', bevel: '内斜面' },
+        type: { neutral: '常规字面', tight: '紧凑字面', loose: '疏朗字面' }
+    };
+    var SHADOW_LABEL = { none: '无投影', sm: '微投影', md: '中投影', lg: '重投影' };
+    var FONT_LABEL = { system: '系统字体', inter: 'Inter', pingfang: '苹方', serif: '宋体', rounded: '圆体', mono: '等宽' };
+    var LAUNCHER_LABEL = { bubble: '圆浮标', pill: '胶囊浮标' };
+
+    /** 从预设值里挑出「非颜色」的差异，做成一行芯片。
+     * 排序刻意让**闭合态**（浮标形态、尺寸）排在最前：挂件九成时间只露那颗浮标，
+     * 站长在画廊里第一眼要能判断"关着的时候长什么样"，而不是先看到聊天区细节。
+     * 投影只在真的打了投影时才进芯片——六套预设一律不设投影（那是站长自己的开关），
+     * 无条件推入等于六张卡共享一条无信息量的标签。 */
+    function presetAxisChips(v) {
+        var theme = v.theme || {};
+        var chips = [];
+        if (v.launcher_style) chips.push(LAUNCHER_LABEL[v.launcher_style] || v.launcher_style);
+        if (v.widget_size !== undefined) chips.push('浮标 ' + v.widget_size);
+        if (v.panel_radius !== undefined) chips.push('圆角 ' + v.panel_radius);
+        if (v.panel_shadow && v.panel_shadow !== 'none') chips.push(SHADOW_LABEL[v.panel_shadow] || v.panel_shadow);
+        if (v.font_family) chips.push(FONT_LABEL[v.font_family] || v.font_family);
+        ['edge', 'type', 'density', 'header_style', 'bubble_style', 'quick_style', 'bubble_anim'].forEach(function (axis) {
+            var value = theme[axis];
+            if (value && AXIS_LABEL[axis] && AXIS_LABEL[axis][value]) chips.push(AXIS_LABEL[axis][value]);
+        });
+        return chips;
+    }
+
+    /** 预设缩略图：一个真的迷你挂件。圆角 / 边缘语言 / 字面 / 顶栏 / 气泡 / 快捷 / 密度 /
+     * 字体，以及**闭合态那颗浮标**（形态、直径、圆角）都照预设自己的值画。
+     * 浮标要单独喂一遍，是因为挂件九成时间只露它——画廊里如果六张卡的浮标一模一样，
+     * 站长就永远看不出"这六套关着的时候不一样"。 */
+    function presetThumb(v) {
+        var theme = v.theme || {};
+        var thumb = el('div', 'acs-a-preset-thumb');
+        thumb.style.setProperty('--pv-surface', v.surface_color || '#fff');
+        thumb.style.setProperty('--pv-header', v.header_color || '#1677ff');
+        thumb.style.setProperty('--pv-header-fg', v.header_text_color || '#111827');
+        thumb.style.setProperty('--pv-text', v.text_color || '#111827');
+        thumb.style.setProperty('--pv-muted', v.muted_color || '#6B7280');
+        thumb.style.setProperty('--pv-bot', v.bot_bubble_color || '#f3f4f6');
+        thumb.style.setProperty('--pv-bot-fg', v.bot_bubble_text_color || '#111827');
+        thumb.style.setProperty('--pv-vis', v.visitor_bubble_color || '#1677ff');
+        thumb.style.setProperty('--pv-vis-fg', v.visitor_bubble_text_color || '#fff');
+        thumb.style.setProperty('--pv-accent', v.accent_color || '#4F46E5');
+        thumb.style.setProperty('--pv-radius', (v.panel_radius === undefined ? 14 : v.panel_radius) + 'px');
+        thumb.style.setProperty('--pv-font', (BOOT.fonts && BOOT.fonts[v.font_family]) || 'inherit');
+        // 浮标：缩略图宽度约是真实面板的 .38，直径同比缩，并夹在能看清的区间里
+        var size = numOr(v.widget_size, 56);
+        thumb.style.setProperty('--pv-launcher-size', Math.max(14, Math.min(26, Math.round(size * 0.34))) + 'px');
+        // 浮标圆角在后台是 0–28（28 即"全圆"），缩略图直径只有 1/3，按同一比例折算
+        thumb.style.setProperty('--pv-launcher-corner', Math.round(numOr(v.launcher_corner, 10) * 3.4) / 10 + 'px');
+        thumb.setAttribute('data-pv-shadow', v.panel_shadow || 'none');
+        thumb.setAttribute('data-pv-bubble', theme.bubble_style || 'soft');
+        thumb.setAttribute('data-pv-head', theme.header_style || 'light');
+        thumb.setAttribute('data-pv-quick', theme.quick_style || 'capsule');
+        thumb.setAttribute('data-pv-density', theme.density || 'cozy');
+        thumb.setAttribute('data-pv-edge', theme.edge || 'hairline');
+        thumb.setAttribute('data-pv-type', theme.type || 'neutral');
+        thumb.setAttribute('data-pv-launcher', v.launcher_style || 'bubble');
+
+        var panel = el('div', 'acs-a-pv-panel');
+        var head = el('div', 'acs-a-pv-head');
+        head.appendChild(el('span', 'acs-a-pv-avatar'));
+        var copy = el('div', 'acs-a-pv-copy');
+        copy.appendChild(el('strong', '', '在线客服'));
+        copy.appendChild(el('span', '', '通常几分钟内回复'));
+        head.appendChild(copy);
+        panel.appendChild(head);
+
+        var body = el('div', 'acs-a-pv-body');
+        body.appendChild(el('div', 'acs-a-pv-bot', '您好，需要帮您找什么？'));
+        body.appendChild(el('div', 'acs-a-pv-vis', '看看报价'));
+        body.appendChild(el('div', 'acs-a-pv-bot acs-a-pv-bot--short', '好的'));
+        panel.appendChild(body);
+
+        var quick = el('div', 'acs-a-pv-quick');
+        quick.appendChild(el('b', '', '价格'));
+        quick.appendChild(el('b', '', '交期'));
+        panel.appendChild(quick);
+
+        thumb.appendChild(panel);
+        thumb.appendChild(el('span', 'acs-a-pv-launcher'));
+        return thumb;
+    }
+
     PANELS.presets = function (host) {
         var theme = readJson('theme_json', {});
         var gallery = el('div', 'acs-a-presets');
@@ -365,17 +472,12 @@
             var card = el('button', 'acs-a-preset' + (theme.preset === id ? ' is-active' : ''));
             card.type = 'button';
             card.setAttribute('data-acs-preset', id);
-            var thumb = el('div', 'acs-a-preset-thumb');
-            thumb.style.setProperty('--pv-surface', v.surface_color || '#fff');
-            thumb.style.setProperty('--pv-header', v.header_color || '#1677ff');
-            thumb.style.setProperty('--pv-bot', v.bot_bubble_color || '#f3f4f6');
-            thumb.style.setProperty('--pv-vis', v.visitor_bubble_color || '#1677ff');
-            thumb.appendChild(el('div', 'bar'));
-            thumb.appendChild(el('div', 'b1'));
-            thumb.appendChild(el('div', 'b2'));
-            card.appendChild(thumb);
+            card.appendChild(presetThumb(v));
             card.appendChild(el('div', 'acs-a-preset-name', preset.label));
             card.appendChild(el('div', 'acs-a-preset-note', preset.note));
+            var axes = el('div', 'acs-a-preset-axes');
+            presetAxisChips(v).forEach(function (text) { axes.appendChild(el('span', '', text)); });
+            card.appendChild(axes);
             card.addEventListener('click', function () {
                 applyPreset(id, v);
                 gallery.querySelectorAll('.acs-a-preset').forEach(function (n) { n.classList.remove('is-active'); });
@@ -385,6 +487,13 @@
         });
         host.appendChild(gallery);
     };
+
+    /** 按键套用预设。键不存在时什么都不做，不要让一个改名把整块面板带崩。 */
+    function applyPresetById(id) {
+        var preset = BOOT.presets[id];
+        if (!preset) return;
+        applyPreset(id, preset.values || {});
+    }
 
     function applyPreset(id, values) {
         var theme = readJson('theme_json', {});
@@ -411,7 +520,7 @@
             ['顶栏跟随主色', function () { setCtrl('header_color', val('accent_color', '#4F46E5')); }],
             ['访客气泡跟随主色', function () { setCtrl('visitor_bubble_color', val('accent_color', '#4F46E5')); }],
             ['按背景自动配文字色', autoContrast],
-            ['恢复浅色默认', function () { applyPreset('aurora', BOOT.presets.aurora.values); }]
+            ['恢复浅色默认', function () { applyPresetById(DEFAULT_PRESET); }]
         ].forEach(function (pair) {
             var button = el('button', 'acs-a-btn acs-a-btn--sm', pair[0]);
             button.type = 'button';
@@ -423,6 +532,10 @@
         host.appendChild(box);
         renderThemeControls(host);
     };
+
+    /* 深底判定阈值。必须与 PHP 的 AiCustomerService::TONE_DARK_MAX 相同，
+     * 否则同一套配色在后台预览与前台会判成不同色调（契约测试会比对这两个数）。 */
+    var TONE_DARK_MAX = 0.18;
 
     function luminance(hex) {
         var m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(String(hex || '').trim());
@@ -489,11 +602,20 @@
         }));
         grid.appendChild(segmented('theme_json', 'bubble_anim', '气泡动效', { none: '无', rise: '上浮', pop: '弹入', fade: '淡入' }));
         grid.appendChild(segmented('theme_json', 'typing', '打字指示', { dots: '三点', wave: '波浪', text: '文字' }));
-        // 顶栏只有纯色与浅底两档：normalizeTheme() 只收这两个值，
-        // 曾经这里还列了"渐变"，选了保存后被静默改回纯色，像是保存失败。
-        grid.appendChild(segmented('theme_json', 'header_style', '顶栏', { solid: '纯色', light: '浅底' }));
+        // 这几组的可选值必须与 normalizeTheme() 的白名单逐字对齐：多列一个选项，
+        // 选了保存后会被静默改回默认值，读起来像"保存失败"。
+        // （曾经这里列过"渐变"顶栏就是这个毛病。）
+        grid.appendChild(segmented('theme_json', 'header_style', '顶栏', { solid: '纯色', light: '浅底', accent: '主色', slim: '极简' }));
         grid.appendChild(segmented('theme_json', 'quick_style', '快捷问题', { capsule: '胶囊', ghost: '幽灵', sketch: '手绘' }));
-        grid.appendChild(segmented('theme_json', 'density', '密度', { cozy: '舒适', compact: '紧凑' }));
+        grid.appendChild(segmented('theme_json', 'density', '密度', { compact: '紧凑', cozy: '舒适', roomy: '宽松' }));
+        // 边缘语言：面板靠什么和站点分开。这是六套预设里差异带宽最大的一维，
+        // 和"弹窗投影强度"是叠加关系而不是二选一。
+        grid.appendChild(segmented('theme_json', 'edge', '边缘', {
+            hairline: '细线', flat: '全平', glass: '玻璃', glow: '发光', offset: '硬边', bevel: '斜面'
+        }));
+        // 字面：只动字重/字距/行高。字族在没装 Inter 的中文站点上基本塌成同一种，
+        // 这三个量在任何已装字体上都一定生效。
+        grid.appendChild(segmented('theme_json', 'type', '字面', { neutral: '常规', tight: '紧凑', loose: '疏朗' }));
         themeHost.appendChild(grid);
     }
 
@@ -1966,7 +2088,7 @@
      * 预览节点是 AiCustomerService::previewMarkup() 输出的**前台真实标记**，样式也是
      * 前台那两份 CSS。所以这里不"画"任何东西，只做三件事：
      *   1. 把表单值写成根节点上的 --acs-* 变量（与 renderWidget 的内联变量同名）；
-     *   2. 切换真实的修饰类（acs-bubble--/acs-head--/acs-quick--/acs-density--/acs-shadow--）；
+     *   2. 切换真实的修饰类（acs-bubble--/acs-head--/acs-quick--/acs-density--/acs-edge--/acs-type--/acs-shadow--）；
      *   3. 更新真实节点里的文案，并按舞台尺寸算一个整体缩放比例。
      */
 
@@ -2030,8 +2152,12 @@
         swapClass(w, 'acs-head--', theme.header_style || 'light');
         swapClass(w, 'acs-quick--', theme.quick_style || 'capsule');
         swapClass(w, 'acs-density--', theme.density || 'cozy');
+        swapClass(w, 'acs-edge--', theme.edge || 'hairline');
+        swapClass(w, 'acs-type--', theme.type || 'neutral');
         swapClass(w, 'acs-theme--', theme.preset || 'plain');
         swapClass(w, 'acs-shadow--', val('panel_shadow', 'none'));
+        // 深底/浅底由窗口背景色算出来，阈值必须与 PHP 的 TONE_DARK_MAX 一致
+        swapClass(w, 'acs-tone--', luminance(val('surface_color', '#FFFFFF')) < TONE_DARK_MAX ? 'dark' : 'light');
         var left = val('position', 'right') === 'left';
         w.classList.toggle('acs-widget--left', left);
         w.classList.toggle('acs-widget--right', !left);
