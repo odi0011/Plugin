@@ -4,7 +4,7 @@
     "source": {
         "type": "github-static",
         "repo": "odi0011/Plugin",
-        "commit": "147c3fe"
+        "commit": "c2e30e6"
     },
     "core_api": {
         "min": 1,
@@ -62,7 +62,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@147c3fe/dist/agent-content-integrity-1.0.1.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@c2e30e6/dist/agent-content-integrity-1.0.1.zip",
                 "sha256": "5741fcb46d4dcaf42982d6e7c2427e7a5950b938948a1ccbadf654b80d779d59",
                 "size_bytes": 3120
             },
@@ -118,7 +118,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@147c3fe/dist/agent-hello-1.0.1.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@c2e30e6/dist/agent-hello-1.0.1.zip",
                 "sha256": "265cec149d0fa7bc7e8d6b5eec48f177e3d8bf7b5e69b700bc5f917faa53bfaf",
                 "size_bytes": 4150
             },
@@ -180,7 +180,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@147c3fe/dist/agent-link-auditor-1.0.0.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@c2e30e6/dist/agent-link-auditor-1.0.0.zip",
                 "sha256": "f71de86290b0e40cafebfa016a132e0b25bba9013f1cad7df224f9b7f2e8a83b",
                 "size_bytes": 6225
             },
@@ -241,7 +241,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@147c3fe/dist/agent-run-digest-1.0.0.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@c2e30e6/dist/agent-run-digest-1.0.0.zip",
                 "sha256": "5e5a173a541d80ad1795935fd106f34412e0391b0265feac9b42574a21a1d933",
                 "size_bytes": 8151
             },
@@ -300,7 +300,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@147c3fe/dist/agent-run-notifier-1.0.1.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@c2e30e6/dist/agent-run-notifier-1.0.1.zip",
                 "sha256": "95349f75f5b0e3a41511596c8cb7a9e4faafe055dabb938aad784995b818eb4f",
                 "size_bytes": 3261
             },
@@ -362,7 +362,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@147c3fe/dist/agent-seo-snapshot-1.0.0.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@c2e30e6/dist/agent-seo-snapshot-1.0.0.zip",
                 "sha256": "b99b2fc9b4855262dac9597ea832d42f0354624466fdf21699cb9942985243f2",
                 "size_bytes": 4882
             },
@@ -445,7 +445,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@147c3fe/dist/agent-task-ledger-1.0.1.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@c2e30e6/dist/agent-task-ledger-1.0.1.zip",
                 "sha256": "bf013aedcc4610ad66b64929a35ea65f4750891489cbd67c1ca4a448ebdd4f5f",
                 "size_bytes": 4196
             },
@@ -497,7 +497,7 @@
             "published_at": "2026-09-01T06:11:15Z",
             "changelog": "1.4.3 修掉「按服务时段显示」的一个静默失效，并补上时段外的去处。①时段判定原来在服务端，而它的结果是随时间变的 —— 整页缓存会把渲染那一刻的答案冻住：上午缓存下来的页面到了晚上还带着挂件，晚上缓存的第二天上午一整天都没有挂件。规则看着配好了，实际生效与否取决于缓存是什么时候生成的。定向那边同类问题靠 Vary 解决，但「时间」没有对应的请求头，Vary 救不了。现在把规则下发给浏览器现算，和「按设备显示」一样是客户端规则。用站点时区判定，下发的是时区名而不是算好的偏移量 —— 偏移量含夏令时，一旦被缓存住，过了切换日就会差一小时；站长说的「9:00 上班」是他自己的 9:00，不是访客那边的 9:00。只在初始化时判一次：访客正聊着到了下班点把挂件抽走，比状态略旧糟得多。客户端那套判定和服务端做了 1092 组真值表逐格对齐，含跨零点的 22:00-02:00 与各个边界值；算不出时间或时段配不全时一律放行，不会把挂件误关一整天。后台面板里会写出服务端此刻的时区、星期与钟点，配完能当场对一眼。②时段外原来是整个挂件消失，访客在那段时间连留个联系方式的地方都没有 —— Chaty、Tidio 这类都会给一条 away 说明。现在「体验增强 → 非服务时段」可以选「照常出现 + 顶上一条说明」，文案自己写。默认仍是隐藏：已经在用这个功能的站点，本意就是那段时间别出现，升级插件不该让挂件突然全天可见。AI 仍然照常回答，聊天接口不看服务时段，否则访客正聊着到了下班点就会被中途掐断。说明条不可关闭 —— 它解释的是「现在这个状态」，关掉之后访客就再也看不到自己为什么等不到人工回复了。③写这条说明条时自己踩了一次：背景色引用了一个根本不存在的自定义属性。var(--x) 在 --x 没定义又没 fallback 时，整条声明会在计算值阶段失效，页面不报错、样式静默丢掉。契约因此补了一轮扫描，三个 CSS 文件里每个 var() 引用都必须有定义或有 fallback（PHP/JS 运行时注入的那些也算）。",
             "download": {
-                "url": "",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@c2e30e6/dist/ai-customer-service-1.4.3.zip",
                 "sha256": "c31c906f3b1a7f5ce89c9e66feb34b80789006be1d247d087fd2a822884beaaf",
                 "size_bytes": 201833
             },
@@ -535,7 +535,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@147c3fe/dist/analytics-snippet-1.0.1.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@c2e30e6/dist/analytics-snippet-1.0.1.zip",
                 "sha256": "073f0905fb1d69a484860aa2ff0af9ef12b20f64b8e70f7a36d0803e44f4077d",
                 "size_bytes": 4014
             },
@@ -566,7 +566,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@147c3fe/dist/hello-world-1.0.1.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@c2e30e6/dist/hello-world-1.0.1.zip",
                 "sha256": "5895ac7fe49d0bab9f87a12b4fec00c61ecb30d6fbceca61936d6dab704230f2",
                 "size_bytes": 1696
             },
@@ -608,7 +608,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@147c3fe/dist/maintenance-mode-1.0.0.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@c2e30e6/dist/maintenance-mode-1.0.0.zip",
                 "sha256": "a9c2040049a98c7c811c1c625ba1997540eced940b4571d4cd0122003b18b2b4",
                 "size_bytes": 7991
             },
@@ -646,7 +646,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@147c3fe/dist/preset-components-1.0.1.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@c2e30e6/dist/preset-components-1.0.1.zip",
                 "sha256": "3ece951fa8f99332db1591cea876c832f755ba1976a4bcb04164c5c085ad70c9",
                 "size_bytes": 26934
             },
@@ -688,7 +688,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@147c3fe/dist/reading-time-1.0.0.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@c2e30e6/dist/reading-time-1.0.0.zip",
                 "sha256": "bb9daa5003bdde2bb7e985ffe1b1caf38cad25deffb62e56efa1966cae73f7bc",
                 "size_bytes": 6575
             },
@@ -726,7 +726,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@147c3fe/dist/redirect-rules-1.0.1.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@c2e30e6/dist/redirect-rules-1.0.1.zip",
                 "sha256": "8ac123892a303a95d758fd91507c7d10c0a3412b88b83c80c564b23a4e574a6b",
                 "size_bytes": 6023
             },
@@ -769,7 +769,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@147c3fe/dist/sitemap-ping-1.0.0.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@c2e30e6/dist/sitemap-ping-1.0.0.zip",
                 "sha256": "83f73524e696b030f498a7655d929865ec645aa35d3c61cd9e58985ece6a4bcc",
                 "size_bytes": 8383
             },
@@ -824,7 +824,7 @@
             "published_at": "2026-08-27T04:24:23Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@147c3fe/dist/visual-editor-1.5.0.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@c2e30e6/dist/visual-editor-1.5.0.zip",
                 "sha256": "1f3cad9be458aa0690715157c4bea769ee30d50708c743d6f3e248a3ef8fd248",
                 "size_bytes": 134377
             },
