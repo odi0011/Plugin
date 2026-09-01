@@ -478,6 +478,31 @@
 }
 .acs-ribbon-close:hover { background: rgba(255, 255, 255, .34); }
 
+/* ------------------------------------------------------------------ 非服务时段说明条
+ * 位置在顶栏和聊天区之间，静态、不可关闭 —— 它解释的是「现在这个状态」，
+ * 关掉之后访客就再也看不到自己为什么等不到人工回复了。用弱化的底色而不是
+ * 强调色：它是一句说明，不是一次促销。 */
+
+.acs-away {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--acs-line);
+    background: var(--acs-sunken);
+    color: var(--acs-muted);
+    font-size: calc(var(--acs-font) * .84);
+    line-height: 1.5;
+}
+.acs-away[hidden] { display: none !important; }
+.acs-away-icon {
+    flex: 0 0 auto;
+    margin-top: 1px;
+    font-size: calc(var(--acs-font) * .9);
+}
+/* 长文案/长连续字符不能把面板撑破 */
+.acs-away-text { min-width: 0; overflow-wrap: anywhere; }
+
 /* ACS_MARKER_W4 */
 
 /* ------------------------------------------------------------------ 顶栏

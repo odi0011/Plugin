@@ -32,6 +32,7 @@
  * @var array{count:int,chars:int,missing:list<string>,limit:int} $knowledgeFiles
  * @var array{country:string,languages:list<string>} $geo
  * @var list<string> $saveErrors
+ * @var array{tz:string,now:string,day:int,open:bool} $schedule
  * @var string $version
  */
 $this->extend('admin/views/layouts/main');
@@ -70,6 +71,7 @@ $boot = [
     // 要不要出提示，后者把校验失败的控件标红。不进 $boot 这两个功能就是死的。
     'models' => $models,
     'saveErrors' => $saveErrors,
+    'schedule' => $schedule,
     'config' => $config,
 ];
 $jsonFlags = JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;

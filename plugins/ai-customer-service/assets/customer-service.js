@@ -48,6 +48,8 @@
         // modal: 这次打开是访客自己点的。只有这时候才圈住 Tab 并对读屏声明 aria-modal ——
         // 自动弹出的面板是「环境里多了一块东西」，把键盘用户锁在里面出不去是纯粹的伤害
         modal: false,
+        // away: 不在服务时段，但站长选了「照出 + 说明」而不是隐藏
+        away: false,
         consented: !consentRequired || !!consentCfg.accepted
     };
     var AUTO_KEY = 'acs_auto_shown';
@@ -72,6 +74,62 @@
         if (config.deviceMode === 'desktop') return !isMobile();
         if (config.deviceMode === 'mobile') return isMobile();
         return true;
+    }
+
+    /* ------------------------------------------------------------ 服务时段（客户端判定）
+     *
+     * 服务端不判这个：结果随时间变，而整页缓存会把渲染那一刻的答案冻住。判定必须用
+     * 「站点」的本地时间 —— 站长说的 9:00 上班是他自己的 9:00，不是访客那边的 9:00，
+     * 所以走 Intl + 时区名，而不是访客自己的 getDay()/getHours()。
+     */
+    var WEEKDAYS = { Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6, Sun: 7 };
+
+    /** @return {{day:number,hm:string}|null} 站点本地的 ISO 周序号与 HH:MM */
+    function siteClock() {
+        var sched = config.schedule || {};
+        if (sched.tz) {
+            try {
+                var parts = new Intl.DateTimeFormat('en-GB', {
+                    timeZone: String(sched.tz), weekday: 'short',
+                    hour: '2-digit', minute: '2-digit', hour12: false
+                }).formatToParts(new Date());
+                var got = {};
+                parts.forEach(function (p) { got[p.type] = p.value; });
+                var day = WEEKDAYS[got.weekday];
+                if (day && got.hour && got.minute) {
+                    // Intl 在部分实现里把午夜给成 24，规格化回 00
+                    var hour = got.hour === '24' ? '00' : got.hour;
+                    return { day: day, hm: hour + ':' + got.minute };
+                }
+            } catch (error) { /* 时区名不认或没有 Intl：落到下面的偏移量算法 */ }
+        }
+        // 退路：用服务端渲染时的 UTC 偏移量。含夏令时，缓存久了可能差一小时，但比不判好
+        var offset = Number(sched.offset);
+        if (!isFinite(offset)) return null;
+        var shifted = new Date(Date.now() + offset * 60000);
+        var iso = shifted.getUTCDay();
+        return {
+            day: iso === 0 ? 7 : iso,
+            hm: pad2(shifted.getUTCHours()) + ':' + pad2(shifted.getUTCMinutes())
+        };
+    }
+
+    function pad2(n) { return (n < 10 ? '0' : '') + n; }
+
+    /** 与服务端 scheduleAllowed() 同一套判定，包括跨零点的 start > end。 */
+    function withinSchedule() {
+        var sched = config.schedule || {};
+        if (!sched.enabled) return true;
+        var days = Array.isArray(sched.days) ? sched.days : [];
+        var start = String(sched.start || '');
+        var end = String(sched.end || '');
+        if (!days.length || !start || !end) return true;   // 配不全等于没配，别把挂件全天关掉
+        var now = siteClock();
+        if (!now) return true;                              // 算不出来就别擅自隐藏
+        // 服务端给的是数字，但 indexOf 是严格比较：万一哪天变成 "1" 就会天天都算歇业
+        var open = days.some(function (d) { return Number(d) === now.day; });
+        if (!open) return false;
+        return start <= end ? (now.hm >= start && now.hm <= end) : (now.hm >= start || now.hm <= end);
     }
 
     /* ---------------------------------------------------------------- DOM 小工具 */
@@ -1317,6 +1375,19 @@
             state.dead = true;
             root.remove();
             return;
+        }
+        /* 服务时段：hide 就整棵移除（和设备不匹配同一处理），notice 则照出、展开说明条。
+         * 只在初始化时判一次 —— 访客正聊着到了下班点把挂件抽走，比状态略旧糟得多。 */
+        if (!withinSchedule()) {
+            var away = config.away || {};
+            if (String(away.mode || 'hide') !== 'notice') {
+                state.dead = true;
+                root.remove();
+                return;
+            }
+            state.away = true;
+            var notice = root.querySelector('[data-acs-away]');
+            if (notice) notice.hidden = false;
         }
         var hasRule = false;
         var delay = Math.max(0, Number(config.delaySeconds) || 0);

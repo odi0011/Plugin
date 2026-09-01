@@ -16,7 +16,7 @@ declare(strict_types=1);
 final class AiCustomerService
 {
     public const SLUG = 'ai-customer-service';
-    public const VERSION = '1.4.2';
+    public const VERSION = '1.4.3';
 
     private const SESSION_KEY = '_ai_customer_service';
     private const CONVERSATION_TTL = 21600;
@@ -391,10 +391,16 @@ final class AiCustomerService
      * 这类"会被访客感知"的开关不适合装完就生效），只有 resume 默认开：会话上下文本来
      * 就存在服务端 session 里，刷新后把它取回来只是消除了一个反直觉的信息丢失。
      */
+    /**
+     * away：非服务时段怎么办。默认 hide 保持原行为（整个挂件不出现）；notice 是挂件照出、
+     * 顶上多一条说明。默认不改成 notice —— 已经在用「按服务时段显示」的站点，本意就是
+     * 那段时间别出现，升级插件不该让挂件突然全天可见。
+     */
     public static function defaultExperience(): array
     {
         return ['timestamps' => false, 'resume' => true, 'sound' => false, 'unread_title' => false,
-            'analytics' => false, 'channels' => ['enabled' => false, 'style' => 'fan', 'title' => '其他联系方式', 'max' => 6]];
+            'analytics' => false, 'channels' => ['enabled' => false, 'style' => 'fan', 'title' => '其他联系方式', 'max' => 6],
+            'away' => ['mode' => 'hide', 'text' => '现在不在服务时段。AI 助手仍可先为您解答；留下联系方式，我们上班后回复您。']];
     }
 
     /**
@@ -488,6 +494,8 @@ final class AiCustomerService
     private static function normalizeExperience(array $experience): array
     {
         $channels = is_array($experience['channels'] ?? null) ? $experience['channels'] : [];
+        $away = is_array($experience['away'] ?? null) ? $experience['away'] : [];
+        $awayDefault = self::defaultExperience()['away'];
         return [
             'timestamps' => self::bool($experience['timestamps'] ?? false),
             'resume' => self::bool($experience['resume'] ?? true),
@@ -499,6 +507,11 @@ final class AiCustomerService
                 'style' => self::choice($channels['style'] ?? '', ['fan', 'list'], 'fan'),
                 'title' => self::text($channels['title'] ?? '', 40, '其他联系方式'),
                 'max' => self::int($channels['max'] ?? 6, 1, 12, 6),
+            ],
+            'away' => [
+                'mode' => self::choice($away['mode'] ?? '', ['hide', 'notice'], 'hide'),
+                // 文案清空后回默认：mode 已经是 notice 却拿不出一句话，等于什么都不说
+                'text' => self::text($away['text'] ?? '', 200, (string)$awayDefault['text']),
             ],
         ];
     }
@@ -1242,8 +1255,11 @@ final class AiCustomerService
     public static function renderWidget(): void
     {
         $config = self::config();
-        if (!$config['enabled'] || !self::pathAllowed($config) || !self::scheduleAllowed($config)
-            || !self::targetingAllowed($config)) return;
+        // 服务时段故意不在这儿判：它是随时间变的，而整页缓存会把渲染那一刻的结果冻住 ——
+        // 上午缓存的页面到了晚上还带着挂件，晚上缓存的页面第二天上午一整天都没有挂件。
+        // Vary 对「时间」这个维度无能为力（没有对应的请求头），所以判定交给客户端，
+        // 用站点时区算，和「按设备显示」一样是客户端规则（见 activateVisibilityRules）。
+        if (!$config['enabled'] || !self::pathAllowed($config) || !self::targetingAllowed($config)) return;
 
         $json = json_encode(
             self::publicWidgetConfig($config),
@@ -1417,6 +1433,20 @@ final class AiCustomerService
             . '<button type="button" class="acs-icon-btn acs-restart" aria-label="重新开始对话" title="重新开始"><i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i></button>'
             . '<button type="button" class="acs-icon-btn acs-close" aria-label="关闭对话" title="关闭"><i class="bi bi-x-lg" aria-hidden="true"></i></button>'
             . '</div></header>';
+
+        /*
+         * 非服务时段的说明条。服务端只负责把它渲染出来（默认隐藏）—— 显不显示由客户端
+         * 按站点时区现算，服务端算好的结果会被整页缓存冻住。后台预览里 mode=notice
+         * 就直接展开，否则站长写完那句话没有任何地方能看见它长什么样。
+         */
+        $away = is_array($config['experience']['away'] ?? null) ? $config['experience']['away'] : [];
+        $awayText = (string)($away['text'] ?? '');
+        if ($awayText !== '') {
+            $awayOpen = $open && (string)($away['mode'] ?? 'hide') === 'notice';
+            $html .= '<div class="acs-away" data-acs-away role="status"' . ($awayOpen ? '' : ' hidden') . '>'
+                . '<i class="bi bi-moon-stars acs-away-icon" aria-hidden="true"></i>'
+                . '<span class="acs-away-text">' . self::escape($awayText) . '</span></div>';
+        }
 
         $html .= '<div class="acs-chat" role="log" aria-live="polite" aria-relevant="additions text">' . $chat . '</div>';
         $html .= '<div class="acs-quick-replies" aria-label="快捷问题">' . $quick . '</div>';
@@ -1683,6 +1713,25 @@ final class AiCustomerService
                 'unread_title' => $config['experience']['unread_title'],
                 'analytics' => $config['experience']['analytics'],
             ],
+            /*
+             * 服务时段下发给客户端自己判（原因见 renderWidget）。带的是时区「名字」而不是
+             * 当时算好的偏移量：偏移量含夏令时，一旦被缓存住，过了切换日就会差一小时。
+             * 名字交给 Intl 现算，客户端时钟无论在哪个时区，算出来的都是站点本地时间 ——
+             * 站长说的「9:00 上班」是他自己的 9:00，不是访客那边的 9:00。
+             * offset 只是 Intl 不可用时的退路。
+             */
+            'schedule' => [
+                'enabled' => !empty($config['schedule_enabled']),
+                'days' => array_values((array)$config['schedule_days']),
+                'start' => (string)$config['schedule_start'],
+                'end' => (string)$config['schedule_end'],
+                'tz' => date_default_timezone_get(),
+                'offset' => (int)round((int)date('Z') / 60),
+            ],
+            'away' => [
+                'mode' => (string)$config['experience']['away']['mode'],
+                'text' => (string)$config['experience']['away']['text'],
+            ],
             // accepted 取的是服务端 session。万一页面被整页缓存导致这里是过期的 false，
             // 访客再勾一次即可；反过来若缓存成过期的 true，聊天接口会回 consent_required，
             // 前端据此把同意块重新打开 —— 两个方向都不会把人锁死。
@@ -1791,6 +1840,15 @@ final class AiCustomerService
             // 上一次保存校验失败的字段。保存是 POST→302，消息里只能写字段名，
             // 有了这个列表才能把对应控件标红并滚过去。取一次就清掉。
             'saveErrors' => self::takeSaveErrors(),
+            // 服务时段面板同样要能自证：站长填的「9:00 上班」是站点时区的 9:00，
+            // 而站点时区跟他本人所在时区可能不是一回事。把服务端此刻的读数摆出来，
+            // 配完就能当场确认，不用等到第二天早上发现挂件没出来。
+            'schedule' => [
+                'tz' => date_default_timezone_get(),
+                'now' => date('H:i'),
+                'day' => (int)date('N'),
+                'open' => self::scheduleAllowed(self::config()),
+            ],
             'version' => self::VERSION,
         ];
     }

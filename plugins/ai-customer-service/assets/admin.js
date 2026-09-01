@@ -677,12 +677,21 @@
         host.appendChild(box);
     };
 
-    /* ---- 体验增强：时间戳 / 接续会话 / 未读提醒 / 转化事件 / 浮标多渠道 ---- */
+    /* 与 AiCustomerService::defaultExperience() 里的那句必须一模一样：两边都会在
+     * 文案被清空时回填它，对不上就会出现「后台显示的默认值和前台实际用的不是一句话」。 */
+    var AWAY_TEXT_DEFAULT = '现在不在服务时段。AI 助手仍可先为您解答；留下联系方式，我们上班后回复您。';
+
+    /* ---- 体验增强：时间戳 / 接续会话 / 未读提醒 / 转化事件 / 浮标多渠道 / 非服务时段 ---- */
     PANELS.experience = function (host) {
         var exp = readJson('experience_json', {});
         if (!exp.channels || typeof exp.channels !== 'object') {
             exp.channels = { enabled: false, style: 'fan', title: '其他联系方式', max: 6 };
         }
+        if (!exp.away || typeof exp.away !== 'object') {
+            exp.away = { mode: 'hide', text: AWAY_TEXT_DEFAULT };
+        }
+        if (exp.away.mode !== 'notice') exp.away.mode = 'hide';
+        if (typeof exp.away.text !== 'string' || exp.away.text === '') exp.away.text = AWAY_TEXT_DEFAULT;
         function save() {
             jsonCache.experience_json = exp;
             writeJson('experience_json');
@@ -739,6 +748,46 @@
             ? ('「站长名片」里现有 ' + count + ' 个联系方式，展开时按上面的上限依次显示。')
             : '「站长名片」里还没填社媒，这里开了也没有东西可展开。'));
         host.appendChild(chan);
+
+        /* ---- 非服务时段：原来是整个挂件消失，访客在那段时间一点门路都没有 ---- */
+        var away = el('div', 'acs-a-sub');
+        away.appendChild(el('h3', '', '非服务时段'));
+        away.appendChild(el('p', 'acs-a-sub-note',
+            '上面「按服务时段显示」开着时才起作用。原来的行为是整个挂件消失——访客在那段时间连留个联系方式的地方都没有。'));
+        var awayRow = el('div', 'acs-a-subgrid');
+        awayRow.appendChild(selectField('时段外怎么办', exp.away.mode, {
+            hide: '整个挂件不出现',
+            notice: '照常出现，顶上加一条说明'
+        }, function (value) {
+            exp.away.mode = value;
+            save();
+            syncAwayRow();
+        }));
+        away.appendChild(awayRow);
+        var awayText = el('div', 'acs-a-subgrid');
+        awayText.appendChild(textField('说明文案', exp.away.text, 200, function (value) {
+            exp.away.text = value;
+            save();
+        }, AWAY_TEXT_DEFAULT));
+        away.appendChild(awayText);
+        away.appendChild(el('p', 'acs-a-help',
+            'AI 仍然会照常回答——聊天接口不看服务时段，否则访客正聊着到了下班点就会被中途掐断。'
+            + '这条说明的用处是让访客知道「人工要等到上班」，顺手把询盘留下来。'));
+
+        /* 时段判定用的是站点时区，而它跟站长本人所在的时区可能不是一回事。
+         * 把服务端此刻的读数摆出来，配完就能当场对一眼。 */
+        var sched = BOOT.schedule && typeof BOOT.schedule === 'object' ? BOOT.schedule : null;
+        if (sched) {
+            var DAY_NAMES = ['', '周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+            away.appendChild(el('p', 'acs-a-help',
+                '站点时区 ' + String(sched.tz || '未知') + '，服务端此刻是 '
+                + (DAY_NAMES[Number(sched.day)] || '') + ' ' + String(sched.now || '')
+                + '，按当前设置' + (sched.open ? '在' : '不在') + '服务时段内。'
+                + '访客那边由浏览器按同一个时区现算，所以整页缓存不会把上午的结果留到晚上。'));
+        }
+        function syncAwayRow() { awayText.hidden = exp.away.mode !== 'notice'; }
+        syncAwayRow();
+        host.appendChild(away);
     };
 
     /* ---- 按国家 / 语言显示：只管浮标要不要出现在这个访客眼里 ---- */
@@ -2016,6 +2065,14 @@
     /* 同意门槛：文案与开关都要在预览里当场生效。服务端对空值有回落（清空标题会回到
      * 「开始对话前」），这里照抄同一组默认值，不然后台看到的是空的、保存后又冒出文字。
      * 链接用 DOM API 拼，不碰 innerHTML——预览里的文案同样来自用户输入。 */
+    /* 非服务时段说明条的文案。清空回默认，和服务端 normalizeExperience 一致。 */
+    function syncAway(w) {
+        var node = w.querySelector('.acs-away-text');
+        if (!node) return;
+        var away = (readJson('experience_json', {}) || {}).away || {};
+        node.textContent = String(away.text || '') || AWAY_TEXT_DEFAULT;
+    }
+
     function syncConsent(w) {
         var block = w.querySelector('[data-acs-consent]');
         if (!block) return;
@@ -2067,6 +2124,7 @@
         var label = w.querySelector('.acs-launcher-label');
         if (label) label.textContent = val('brand_name', 'AI客服');
         syncConsent(w);
+        syncAway(w);
 
         // 快捷问题：整行重建，跟着输入框实时变
         var quickRow = w.querySelector('.acs-quick-row');
@@ -2123,6 +2181,10 @@
         show('[data-acs-channels-toggle]', !!chan.enabled && pv.state === 'closed');
         // 同意门槛：拨开关就能看到效果（面板关着时整块面板都不可见，不必额外判断）
         show('[data-acs-consent]', !!(readJson('consent_json', {}) || {}).enabled);
+        /* 非服务时段说明条：前台只在真的过了点才出现，预览里按「选了 notice + 开了时段」
+         * 直接摊开——否则站长写完那句话没有任何地方能看见它长什么样。 */
+        var awayCfg = (experience && experience.away) || {};
+        show('[data-acs-away]', awayCfg.mode === 'notice' && on('schedule_enabled'));
         show('.acs-powered', on('show_powered_by'));
         show('.acs-avatar', on('show_avatar'));
         w.querySelectorAll('.acs-message-avatar').forEach(function (n) { n.hidden = !on('show_avatar'); });

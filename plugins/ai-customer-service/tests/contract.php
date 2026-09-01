@@ -333,6 +333,67 @@ $assert($missingBoot === [], 'admin.js 读了这些 BOOT 键但 $boot 没有转�
 $assert(isset($bootKeys['models']) && isset($bootKeys['saveErrors']),
     '$boot 必须转发 models 与 saveErrors：前者判断「一个对话模型都没配」，后者标红出错字段');
 
+/* 服务时段：判定必须在客户端。服务端判的话，整页缓存会把渲染那一刻的答案冻住 ——
+ * 上午缓存的页面到晚上还带挂件，晚上缓存的第二天上午一整天都没有。Vary 救不了「时间」
+ * 这个维度（没有对应的请求头），所以下发规则让浏览器按站点时区现算。 */
+$assert(!preg_match('/!self::scheduleAllowed\(\$config\)/', $service),
+    'renderWidget 不得在服务端判服务时段：结果会被整页缓存冻住');
+$assert(str_contains($widgetJs, 'function withinSchedule(') && str_contains($widgetJs, 'if (!withinSchedule())'),
+    '服务时段必须由客户端判定并接进显隐规则');
+$assert(str_contains($service, "'tz' => date_default_timezone_get()"),
+    '下发的必须是时区名而不是算好的偏移量：偏移量含夏令时，缓存久了会差一小时');
+$assert(str_contains($widgetJs, 'timeZone: String(sched.tz)'),
+    '客户端必须按站点时区算：站长说的 9:00 是他自己的 9:00，不是访客那边的 9:00');
+$assert(str_contains($widgetJs, 'start <= end ? (now.hm >= start && now.hm <= start') === false
+    && str_contains($widgetJs, 'start <= end ? (now.hm >= start && now.hm <= end) : (now.hm >= start || now.hm <= end)'),
+    '客户端的时段判定必须和服务端一致，含跨零点的 start > end');
+
+/* 非服务时段：原来整个挂件消失，访客连留个联系方式的地方都没有（Chaty / Tidio 都是
+ * 给一条 away 说明）。默认必须仍是 hide —— 已经在用这个功能的站点本意就是别出现。 */
+$assert(str_contains($service, "'away' => ['mode' => 'hide'"), '非服务时段的默认行为必须仍是隐藏');
+$assert(str_contains($service, "self::choice(\$away['mode'] ?? '', ['hide', 'notice'], 'hide')"),
+    'away.mode 只能是 hide / notice');
+$assert(str_contains($service, 'data-acs-away') && str_contains($widgetCss, '.acs-away'),
+    '说明条要有标记与样式');
+$assert(str_contains($adminJs, "show('[data-acs-away]'") && str_contains($adminJs, 'function syncAway('),
+    '说明条必须接进后台预览，否则站长写完那句话没地方看效果');
+$assert(str_contains($adminJs, 'BOOT.schedule'), '服务时段面板要能自证：把服务端此刻的读数摆出来');
+
+/* 三处默认文案必须一字不差：PHP 与 JS 都会在清空时回填它 */
+$awayPhp = preg_match("/'away' => \['mode' => 'hide', 'text' => '([^']+)'\]/", $service, $ap) ? $ap[1] : '';
+$awayJs = preg_match("/var AWAY_TEXT_DEFAULT = '([^']+)'/", $adminJs, $aj) ? $aj[1] : '';
+$awayJson = '';
+if (isset($fields['experience_json'])) {
+    $decoded = json_decode((string)($fields['experience_json']['field']['default'] ?? ''), true);
+    $awayJson = (string)($decoded['away']['text'] ?? '');
+}
+$assert($awayPhp !== '' && $awayPhp === $awayJs && $awayPhp === $awayJson,
+    'away 默认文案在 PHP / admin.js / plugin.json 三处必须一致，当前：'
+    . $awayPhp . ' | ' . $awayJs . ' | ' . $awayJson);
+
+/* var(--x) 在 --x 没定义又没 fallback 时，整条声明在计算值阶段失效：页面不报错、
+ * 样式静默丢掉。--acs-soft 就是这么写进去过一次的。 */
+$cssDefined = [];
+foreach ([$widgetCss, $presetCss, $adminCss, $service, $cards, $widgetJs, $adminJs] as $src) {
+    if (preg_match_all('/(--[a-zA-Z0-9-]+)\s*:/', $src, $dm)) {
+        foreach ($dm[1] as $name) $cssDefined[$name] = true;
+    }
+    if (preg_match_all("/setProperty\(\s*['\"](--[a-zA-Z0-9-]+)['\"]/", $src, $sm)) {
+        foreach ($sm[1] as $name) $cssDefined[$name] = true;
+    }
+}
+$undefinedVars = [];
+foreach ([$widgetCss, $presetCss, $adminCss] as $src) {
+    if (!preg_match_all('/var\(\s*(--[a-zA-Z0-9-]+)\s*([,)])/', $src, $vm, PREG_SET_ORDER)) continue;
+    foreach ($vm as $one) {
+        if ($one[2] === ',') continue;                    // 有 fallback，失效也有后备值
+        if (!isset($cssDefined[$one[1]])) $undefinedVars[$one[1]] = true;
+    }
+}
+$assert($cssDefined !== [], 'CSS 变量提取失败，检查测试自身的正则');
+$assert($undefinedVars === [], '这些自定义属性没有定义又没有 fallback（整条声明会静默失效）：'
+    . implode('、', array_slice(array_keys($undefinedVars), 0, 8)));
+
 /* 自动弹出不是访客点的：抢焦点会把光标从站点自己的搜索框/结账表单里挪走，
  * 圈 Tab 会把键盘用户锁在一块他没要求打开的面板里。两件事都只在 !silent 时做。 */
 $assert(str_contains($widgetJs, 'function setOpen(open, silent)') && str_contains($widgetJs, 'setOpen(true, true)'),
