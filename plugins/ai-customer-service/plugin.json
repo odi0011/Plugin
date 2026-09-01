@@ -1,7 +1,7 @@
 {
     "slug": "ai-customer-service",
     "name": "AI客服",
-    "version": "1.4.3",
+    "version": "1.4.4",
     "author": "odi0011",
     "author_url": "",
     "homepage": "",
@@ -13,7 +13,7 @@
     "requires_php": "8.0",
     "license": "MIT",
     "category": "other",
-    "changelog": "1.4.3 修掉「按服务时段显示」的一个静默失效，并补上时段外的去处。①时段判定原来在服务端，而它的结果是随时间变的 —— 整页缓存会把渲染那一刻的答案冻住：上午缓存下来的页面到了晚上还带着挂件，晚上缓存的第二天上午一整天都没有挂件。规则看着配好了，实际生效与否取决于缓存是什么时候生成的。定向那边同类问题靠 Vary 解决，但「时间」没有对应的请求头，Vary 救不了。现在把规则下发给浏览器现算，和「按设备显示」一样是客户端规则。用站点时区判定，下发的是时区名而不是算好的偏移量 —— 偏移量含夏令时，一旦被缓存住，过了切换日就会差一小时；站长说的「9:00 上班」是他自己的 9:00，不是访客那边的 9:00。只在初始化时判一次：访客正聊着到了下班点把挂件抽走，比状态略旧糟得多。客户端那套判定和服务端做了 1092 组真值表逐格对齐，含跨零点的 22:00-02:00 与各个边界值；算不出时间或时段配不全时一律放行，不会把挂件误关一整天。后台面板里会写出服务端此刻的时区、星期与钟点，配完能当场对一眼。②时段外原来是整个挂件消失，访客在那段时间连留个联系方式的地方都没有 —— Chaty、Tidio 这类都会给一条 away 说明。现在「体验增强 → 非服务时段」可以选「照常出现 + 顶上一条说明」，文案自己写。默认仍是隐藏：已经在用这个功能的站点，本意就是那段时间别出现，升级插件不该让挂件突然全天可见。AI 仍然照常回答，聊天接口不看服务时段，否则访客正聊着到了下班点就会被中途掐断。说明条不可关闭 —— 它解释的是「现在这个状态」，关掉之后访客就再也看不到自己为什么等不到人工回复了。③写这条说明条时自己踩了一次：背景色引用了一个根本不存在的自定义属性。var(--x) 在 --x 没定义又没 fallback 时，整条声明会在计算值阶段失效，页面不报错、样式静默丢掉。契约因此补了一轮扫描，三个 CSS 文件里每个 var() 引用都必须有定义或有 fallback（PHP/JS 运行时注入的那些也算）。",
+    "changelog": "1.4.4 修 RTL 站点上的两处错位。挂件是注进站点页面的，会继承 <html dir>；插件支持按语言定向，阿拉伯语、希伯来语这类站点本来就在射程内，但样式里有两处方向敏感的物理属性会翻错：①卡片右下角那个「查看详情」用 margin-left:auto 顶到行尾，RTL 下会被顶到错的一侧；②minimal 卡片那条主色竖线用的是 border-left，RTL 下应该在右边，圆角与内边距也跟着不对。两处都换成逻辑属性（margin-inline-start / border-inline-start / border-*-*-radius / padding-inline），LTR 下渲染结果一字不变。浮标贴哪个角是站长自己在后台选的，那些 .acs-widget--left/--right 的 left/right 是对的，没有动；消息气泡靠 flex-end 对齐，本身就跟着书写方向翻，也不用改。契约补了一条扫描：前台样式里不允许再出现 margin/padding/border 的 -left/-right 声明。",
     "tags": [
         "AI",
         "客服",
@@ -43,14 +43,14 @@
             "type": "css",
             "area": "frontend",
             "src": "assets/customer-service.css",
-            "version": "1.4.3"
+            "version": "1.4.4"
         },
         {
             "handle": "ai-customer-service-preset-cards",
             "type": "css",
             "area": "frontend",
             "src": "assets/preset-cards.css",
-            "version": "1.4.3",
+            "version": "1.4.4",
             "deps": [
                 "ai-customer-service-widget-css"
             ]
@@ -60,7 +60,7 @@
             "type": "js",
             "area": "frontend",
             "src": "assets/customer-service.js",
-            "version": "1.4.3",
+            "version": "1.4.4",
             "defer": true
         },
         {
@@ -68,14 +68,14 @@
             "type": "css",
             "area": "admin",
             "src": "assets/admin.css",
-            "version": "1.4.3"
+            "version": "1.4.4"
         },
         {
             "handle": "ai-customer-service-admin-js",
             "type": "js",
             "area": "admin",
             "src": "assets/admin.js",
-            "version": "1.4.3",
+            "version": "1.4.4",
             "defer": true
         }
     ],

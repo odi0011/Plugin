@@ -394,6 +394,20 @@ $assert($cssDefined !== [], 'CSS 变量提取失败，检查测试自身的正�
 $assert($undefinedVars === [], '这些自定义属性没有定义又没有 fallback（整条声明会静默失效）：'
     . implode('、', array_slice(array_keys($undefinedVars), 0, 8)));
 
+/* 挂件是注进站点页面的，会继承 <html dir>。阿拉伯语 / 希伯来语站点上，margin-left 之类的
+ * 物理属性会把元素推到错的一侧。浮标贴哪个角是站长自己选的（.acs-widget--left/--right），
+ * 那些 left/right 是对的；但方向敏感的间距与边框必须用逻辑属性。
+ * 消息气泡靠 flex-end 对齐，本身就跟着书写方向翻，不用改。 */
+$physical = [];
+if (preg_match_all('/^\s*(margin|padding|border)-(left|right)\s*:/m', $widgetCss, $pm, PREG_SET_ORDER)) {
+    foreach ($pm as $one) $physical[$one[1] . '-' . $one[2]] = true;
+}
+$assert($physical === [], '前台样式里这些物理属性在 RTL 站点上会翻错，改用 *-inline-start/end：'
+    . implode('、', array_keys($physical)));
+$assert(str_contains($widgetCss, 'margin-inline-start: auto')
+    && str_contains($widgetCss, 'border-inline-start: 2px solid var(--acs-accent)'),
+    '卡片 CTA 与 minimal 卡的竖线必须用逻辑属性');
+
 /* 自动弹出不是访客点的：抢焦点会把光标从站点自己的搜索框/结账表单里挪走，
  * 圈 Tab 会把键盘用户锁在一块他没要求打开的面板里。两件事都只在 !silent 时做。 */
 $assert(str_contains($widgetJs, 'function setOpen(open, silent)') && str_contains($widgetJs, 'setOpen(true, true)'),

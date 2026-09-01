@@ -873,7 +873,8 @@
     font-weight: 600;
 }
 .acs-item-cta {
-    margin-left: auto;
+    /* 逻辑属性：挂件继承页面的 dir，阿拉伯语/希伯来语站点上 margin-left 会把它推到错的一侧 */
+    margin-inline-start: auto;
     color: var(--acs-accent);
     font-size: calc(var(--acs-font) * .8);
     font-weight: 600;
@@ -884,10 +885,15 @@
 .acs-card-items.is-minimal .acs-item {
     grid-template-columns: minmax(0, 1fr);
     border: 0;
-    border-left: 2px solid var(--acs-accent);
-    border-radius: 0 10px 10px 0;
+    /* 逻辑属性：RTL 站点上这条竖线要在右边，圆角与内边距跟着一起翻 */
+    border-inline-start: 2px solid var(--acs-accent);
+    border-start-start-radius: 0;
+    border-start-end-radius: 10px;
+    border-end-end-radius: 10px;
+    border-end-start-radius: 0;
     background: transparent;
-    padding: 4px 8px 4px 10px;
+    padding-block: 4px;
+    padding-inline: 10px 8px;
 }
 .acs-card-items.is-minimal .acs-item-thumb { display: none; }
 .acs-card-items.is-minimal .acs-item:hover { background: var(--acs-hover); transform: none; }
