@@ -4,7 +4,7 @@
     "source": {
         "type": "github-static",
         "repo": "odi0011/Plugin",
-        "commit": "b8de16e"
+        "commit": "147c3fe"
     },
     "core_api": {
         "min": 1,
@@ -62,7 +62,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@b8de16e/dist/agent-content-integrity-1.0.1.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@147c3fe/dist/agent-content-integrity-1.0.1.zip",
                 "sha256": "5741fcb46d4dcaf42982d6e7c2427e7a5950b938948a1ccbadf654b80d779d59",
                 "size_bytes": 3120
             },
@@ -118,7 +118,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@b8de16e/dist/agent-hello-1.0.1.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@147c3fe/dist/agent-hello-1.0.1.zip",
                 "sha256": "265cec149d0fa7bc7e8d6b5eec48f177e3d8bf7b5e69b700bc5f917faa53bfaf",
                 "size_bytes": 4150
             },
@@ -180,7 +180,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@b8de16e/dist/agent-link-auditor-1.0.0.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@147c3fe/dist/agent-link-auditor-1.0.0.zip",
                 "sha256": "f71de86290b0e40cafebfa016a132e0b25bba9013f1cad7df224f9b7f2e8a83b",
                 "size_bytes": 6225
             },
@@ -241,7 +241,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@b8de16e/dist/agent-run-digest-1.0.0.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@147c3fe/dist/agent-run-digest-1.0.0.zip",
                 "sha256": "5e5a173a541d80ad1795935fd106f34412e0391b0265feac9b42574a21a1d933",
                 "size_bytes": 8151
             },
@@ -300,7 +300,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@b8de16e/dist/agent-run-notifier-1.0.1.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@147c3fe/dist/agent-run-notifier-1.0.1.zip",
                 "sha256": "95349f75f5b0e3a41511596c8cb7a9e4faafe055dabb938aad784995b818eb4f",
                 "size_bytes": 3261
             },
@@ -362,7 +362,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@b8de16e/dist/agent-seo-snapshot-1.0.0.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@147c3fe/dist/agent-seo-snapshot-1.0.0.zip",
                 "sha256": "b99b2fc9b4855262dac9597ea832d42f0354624466fdf21699cb9942985243f2",
                 "size_bytes": 4882
             },
@@ -445,7 +445,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@b8de16e/dist/agent-task-ledger-1.0.1.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@147c3fe/dist/agent-task-ledger-1.0.1.zip",
                 "sha256": "bf013aedcc4610ad66b64929a35ea65f4750891489cbd67c1ca4a448ebdd4f5f",
                 "size_bytes": 4196
             },
@@ -497,7 +497,7 @@
             "published_at": "2026-09-01T05:37:59Z",
             "changelog": "1.4.1 那批修复的自查，又清掉十一处：①视图的 $boot 备好了 models 和 saveErrors 却没往下转发，JS 读到的是 undefined。这类故障特别安静：JS 侧一律写成 Array.isArray(x) ? x : [] 的安全兜底，所以功能不是报错而是静默变成空操作，页面全绿、契约也不响。契约补了一轮交叉核对——admin.js 读的每个 BOOT 键都必须在 $boot 里出现，「值算好了忘了传」这一类以后一律拦下。②延时自动弹出会把光标从访客正在填的站内搜索框、结账表单里抢进聊天输入框，后面敲的字全打到别处；现在自动弹出走静默通道，一个字都不碰焦点。③同一条路上：自动弹出的面板还会把 Tab 圈在里面，访客没要求打开的东西反而出不去（只剩 Esc）。圈 Tab 与 aria-modal 现在按「是不是访客自己点开的」成对开关——原来只圈不声明，读屏说页面还能去、键盘却出不去。④询盘表单的 has-error 从来没有任何 CSS 规则，校验失败时字段一点都不变红。顺带补了一轮不带 acs- 前缀的状态类扫描：之前那轮只认 ^acs-，is-/has- 这些整批漏过去。⑤服务端有「邮箱和电话至少留一个」的硬规则，两个字段都配上时谁都不算必填，前台不认这条就会放过一次注定被拒的提交。现在前台也拦一道，并补了邮箱格式校验、把焦点送到第一个出错的字段、改动即撤红框，校验与提交结果用 aria-live 播报、出错字段写 aria-invalid。⑥限流的等待时间服务端已经算好放在响应里，前台直接丢掉、只说一句「稍后再试」；现在写成「约 N 分钟后可继续」。⑦保存校验失败原来只在页面顶部丢一句话，站长得在几十个控件里对着标签自己找；现在把出错控件标红并滚到第一个。只存字段名——提交里可能带独立接口密钥，值不能落会话。⑧站点一个支持对话的 AI 模型都没启用时，模型下拉框就是空的，看着像「没什么要选」，而挂件是开着的、访客每一句都撞到「暂时无法回复」；现在在模型来源下面直接说明。⑨知识文件与表情包的上传限制原来只写在 accept 上，拖拽整个绕过去，超限文件要等服务端才退回；现在按扩展名、体积、剩余条数先筛一遍。知识文件删除补确认——插件只存抽取后的文本、不留原文件，删了得重新上传。⑩表情与表情包两个触发按钮补 aria-expanded。⑪店主简介和二维码名称遇到超长连续字符会把卡片撑破，补 overflow-wrap。",
             "download": {
-                "url": "",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@147c3fe/dist/ai-customer-service-1.4.2.zip",
                 "sha256": "e5b01cd5407bf149c8853d1f64f5ec8322559362ee0278d70cc5f1d194c02f85",
                 "size_bytes": 194728
             },
@@ -535,7 +535,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@b8de16e/dist/analytics-snippet-1.0.1.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@147c3fe/dist/analytics-snippet-1.0.1.zip",
                 "sha256": "073f0905fb1d69a484860aa2ff0af9ef12b20f64b8e70f7a36d0803e44f4077d",
                 "size_bytes": 4014
             },
@@ -566,7 +566,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@b8de16e/dist/hello-world-1.0.1.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@147c3fe/dist/hello-world-1.0.1.zip",
                 "sha256": "5895ac7fe49d0bab9f87a12b4fec00c61ecb30d6fbceca61936d6dab704230f2",
                 "size_bytes": 1696
             },
@@ -608,7 +608,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@b8de16e/dist/maintenance-mode-1.0.0.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@147c3fe/dist/maintenance-mode-1.0.0.zip",
                 "sha256": "a9c2040049a98c7c811c1c625ba1997540eced940b4571d4cd0122003b18b2b4",
                 "size_bytes": 7991
             },
@@ -646,7 +646,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@b8de16e/dist/preset-components-1.0.1.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@147c3fe/dist/preset-components-1.0.1.zip",
                 "sha256": "3ece951fa8f99332db1591cea876c832f755ba1976a4bcb04164c5c085ad70c9",
                 "size_bytes": 26934
             },
@@ -688,7 +688,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@b8de16e/dist/reading-time-1.0.0.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@147c3fe/dist/reading-time-1.0.0.zip",
                 "sha256": "bb9daa5003bdde2bb7e985ffe1b1caf38cad25deffb62e56efa1966cae73f7bc",
                 "size_bytes": 6575
             },
@@ -726,7 +726,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@b8de16e/dist/redirect-rules-1.0.1.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@147c3fe/dist/redirect-rules-1.0.1.zip",
                 "sha256": "8ac123892a303a95d758fd91507c7d10c0a3412b88b83c80c564b23a4e574a6b",
                 "size_bytes": 6023
             },
@@ -769,7 +769,7 @@
             "published_at": "2026-08-21T12:08:16Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@b8de16e/dist/sitemap-ping-1.0.0.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@147c3fe/dist/sitemap-ping-1.0.0.zip",
                 "sha256": "83f73524e696b030f498a7655d929865ec645aa35d3c61cd9e58985ece6a4bcc",
                 "size_bytes": 8383
             },
@@ -824,7 +824,7 @@
             "published_at": "2026-08-27T04:24:23Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@b8de16e/dist/visual-editor-1.5.0.zip",
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@147c3fe/dist/visual-editor-1.5.0.zip",
                 "sha256": "1f3cad9be458aa0690715157c4bea769ee30d50708c743d6f3e248a3ef8fd248",
                 "size_bytes": 134377
             },
