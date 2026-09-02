@@ -1,0 +1,162 @@
+{
+  "slug": "search-insights",
+  "name": "搜索数据中心",
+  "version": "1.0.0",
+  "author": "odi0011",
+  "description": "连接 Google Search Console、GA4 与 Merchant Center，执行索引、Sitemap、商品诊断和 PageSpeed 检查，并统一审查搜索、转化与 GEO 引用数据。",
+  "icon": "icon.svg",
+  "requires": "7k",
+  "requires_php": "8.0",
+  "license": "MIT",
+  "category": "analytics",
+  "tags": ["SEO", "GEO", "Search Console", "GA4", "PageSpeed", "Bing"],
+  "permissions": [
+    {"key": "search_insights.view", "label": "查看搜索数据", "group": "plugin", "sort_order": 1300},
+    {"key": "search_insights.manage", "label": "管理搜索平台连接", "group": "plugin", "sort_order": 1310},
+    {"key": "search_insights.sync", "label": "同步搜索平台数据", "group": "plugin", "sort_order": 1320}
+  ],
+  "api": [
+    {
+      "endpoint": "status",
+      "method": "GET",
+      "label": "读取搜索平台状态",
+      "description": "读取 Google、Bing、PageSpeed、站点验证和数据新鲜度摘要；不返回任何凭证。",
+      "handler": "SearchInsightsApi::status",
+      "permission": "search_insights.view",
+      "params": [],
+      "risk": "low"
+    },
+    {
+      "endpoint": "report",
+      "method": "GET",
+      "label": "查询搜索分析数据",
+      "description": "按平台、日期与维度分页查询规范化搜索和访问指标。",
+      "handler": "SearchInsightsApi::report",
+      "permission": "search_insights.view",
+      "params": ["provider", "dimension", "date_from", "date_to", "q", "page", "per_page"],
+      "risk": "low"
+    },
+    {
+      "endpoint": "sync",
+      "method": "POST",
+      "label": "同步搜索平台数据",
+      "description": "使用已保存的加密连接同步 GSC 与 GA4 的有界日期窗口。",
+      "handler": "SearchInsightsApi::sync",
+      "permission": "search_insights.sync",
+      "params": ["provider", "date_from", "date_to"],
+      "risk": "medium"
+    },
+    {
+      "endpoint": "inspect-url",
+      "method": "POST",
+      "label": "检查 Google 索引状态",
+      "description": "对当前已验证站点内的一个 URL 执行 Search Console URL Inspection 并保存规范化结果。",
+      "handler": "SearchInsightsApi::inspectUrl",
+      "permission": "search_insights.sync",
+      "params": ["url", "language_code"],
+      "risk": "medium"
+    },
+    {
+      "endpoint": "submit-sitemap",
+      "method": "POST",
+      "label": "提交 Sitemap 到 Google",
+      "description": "将当前站点的 HTTPS Sitemap 提交到已连接的 Search Console property。",
+      "handler": "SearchInsightsApi::submitSitemap",
+      "permission": "search_insights.sync",
+      "params": ["sitemap_url"],
+      "risk": "medium"
+    },
+    {
+      "endpoint": "pagespeed",
+      "method": "POST",
+      "label": "执行 PageSpeed 检查",
+      "description": "对当前站点内 URL 执行 mobile 或 desktop PageSpeed 检查并保存性能、可访问性、SEO 与 CWV 摘要。",
+      "handler": "SearchInsightsApi::pageSpeed",
+      "permission": "search_insights.sync",
+      "params": ["url", "strategy"],
+      "risk": "medium"
+    },
+    {
+      "endpoint": "metric-import",
+      "method": "POST",
+      "label": "导入搜索平台指标",
+      "description": "导入一条经过规范化的 Bing、GSC、GA4 或 AI Performance 指标，不接受原始凭证或任意响应体。",
+      "handler": "SearchInsightsApi::importMetric",
+      "permission": "search_insights.sync",
+      "params": ["provider", "metric_date", "dimension", "dimension_key", "clicks", "impressions", "ctr", "position", "users", "sessions", "pageviews", "conversions", "citations"],
+      "risk": "medium"
+    },
+    {
+      "endpoint": "geo-report",
+      "method": "GET",
+      "label": "查询 GEO 引用表现",
+      "description": "分页查询 ChatGPT、Gemini、Perplexity、Copilot、Bing AI 与 Google AI Overview 的引用观测。",
+      "handler": "SearchInsightsApi::geoReport",
+      "permission": "search_insights.view",
+      "params": ["engine", "date_from", "date_to", "q", "page", "per_page"],
+      "risk": "low"
+    },
+    {
+      "endpoint": "geo-observation",
+      "method": "POST",
+      "label": "记录 GEO 引用观测",
+      "description": "记录一条答案引擎提示词、站内引用 URL、引用位置和情感摘要，供后续 share-of-voice 分析。",
+      "handler": "SearchInsightsApi::recordGeoObservation",
+      "permission": "search_insights.sync",
+      "params": ["engine", "observed_at", "prompt", "cited_url", "citation_position", "sentiment", "answer_summary"],
+      "risk": "medium"
+    },
+    {
+      "endpoint": "verification-update",
+      "method": "POST",
+      "label": "更新站点验证标签",
+      "description": "更新 Google 与 Bing 的公开站点验证 meta token；变更会立即进入前台 head。",
+      "handler": "SearchInsightsApi::updateVerification",
+      "permission": "search_insights.manage",
+      "params": ["google_token", "bing_token"],
+      "risk": "high"
+    },
+    {
+      "endpoint": "merchant-diagnostics",
+      "method": "GET",
+      "label": "查询 Merchant Center 诊断",
+      "description": "分页查询规范化的 Merchant Center 账户与商品问题，不返回 OAuth token 或上游原始响应。",
+      "handler": "SearchInsightsApi::merchantDiagnostics",
+      "permission": "search_insights.view",
+      "params": ["scope", "severity", "q", "page", "per_page"],
+      "risk": "low"
+    },
+    {
+      "endpoint": "merchant-sync",
+      "method": "POST",
+      "label": "同步 Merchant Center 诊断",
+      "description": "使用已授权的 Google 连接同步有界批次的账户与商品诊断；大型目录会保存续跑游标并明确报告未完成状态。",
+      "handler": "SearchInsightsApi::syncMerchantDiagnostics",
+      "permission": "search_insights.sync",
+      "params": ["language_code", "max_products"],
+      "risk": "medium"
+    },
+    {
+      "endpoint": "url-inspections",
+      "method": "GET",
+      "label": "查询 URL Inspection 历史",
+      "description": "分页查询已规范化保存的 Google URL Inspection verdict、覆盖、robots、canonical 与富结果摘要。",
+      "handler": "SearchInsightsApi::urlInspections",
+      "permission": "search_insights.view",
+      "params": ["q", "verdict", "page", "per_page"],
+      "risk": "low"
+    }
+  ],
+  "schedules": [
+    {
+      "key": "sync",
+      "label": "同步搜索分析数据",
+      "handler": "SearchInsightsService::scheduledSync",
+      "interval": 21600,
+      "permission": "search_insights.sync",
+      "payload": {"provider": "google"},
+      "max_attempts": 5,
+      "enabled": true
+    }
+  ]
+}

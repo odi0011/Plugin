@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS `plugin_redirects` (
+CREATE TABLE IF NOT EXISTS `{{prefix}}plugin_redirects` (
     `id`          INT UNSIGNED NOT NULL AUTO_INCREMENT,
     `from_url`    VARCHAR(500) NOT NULL,
     `to_url`      VARCHAR(500) NOT NULL,

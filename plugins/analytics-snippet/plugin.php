@@ -1,71 +1,165 @@
 <?php
 /**
- * Analytics Snippet 插件
+ * Consent-aware Google Analytics 4 integration.
  *
- * 演示：
- *   - 用 register_plugin_setting 注册默认值
- *   - 用 admin.menu.register filter 注入侧边栏菜单
- *   - 用 routes.admin.register action 注册设置页路由（闭包风格）
- *   - 用 frontend.head action 注入第三方 JS
+ * Configuration is declared in plugin.json, so the normal settings UI, public
+ * plugin-settings API, and Agent gateway all share the same validation path.
  */
 if (!defined('CODE_SCHEMA_VERSION')) exit;
 
-// 激活时注册默认值
-add_action('plugin.activated', function ($slug) {
-    if ($slug !== 'analytics-snippet') return;
-    register_plugin_setting('analytics-snippet', 'ga_id', '');
-});
+require_once __DIR__ . '/AnalyticsApi.php';
 
-// 注入侧边栏菜单（如果有权限）
-add_filter('admin.menu.register', function ($items) {
-    if (!\App\Core\Auth::can('analytics.config')) return $items;
-    $items[] = [
-        'url'   => admin_url('/analytics-snippet/settings'),
-        'label' => '站点统计',
-        'icon'  => 'bi-graph-up',
-        'perm'  => 'analytics.config',
-    ];
-    return $items;
-});
+if (!function_exists('analytics_snippet_measurement_id')) {
+    function analytics_snippet_measurement_id(): string
+    {
+        $id = strtoupper(trim((string)get_plugin_setting('analytics-snippet', 'ga_id', '')));
+        return preg_match('/^G-[A-Z0-9]{10}$/D', $id) === 1 ? $id : '';
+    }
+}
 
-// 注册后台设置页（闭包路由）
-add_action('routes.admin.register', function ($router) {
-    $router->get('/admin/analytics-snippet/settings', function () {
-        \App\Core\Auth::requirePermission('analytics.config');
-        echo plugin_view('analytics-snippet', 'settings', [
-            'gaId' => get_plugin_setting('analytics-snippet', 'ga_id', ''),
-        ]);
-    });
-    $router->post('/admin/analytics-snippet/settings', function () {
-        \App\Core\Auth::requirePermission('analytics.config');
-        $id = trim((string)($_POST['ga_id'] ?? ''));
-        // 简单格式校验：仅允许 G-XXX / UA-XXX / 字母数字 - _
-        if ($id !== '' && !preg_match('/^[A-Za-z0-9_\-]+$/', $id)) {
-            flash('error', 'Tracking ID 格式不合法');
-        } else {
-            set_plugin_setting('analytics-snippet', 'ga_id', $id);
-            flash('success', '已保存');
+if (!function_exists('analytics_snippet_consent_state')) {
+    function analytics_snippet_consent_state(): string
+    {
+        try {
+            if (class_exists(\App\Core\AttributionService::class)) {
+                $state = \App\Core\AttributionService::consentState();
+                if (in_array($state, ['granted', 'denied'], true)) return $state;
+            }
+        } catch (\Throwable $_) {
         }
-        header('Location: ' . admin_url('/analytics-snippet/settings'));
-        exit;
-    });
+        return 'unknown';
+    }
+}
+
+if (!function_exists('analytics_snippet_migrate_legacy_settings')) {
+    function analytics_snippet_migrate_legacy_settings(): void
+    {
+        try {
+            $enabledKey = 'plugin.analytics-snippet.enabled';
+            if (!\App\Core\Setting::has($enabledKey)) {
+                \App\Core\Setting::setRuntime(
+                    $enabledKey,
+                    analytics_snippet_measurement_id() !== '' ? '1' : '0'
+                );
+            }
+            $modeKey = 'plugin.analytics-snippet.consent_mode';
+            if (!\App\Core\Setting::has($modeKey)) {
+                \App\Core\Setting::setRuntime($modeKey, 'basic');
+            }
+        } catch (\Throwable $_) {
+            // Declarative defaults remain fail-closed if the settings table is unavailable.
+        }
+    }
+}
+
+analytics_snippet_migrate_legacy_settings();
+
+add_action('plugin.activated', static function ($slug): void {
+    if ($slug !== 'analytics-snippet') return;
+    register_plugin_setting('analytics-snippet', 'enabled', '0');
+    register_plugin_setting('analytics-snippet', 'ga_id', '');
+    register_plugin_setting('analytics-snippet', 'consent_mode', 'basic');
 });
 
-// 前台 head 注入 GA snippet（仅当配置了 ID）
-add_action('frontend.head', function () {
-    $gaId = get_plugin_setting('analytics-snippet', 'ga_id', '');
-    if ($gaId === '') return;
-    $gaIdSafe = htmlspecialchars($gaId, ENT_QUOTES, 'UTF-8');
+add_action('frontend.head', static function (): void {
+    if ((string)get_plugin_setting('analytics-snippet', 'enabled', '0') !== '1') return;
+    $measurementId = analytics_snippet_measurement_id();
+    if ($measurementId === '') return;
+
+    $mode = strtolower(trim((string)get_plugin_setting('analytics-snippet', 'consent_mode', 'basic')));
+    if (!in_array($mode, ['basic', 'advanced'], true)) $mode = 'basic';
+    $state = analytics_snippet_consent_state();
+    $idJson = json_encode($measurementId, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
+    $modeJson = json_encode($mode, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
+    $stateJson = json_encode($state, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
+    if (!is_string($idJson) || !is_string($modeJson) || !is_string($stateJson)) return;
+
     echo <<<HTML
-    <!-- Google Analytics (analytics-snippet plugin) -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id={$gaIdSafe}"></script>
+    <!-- Google Analytics 4 (analytics-snippet plugin) -->
     <script>
-        window.dataLayer = window.dataLayer || [];
-        function gtag(){dataLayer.push(arguments);}
-        gtag('js', new Date());
-        gtag('config', '{$gaIdSafe}');
+    (function(w,d){
+        'use strict';
+        var measurementId={$idJson};
+        var consentMode={$modeJson};
+        var consentState={$stateJson};
+        var loaded=false;
+        w.dataLayer=w.dataLayer||[];
+        w.gtag=w.gtag||function(){w.dataLayer.push(arguments);};
+
+        function consentValue(state){return state==='granted'?'granted':'denied';}
+        function updateConsent(state){
+            consentState=state;
+            w.gtag('consent','update',{
+                analytics_storage:consentValue(state),
+                ad_storage:'denied',
+                ad_user_data:'denied',
+                ad_personalization:'denied'
+            });
+            if(state!=='granted') clearAnalyticsCookies();
+        }
+        function clearAnalyticsCookies(){
+            var names=(d.cookie||'').split(';').map(function(row){return row.split('=')[0].trim();});
+            var host=String(w.location&&w.location.hostname||'').replace(/^\.+/,'');
+            var labels=host.split('.');
+            var domains=[''];
+            if(host) domains.push(host,'.'+host);
+            for(var i=1;i<labels.length-1;i++) domains.push('.'+labels.slice(i).join('.'));
+            names.forEach(function(name){
+                if(!/^_(?:ga|gid|gat|gcl_)/.test(name)) return;
+                domains.forEach(function(domain){
+                    d.cookie=name+'=; Max-Age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax'+(domain?'; domain='+domain:'');
+                });
+            });
+        }
+        function loadTag(){
+            if(loaded) return;
+            loaded=true;
+            var script=d.createElement('script');
+            script.async=true;
+            script.src='https://www.googletagmanager.com/gtag/js?id='+encodeURIComponent(measurementId);
+            d.head.appendChild(script);
+            w.gtag('js',new Date());
+            w.gtag('config',measurementId,{'send_page_view':true});
+        }
+        function applyState(state){
+            updateConsent(state);
+            if(consentMode==='advanced'||state==='granted') loadTag();
+        }
+
+        w.gtag('consent','default',{
+            analytics_storage:consentValue(consentState),
+            ad_storage:'denied',
+            ad_user_data:'denied',
+            ad_personalization:'denied',
+            wait_for_update:500
+        });
+        if(consentState!=='granted') clearAnalyticsCookies();
+        if(consentMode==='advanced'||consentState==='granted') loadTag();
+
+        function bindConsentRoot(root){
+            if(!root||root.dataset.analyticsConsentBound==='1') return;
+            root.dataset.analyticsConsentBound='1';
+            var observer=new MutationObserver(function(){applyState(String(root.dataset.state||'unknown'));});
+            observer.observe(root,{attributes:true,attributeFilter:['data-state']});
+        }
+        d.addEventListener('odcms:inquiry-submitted',function(event){
+            if(consentState!=='granted') return;
+            loadTag();
+            var detail=event&&event.detail&&typeof event.detail==='object'?event.detail:{};
+            w.gtag('event','generate_lead',{
+                send_to:measurementId,
+                method:detail.channel==='cart'?'inquiry_cart':'inquiry_form',
+                content_type:detail.product_context?'product':'content'
+            });
+        });
+        if(d.readyState==='loading'){
+            d.addEventListener('DOMContentLoaded',function(){d.querySelectorAll('[data-privacy-consent]').forEach(bindConsentRoot);});
+        }else{
+            d.querySelectorAll('[data-privacy-consent]').forEach(bindConsentRoot);
+        }
+    }(window,document));
     </script>
-    <!-- End Google Analytics -->
+    <!-- End Google Analytics 4 -->
 
 HTML;
 });

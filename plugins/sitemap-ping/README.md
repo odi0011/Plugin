@@ -1,43 +1,35 @@
-# 站点地图推送（sitemap-ping）
+# IndexNow 提交
 
-内容发布后自动把 sitemap 地址推送给搜索引擎，并把每次推送结果记入日志。
+这是原 `sitemap-ping` 的替代实现。Google 的 sitemap ping 已停用，Bing 的匿名
+`/ping?sitemap=` 也已移除；插件不再调用这些端点。
 
-## 提供什么
+## 工作流
 
-- 内容钩子 `page.after_save` / `article.after_save` / `product.after_save`，
-  仅当 `status === 'published'` 时触发
-- 自建日志表 `plugin_sitemap_pings`（迁移 `migrations/001_create.sql`）
-- 后台页面 `/admin/sitemap-ping`：开关、sitemap 地址、端点列表、节流分钟数、
-  「立即推送」按钮、最近 30 条推送记录
-- 权限点 `sitemap_ping.manage`
-- `uninstall.php` 卸载时 DROP 日志表并清设置键
+1. 内容发布、更新、下线或自定义内容变更时，先把 URL 放入本地队列。
+2. 分类定义变更和没有专用删除钩子的旧路径会触发异步 run。
+3. worker 重建 sitemap，比较每个 URL 块的指纹（含 `lastmod` / hreflang），补入
+   新增、更新和删除 URL；因此分类项改名或删除也会被周期 diff 捕获。
+4. worker 以最多 1,000 条为一批 POST 到 `https://api.indexnow.org/indexnow`。
+5. 200/202 标记成功；429、5xx 和传输错误按指数退避重试，永久错误保留为失败记录。
 
-## 端点怎么配
+## 安全与隐私
 
-每行一个，最多 5 个，必须是 `https://`。用 `{SITEMAP}` 占位 sitemap 地址
-（会做 URL 编码）。默认给了一个：
+- IndexNow key 在激活时随机生成，使用核心加密信封保存；设置/API/Agent 只返回
+  `key_configured` 与公开 `key_location`，不回显 key。
+- key 文件路径为 `/indexnow-key.txt`，仅用于搜索引擎所有权验证，并带 `noindex`。
+- URL 只接受 HTTPS 且必须与站点 origin 相同；请求均经过核心 SSRF 防护。
+- 队列和日志只记录 URL、状态码、计数及固定错误代码，不记录请求 body、key 或响应正文。
+- 队列迁移使用核心 `{{prefix}}` 表前缀占位符，fencing token 防止过期 worker 覆盖新结果；
+  已激活插件原地更新会先执行新迁移，失败则回滚插件目录与库存。
 
-```
-https://www.bing.com/ping?sitemap={SITEMAP}
-```
+## 普通后台
 
-sitemap 地址留空时自动用 `url('/sitemap.xml')` 推断，页面上会显示实际使用的值。
+后台菜单「IndexNow 提交」展示开关、keyLocation、排队/执行/失败/完成计数，并提供
+“立即加入队列”命令；设置页继续管理启用状态和每批上限。API/Agent 与该后台状态使用
+同一队列，不在 HTTP 请求内发送外部网络请求。
 
-## 三处刻意的约束
+## API / Agent
 
-**外发只走核心安全通道。** 用 `PluginManager::httpFetchRaw()`：强制 HTTPS、
-禁重定向、经 `OutboundHttpClient` 做公网 IP 校验——指向内网地址的端点会被直接
-拒绝，插件无法被用来做 SSRF 跳板。
-
-**节流。** 默认 30 分钟内只推一次，批量发布 20 篇文章不会把搜索引擎刷爆。
-后台的「立即推送」会忽略节流，方便验证配置。
-
-**日志不会无界增长。** 只留最近 200 条，按 5% 采样清理，不需要定时任务。
-
-## 演示了哪些插件 API
-
-- `{type}.after_save` 内容生命周期钩子（收到 `$id, $input, $isCreate`）
-- 在循环里注册多个钩子时用 `use` 捕获类型，避免闭包共享变量
-- `PluginManager::httpFetchRaw()` 作为插件唯一被认可的外发出口
-- 自建表迁移 + `uninstall.php` 的成对清理
-- POST 校验失败走 `flash('error')` 并原样返回，绝不半保存
+- `GET /api/v1/ext/sitemap-ping/status`：查看队列状态。
+- `POST /api/v1/ext/sitemap-ping/submit`：排队一次重建与提交；网络工作由 worker 执行。
+- 周期处理器 `plugin.sitemap-ping.submit` 与上述权限边界一致。

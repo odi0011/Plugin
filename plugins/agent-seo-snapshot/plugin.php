@@ -12,12 +12,12 @@ require_once __DIR__ . '/AgentActions.php';
 agent_register_action('agent-seo-snapshot', [
     'id' => 'snapshot',
     'label' => 'SEO 字段完整度快照',
-    'description' => '只读统计各内容类型的 SEO 字段完整度，返回缺失计数、完整度百分比与缺失最严重的条目清单。',
+    'description' => '按前台实际 fallback 口径分页统计有效 SEO 输出，返回缺失计数、完整度与优先处理清单。',
     'module' => 'seo_snapshot',
     'operation' => 'read',
     'risk' => 'low',
     'mutates' => false,
-    'params' => ['type', 'limit'],
+    'params' => ['type', 'status', 'page', 'per_page', 'limit'],
     'required_permissions' => ['agent_seo_snapshot.view'],
     'executor' => 'AgentSeoSnapshotActions::snapshot',
 ]);

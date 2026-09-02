@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS `plugin_agent_run_events` (
+CREATE TABLE IF NOT EXISTS `{{prefix}}plugin_agent_run_events` (
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     `run_id` BIGINT UNSIGNED NOT NULL,
     `session_id` BIGINT UNSIGNED NOT NULL DEFAULT 0,

@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS `plugin_sitemap_pings` (
+CREATE TABLE IF NOT EXISTS `{{prefix}}plugin_sitemap_pings` (
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     `endpoint` VARCHAR(500) NOT NULL DEFAULT '',
     `trigger_type` VARCHAR(40) NOT NULL DEFAULT '',

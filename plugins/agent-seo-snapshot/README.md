@@ -1,32 +1,31 @@
-# Agent SEO 体检快照（agent-seo-snapshot）
+# Agent SEO 体检快照
 
-只读统计页面 / 文章 / 产品的 SEO 字段完整度，并注册一个「SEO 体检」委派角色。
+只读、分页统计页面、文章和产品最终会呈现给搜索引擎的有效 SEO 信号。
 
-## 提供什么
+## 输入
 
-- Agent 动作 `plugin.agent-seo-snapshot.snapshot`（只读，R0）
-  - `type`：`page` / `article` / `product`，数组或逗号分隔，默认全部
-  - `limit`：返回「缺得最狠」的条目数，1–50，默认 10
-- 委派角色 `agent-seo-snapshot.seo_snapshot`，主 Agent 可用它派子智能体做只读分析
-- 权限点 `agent_seo_snapshot.view`
+- `type`: `page` / `article` / `product`，可传数组或逗号分隔值。
+- `status`: `published`（默认）、`draft`、`scheduled`、`archived` 或 `all`。
+- `page` / `per_page`: 内容页码与每类型页大小，最大 200。
+- `limit`: 当前页返回的优先处理条目数，最大 50。
 
-## 体检哪些字段
+响应中的 `pagination.next_page` 非空时可以继续读取，不再用无法推进的 500 行
+截断代替分页。
 
-`seo_title`、`seo_description`、`seo_keywords`、`og_title`、`og_description`、
-`og_image`、`canonical_url`。字段为空串或纯空白都算缺失。
+## 口径
 
-返回三层结果：
+评分使用前台实际 fallback，而不是机械要求每个覆盖字段都单独填写：
 
-- `by_type`：每种类型的行数、完整度百分比、按字段的缺失计数、有缺口的行数
-- `worst`：按缺失权重倒序的条目清单（标题、slug、状态、缺哪些字段）
-- `truncated`：是否碰到单类型 500 行的取数上限
+- title: `seo_title` -> `title`
+- description: `seo_description` -> `summary`
+- Open Graph title/description: 显式 OG -> 上述有效 title/description
+- Open Graph image: `og_image` -> `cover_image`
+- canonical: 显式值 -> `SeoPresenter` 自动解析值
 
-权重只用于排序：`seo_title` 与 `seo_description` 各 3 分，其余各 1 分，所以
-「标题和描述都没写」会排在「只差一个 og_image」前面。
+`seo_keywords` 不参与完整度，因为它不构成现代搜索引擎的有效排名或展示信号。
 
-## 演示了哪些插件 API
+## 三面适用性
 
-- `agent_register_action()` 只读动作（`mutates: false` → 不需要审批、不落审计）
-- `agent_register_role()` 委派角色注册，与内置的 research / docs / seo / review 合并
-- 单类型取数上限 + `truncated` 标记：大列表要么分页、要么明确告诉模型结果被截断，
-  不能让一次工具调用变成全表扫描
+这是专门给 Agent 的只读快照插件；普通后台 UI 和 `/api/v1` 公共路由不适用，避免
+为只读审查复制另一套控制面。`tests/contract.php` 固定这一 N/A 决定；非公开状态
+仍要求对应内容 `*.view` 权限。

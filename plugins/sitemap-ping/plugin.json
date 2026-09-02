@@ -1,19 +1,70 @@
 {
     "slug": "sitemap-ping",
-    "name": "站点地图推送",
-    "version": "1.0.0",
+    "name": "IndexNow 提交",
+    "version": "2.0.0",
     "author": "odi0011",
     "author_url": "",
     "homepage": "",
-    "description": "内容发布后自动把 sitemap 地址推送给搜索引擎，并把每次推送的状态记入日志。内置节流（默认 30 分钟内只推一次）、仅 HTTPS 且经过公网 IP 校验的外发请求、后台可查最近推送记录。",
+    "description": "异步重建 sitemap 并通过加密密钥提交 IndexNow；覆盖内容发布、更新、下线、删除与分类变化，提供可重试队列和脱敏状态。",
     "icon": "icon.svg",
     "screenshots": [],
-    "requires_core": "7i",
+    "requires": "7k",
+    "requires_core": "7k",
     "requires_php": "8.0",
     "license": "MIT",
     "category": "seo",
-    "tags": ["SEO", "站点地图", "搜索引擎", "外发请求"],
+    "tags": ["SEO", "Sitemap", "IndexNow", "异步提交", "搜索引擎"],
     "permissions": [
-        {"key": "sitemap_ping.manage", "label": "配置站点地图推送", "group": "plugin", "sort_order": 1290}
+        {"key": "sitemap_ping.manage", "label": "管理 IndexNow 提交", "group": "plugin", "sort_order": 1290}
+    ],
+    "settings": {
+        "permission": "sitemap_ping.manage",
+        "title": "IndexNow 提交",
+        "sections": [
+            {
+                "key": "submission",
+                "label": "提交队列",
+                "description": "发布或修改内容后，系统会异步重建 sitemap 并提交 URL。密钥由系统生成并加密保存。",
+                "fields": [
+                    {"key": "enabled", "label": "启用 IndexNow", "type": "boolean", "default": false},
+                    {"key": "batch_limit", "label": "每轮最多提交 URL 数", "type": "number", "default": 100, "min": 1, "max": 1000, "step": 1}
+                ]
+            }
+        ]
+    },
+    "schedules": [
+        {
+            "key": "submit",
+            "label": "重建并提交 IndexNow",
+            "description": "异步重建所有可用 sitemap，计算 URL 增删差异并提交待处理 URL。",
+            "handler": "SitemapPingActions::run",
+            "interval": 3600,
+            "permission": "sitemap_ping.manage",
+            "payload": {"batch_limit": 100},
+            "max_attempts": 5,
+            "enabled": true
+        }
+    ],
+    "api": [
+        {
+            "endpoint": "status",
+            "method": "GET",
+            "label": "读取 IndexNow 状态",
+            "description": "读取 IndexNow 开关、密钥位置和提交队列计数；不返回密钥。",
+            "handler": "SitemapPingApi::status",
+            "permission": "sitemap_ping.manage",
+            "params": [],
+            "risk": "low"
+        },
+        {
+            "endpoint": "submit",
+            "method": "POST",
+            "label": "请求 IndexNow 提交",
+            "description": "将 sitemap 重建与 IndexNow URL 提交加入异步自动化队列，不在 HTTP 请求内执行网络提交。",
+            "handler": "SitemapPingApi::submit",
+            "permission": "sitemap_ping.manage",
+            "params": [],
+            "risk": "medium"
+        }
     ]
 }

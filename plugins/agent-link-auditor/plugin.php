@@ -17,7 +17,7 @@ agent_register_action('agent-link-auditor', [
     'operation' => 'read',
     'risk' => 'low',
     'mutates' => false,
-    'params' => ['limit', 'types'],
+    'params' => ['limit', 'types', 'page', 'per_page'],
     'required_permissions' => ['agent_link_audit.view'],
     'executor' => 'AgentLinkAuditorActions::scan',
 ]);

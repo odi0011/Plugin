@@ -1,17 +1,71 @@
 {
     "slug": "analytics-snippet",
     "name": "Analytics Snippet",
-    "version": "1.0.1",
+    "version": "1.1.0",
     "author": "Project",
     "author_url": "",
     "homepage": "",
-    "description": "在所有前台页面 <head> 注入 Google Analytics 跟踪代码。后台「站点统计」可配置 Tracking ID。",
+    "description": "以站点隐私选择为授权边界，在所有前台页面接入 Google Analytics 4；支持 basic/advanced Consent Mode。",
     "icon": "icon.svg",
     "screenshots": [],
-    "requires": "5a",
-    "requires_php": "7.4",
+    "requires": "7k",
+    "requires_core": "7k",
+    "requires_php": "8.0",
     "license": "MIT",
+    "category": "analytics",
+    "tags": ["Google Analytics 4", "Consent Mode", "统计", "隐私"],
     "permissions": [
         {"key": "analytics.config", "label": "配置站点统计", "group": "plugin", "sort_order": 1001}
+    ],
+    "settings": {
+        "permission": "analytics.config",
+        "title": "Google Analytics 4",
+        "sections": [
+            {
+                "key": "measurement",
+                "label": "衡量与隐私",
+                "description": "只接收 GA4 衡量 ID。启用后仍严格遵循访客在站点隐私面板中的选择。",
+                "fields": [
+                    {
+                        "key": "enabled",
+                        "label": "启用 Google Analytics 4",
+                        "type": "boolean",
+                        "default": false
+                    },
+                    {
+                        "key": "ga_id",
+                        "label": "GA4 衡量 ID",
+                        "type": "text",
+                        "default": "",
+                        "max_length": 12,
+                        "pattern": "^(?:|G-[A-Z0-9]{10})$",
+                        "placeholder": "G-XXXXXXXXXX",
+                        "help": "不再接受已经停止处理数据的 Universal Analytics UA-* ID，也不能填写 GTM 容器 ID。"
+                    },
+                    {
+                        "key": "consent_mode",
+                        "label": "Consent Mode",
+                        "type": "select",
+                        "default": "basic",
+                        "options": [
+                            {"value": "basic", "label": "Basic：同意前不加载 Google 标签"},
+                            {"value": "advanced", "label": "Advanced：默认拒绝存储，发送无 Cookie 信号"}
+                        ]
+                    }
+                ]
+            }
+        ]
+    },
+    "api": [
+        {
+            "endpoint": "status",
+            "method": "GET",
+            "label": "读取 GA4 集成状态",
+            "description": "读取 GA4 是否启用、衡量 ID是否有效、Consent Mode 与当前请求的同意状态；不返回 Cookie 或访客数据。",
+            "handler": "AnalyticsSnippetApi::status",
+            "permission": "analytics.config",
+            "params": [],
+            "risk": "low"
+        }
     ]
 }

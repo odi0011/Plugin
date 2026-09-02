@@ -23,6 +23,8 @@ index.json.pub             公钥（公开）
 |---|---|
 | hello-world | 最小插件示例 |
 | analytics-snippet | 前台统计代码片段 |
+| search-insights | Google Search Console、GA4、Merchant Center、PageSpeed 与 GEO 数据中心 |
+| sitemap-ping | 加密 IndexNow 异步提交与队列状态 |
 | redirect-rules | 重定向规则管理 |
 | preset-components | 预设组件（内容工作流） |
 | visual-editor | 可视化编辑器（拖拽搭页面 + 白名单样式编译 + 三面对等 API） |
@@ -31,6 +33,8 @@ index.json.pub             公钥（公开）
 | agent-task-ledger | Agent 写动作示例（插件迁移 + 台账） |
 | agent-content-integrity | Agent 资源类型 + 委派角色示例 |
 | agent-run-notifier | Agent 生命周期事件 + 安全外发通知示例 |
+| agent-link-auditor | Agent 只读站内死链审查与可检索资源 |
+| agent-seo-snapshot | Agent 只读 SEO 有效输出快照 |
 
 ## 发布流程
 
