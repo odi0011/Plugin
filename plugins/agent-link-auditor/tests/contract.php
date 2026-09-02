@@ -29,6 +29,9 @@ $assert(str_contains($source, "'id' => self::rowId(\$row)")
 $assert(str_contains($source, 'loadByStableId')
     && str_contains($source, "preg_match('/^(page|article):"),
     'resource loading still depends on the first search page instead of the stable id');
+$assert(str_contains($source, "'slug' => '(?<slug>")
+    && str_contains($source, "'id' => '(?<id>"),
+    'route patterns do not expose identity captures for exact content lookup');
 $assert(str_contains($source, "\$report['has_more'] || \$report['truncated']")
     && str_contains($source, 'isKnownPublicTarget')
     && str_contains($source, 'resolveFromDatabase'),

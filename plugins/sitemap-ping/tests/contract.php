@@ -5,7 +5,6 @@ $root = dirname(__DIR__);
 $plugin = (string)file_get_contents($root . '/plugin.php');
 $actions = (string)file_get_contents($root . '/SitemapPingActions.php');
 $migration = (string)file_get_contents($root . '/migrations/002_indexnow_queue.sql');
-$fencingMigration = (string)file_get_contents($root . '/migrations/003_fencing.sql');
 $manifest = json_decode((string)file_get_contents($root . '/plugin.json'), true, 32, JSON_THROW_ON_ERROR);
 $assert = static function (bool $condition, string $message): void {
     if (!$condition) throw new RuntimeException($message);
@@ -52,12 +51,23 @@ $assert(str_contains($migration, '`claim_token` CHAR(64)')
     && str_contains($actions, "where('claim_token', \$claimToken)")
     && str_contains($actions, "'claim_token' => null"),
     'submission lease is missing a fencing token');
-$assert(str_contains($fencingMigration, 'ADD COLUMN `claim_token`')
+$migrationFiles = glob($root . '/migrations/*.sql') ?: [];
+$claimTokenAddCount = 0;
+foreach ($migrationFiles as $migrationFile) {
+    $migrationSql = (string)file_get_contents($migrationFile);
+    if (preg_match('/ALTER\s+TABLE[\s\S]+ADD\s+(?:COLUMN\s+)?`?claim_token`?/i', $migrationSql) === 1) {
+        $claimTokenAddCount++;
+    }
+}
+$assert($claimTokenAddCount === 0
+    && str_contains($migration, '`claim_token` CHAR(64)')
     && str_contains($actions, 'fitRowsToRequest')
     && str_contains($actions, 'MAX_REQUEST_BYTES = 900000')
     && str_contains($actions, 'MAX_BATCHES_PER_RUN = 10')
-    && str_contains($actions, 'queue_overflow'),
-    'IndexNow queue lacks an upgrade migration or bounded request/overflow diagnostics');
+    && str_contains($actions, 'queue_overflow')
+    && str_contains($actions, 'private static function localizationSource(string $url)')
+    && str_contains($actions, 'parse_url(function_exists(\'base_url\')'),
+    'IndexNow queue must create fencing once and retain bounded request/overflow diagnostics');
 $assert(str_contains($migration, '`{{prefix}}plugin_sitemap_submission_urls`')
     && ($manifest['requires_core'] ?? '') === '7k',
     'IndexNow migration is not bound to the core table-prefix contract');

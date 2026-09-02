@@ -19,7 +19,8 @@
 - key 文件路径为 `/indexnow-key.txt`，仅用于搜索引擎所有权验证，并带 `noindex`。
 - URL 只接受 HTTPS 且必须与站点 origin 相同；请求均经过核心 SSRF 防护。
 - 队列和日志只记录 URL、状态码、计数及固定错误代码，不记录请求 body、key 或响应正文。
-- 队列迁移使用核心 `{{prefix}}` 表前缀占位符，fencing token 防止过期 worker 覆盖新结果；
+- 队列迁移使用核心 `{{prefix}}` 表前缀占位符，`002_indexnow_queue.sql` 一次性创建
+  fencing token（避免新装时重复 ADD COLUMN），防止过期 worker 覆盖新结果；
   已激活插件原地更新会先执行新迁移，失败则回滚插件目录与库存。
 
 ## 普通后台

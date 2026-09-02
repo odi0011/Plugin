@@ -47,6 +47,21 @@ $assert(str_contains($service, 'MAX_SYNC_ROWS = 5000')
     && str_contains($service, "'sync_cursor'")
     && str_contains($service, "'next_sync_continues_cycle'"),
     '同步没有有界行数、截断或服务端续跑游标');
+$assert(str_contains($service, "context['checkpoint']")
+    && str_contains($service, 'checkpoint(true)')
+    && str_contains($service, 'syncSearchConsole')
+    && str_contains($service, 'syncGa4'),
+    '周期同步未在 GSC/GA4/Merchant 上游请求边界续租 worker lease');
+$assert(str_contains($service, 'googleOAuthCredentialsChanged')
+    && str_contains($service, "data['access_token_envelope'] = null")
+    && str_contains($service, "data['refresh_token_envelope'] = null")
+    && str_contains($service, "data['scopes_json'] = null")
+    && str_contains($service, 'oauth_reauth_required'),
+    '更换 Google OAuth 客户端时未清除旧 token/scope 并要求重新授权');
+$assert(str_contains($service, '!empty($merchant[\'next_sync_continues_cycle\'])')
+    && str_contains($service, "'ga4_done'")
+    && str_contains($service, "merchant_account_cursor"),
+    '全局同步的 Merchant/GA4 续跑状态未与服务端游标保持一致');
 $assert(str_contains($service, "min(250, \$perDimensionLimit - \$dimensionScanned)")
     && str_contains($service, "min(500, self::MAX_SYNC_ROWS - \$scanned)")
     && str_contains($service, "'fields' => 'products(offerId,productStatus")

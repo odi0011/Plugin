@@ -108,9 +108,7 @@ final class AgentLinkAuditorActions
             if (!is_array($row)) return null;
             foreach (self::internalTargets((string)($row[$definition['content']] ?? '')) as $target => $targetSlug) {
                 if (!hash_equals((string)$match[3], md5($target))) continue;
-                if (self::isKnownPublicTarget($target)) return null;
-                $cache = [];
-                if (self::resolveSlug($targetSlug, $cache) !== null) return null;
+                if (self::isKnownPublicTarget($target) || self::publicRouteState($target) !== false) return null;
                 $base = [
                     'source_type' => $type,
                     'source_id' => (string)($row['id'] ?? ''),
@@ -166,8 +164,7 @@ final class AgentLinkAuditorActions
                 $scanned++;
                 foreach (self::internalTargets((string)($row[$contentField] ?? '')) as $target => $targetSlug) {
                     $checked++;
-                    if (self::isKnownPublicTarget($target)) continue;
-                    if (self::resolveSlug($targetSlug, $slugCache) !== null) continue;
+                    if (self::isKnownPublicTarget($target) || self::publicRouteState($target) !== false) continue;
                     $broken[] = [
                         'source_type' => $type,
                         'source_id' => (string)($row['id'] ?? ''),
@@ -201,19 +198,218 @@ final class AgentLinkAuditorActions
         }
         $out = [];
         foreach ($matches[1] as $target) {
-            $path = parse_url((string)$target, PHP_URL_PATH);
-            if (!is_string($path)) continue;
-            $path = trim($path, '/');
-            if ($path === '') continue;
-            $segments = array_values(array_filter(explode('/', $path), 'strlen'));
-            $last = rawurldecode((string)end($segments));
-            if ($last === '' || !preg_match('/^[\p{L}\p{N}_%.\-]+$/u', $last)) continue;
+            $normalized = self::normalizeRoutePath((string)$target);
+            if ($normalized === null || $normalized === '/') continue;
+            $segments = array_values(array_filter(explode('/', trim($normalized, '/')), 'strlen'));
+            $last = (string)end($segments);
+            if ($last === '' || !preg_match('/^[\p{L}\p{N}_%\-.]+$/u', $last)) continue;
             if (preg_match('/\.(?:css|js|png|jpe?g|gif|webp|svg|ico|pdf|zip|mp4|mp3|xml|txt)$/i', $last)) continue;
             $first = strtolower(rawurldecode((string)($segments[0] ?? '')));
             if (in_array($first, ['admin', 'api', 'assets', 'uploads', 'plugin-asset', 'storage'], true)) continue;
             $out[(string)$target] = $last;
         }
         return $out;
+    }
+
+    /**
+     * Normalize a root-relative target to the path seen by the frontend router.
+     * The core may mount the site below a subdirectory and may prepend a
+     * language segment; both are transport details, not content route segments.
+     */
+    private static function normalizeRoutePath(string $target): ?string
+    {
+        $target = trim($target);
+        if ($target === '' || strlen($target) > 2048 || preg_match('/[\x00-\x1f\x7f]/', $target)) return null;
+        $parts = parse_url($target);
+        $path = is_array($parts) ? ($parts['path'] ?? null) : null;
+        if (!is_string($path) || $path === '' || !str_starts_with($path, '/')) return null;
+        $path = rawurldecode($path);
+        if ($path === '' || str_contains($path, '\\') || str_contains($path, '//')) return null;
+        $path = '/' . trim($path, '/');
+        if ($path === '//') $path = '/';
+
+        $basePath = '';
+        try {
+            if (function_exists('base_url')) {
+                $basePath = trim((string)parse_url((string)base_url(), PHP_URL_PATH), '/');
+            }
+        } catch (\Throwable $_) {
+        }
+        if ($basePath !== '' && ($path === '/' . $basePath || str_starts_with($path, '/' . $basePath . '/'))) {
+            $path = substr($path, strlen('/' . $basePath)) ?: '/';
+        }
+
+        $segments = array_values(array_filter(explode('/', trim($path, '/')), 'strlen'));
+        if ($segments !== []) {
+            try {
+                if (class_exists(\App\Core\LanguageService::class)
+                    && \App\Core\LanguageService::enabledLanguageByCode((string)$segments[0]) !== null) {
+                    array_shift($segments);
+                    $path = $segments === [] ? '/' : '/' . implode('/', $segments);
+                }
+            } catch (\Throwable $_) {
+            }
+        }
+
+        if ($path !== '/' && function_exists('permalink_html_suffix_enabled')) {
+            try {
+                if (permalink_html_suffix_enabled() && preg_match('/\.html$/i', $path) === 1) {
+                    $path = substr($path, 0, -5) ?: '/';
+                }
+            } catch (\Throwable $_) {
+            }
+        }
+        return $path === '' ? '/' : $path;
+    }
+
+    /**
+     * Return true when a target matches an actual public content route and the
+     * target record exists, false when that route is known but missing, and null
+     * when the path belongs to no declared content route.
+     */
+    private static function publicRouteState(string $target): ?bool
+    {
+        static $cache = [];
+        $path = self::normalizeRoutePath($target);
+        if ($path === null) return null;
+        if (array_key_exists($path, $cache)) return $cache[$path];
+        if ($path === '/') return $cache[$path] = true;
+
+        $matched = false;
+        foreach (self::routeDefinitions() as $definition) {
+            $pattern = (string)($definition['pattern'] ?? '');
+            if ($pattern === '' || preg_match($pattern, $path, $matches) !== 1) continue;
+            $matched = true;
+            if (self::routeRecordExists($definition, $matches)) return $cache[$path] = true;
+        }
+        return $cache[$path] = ($matched ? false : null);
+    }
+
+    /** @return array<int,array{type:string,table:string,content_type:string,pattern:string}> */
+    private static function routeDefinitions(): array
+    {
+        static $definitions = null;
+        if (is_array($definitions)) return $definitions;
+        $definitions = [];
+        $add = static function (string $type, string $table, string $contentType, string $structure) use (&$definitions): void {
+            $pattern = self::routePattern($structure);
+            if ($pattern !== null) {
+                $definitions[] = [
+                    'type' => $type,
+                    'table' => $table,
+                    'content_type' => $contentType,
+                    'pattern' => $pattern,
+                ];
+            }
+        };
+
+        foreach ([
+            ['page', 'pages', '', '{slug}'],
+            ['article', 'articles', '', 'post/{slug}'],
+            ['product', 'products', '', 'product/{slug}'],
+        ] as $fallback) {
+            $structure = (string)$fallback[3];
+            try {
+                if (function_exists('permalink_structure_for_type')) {
+                    $structure = (string)permalink_structure_for_type((string)$fallback[0]);
+                }
+            } catch (\Throwable $_) {
+            }
+            $add((string)$fallback[0], (string)$fallback[1], '', $structure);
+        }
+
+        // Read custom type definitions directly. ContentType::allOrdered() also
+        // seeds builtins, which would violate this plugin's read-only contract.
+        try {
+            $rows = \App\Core\Database::table('content_types')->where('status', 1)->get();
+            foreach ($rows as $row) {
+                $slug = strtolower(trim((string)($row['slug'] ?? '')));
+                if ($slug === '' || in_array($slug, ['page', 'article', 'product'], true)) continue;
+                $settings = json_decode((string)($row['settings_json'] ?? '{}'), true);
+                if (is_array($settings) && array_key_exists('public', $settings) && empty($settings['public'])) continue;
+                try {
+                    $structure = function_exists('permalink_structure_for_type')
+                        ? (string)permalink_structure_for_type($slug)
+                        : $slug . '/{slug}';
+                } catch (\Throwable $_) {
+                    $structure = $slug . '/{slug}';
+                }
+                $add('content_entry', 'content_entries', $slug, $structure);
+            }
+        } catch (\Throwable $_) {
+        }
+        return $definitions;
+    }
+
+    /** Convert a core permalink structure into a strict router-compatible regex. */
+    private static function routePattern(string $structure): ?string
+    {
+        $structure = trim($structure, '/');
+        if ($structure === '') return null;
+        $segments = explode('/', $structure);
+        $regex = [];
+        $seenCaptures = [];
+        foreach ($segments as $segment) {
+            if ($segment === '') return null;
+            $offset = 0;
+            $part = '';
+            if (preg_match_all('/\{(slug|id|year|month|day)\}/', $segment, $matches, PREG_OFFSET_CAPTURE)) {
+                foreach ($matches[1] as $index => $marker) {
+                    $name = (string)$marker[0];
+                    $position = (int)$matches[0][$index][1];
+                    $part .= preg_quote(substr($segment, $offset, $position - $offset), '#');
+                    if (in_array($name, ['slug', 'id'], true)) {
+                        if (isset($seenCaptures[$name])) return null;
+                        $seenCaptures[$name] = true;
+                    }
+                    $part .= match ($name) {
+                        'slug' => '(?<slug>[\\p{L}\\p{N}_-]+)',
+                        'id' => '(?<id>[0-9]+)',
+                        'year' => '[0-9]{4}',
+                        'month' => '(?:0[1-9]|1[0-2])',
+                        'day' => '(?:0[1-9]|[12][0-9]|3[01])',
+                        default => '',
+                    };
+                    $offset = $position + strlen((string)$matches[0][$index][0]);
+                }
+                $part .= preg_quote(substr($segment, $offset), '#');
+            } else {
+                if (str_contains($segment, '{') || str_contains($segment, '}')) return null;
+                $part = preg_quote($segment, '#');
+            }
+            $regex[] = $part;
+        }
+        return '#^/' . implode('/', $regex) . '/?$#u';
+    }
+
+    private static function routeRecordExists(array $definition, array $matches): bool
+    {
+        $table = (string)($definition['table'] ?? '');
+        if ($table === '') return false;
+        try {
+            $query = \App\Core\Database::table($table);
+            $id = (string)($matches['id'] ?? '');
+            $slug = rawurldecode((string)($matches['slug'] ?? ''));
+            if ($id !== '') {
+                $query->where('id', (int)$id);
+            } else {
+                if ($slug === '' || !preg_match('/^[\p{L}\p{N}_-]+$/u', $slug)) return false;
+                $query->where('slug', $slug);
+            }
+            if ((string)($definition['type'] ?? '') === 'content_entry') {
+                $contentType = (string)($definition['content_type'] ?? '');
+                if ($contentType === '') return false;
+                $query->where('content_type', $contentType);
+            }
+            if (class_exists(\App\Core\ContentWorkflow::class)) {
+                $query = \App\Core\ContentWorkflow::applyPublicScope($query);
+            } else {
+                $query->where('status', 1);
+            }
+            return is_array($query->first());
+        } catch (\Throwable $_) {
+            return false;
+        }
     }
 
     private static function resolveSlug(string $slug, array &$cache): ?string

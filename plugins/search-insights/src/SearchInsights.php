@@ -24,6 +24,7 @@ final class SearchInsightsService
         'searchconsole.googleapis.com', 'analyticsdata.googleapis.com',
         'merchantapi.googleapis.com',
     ];
+    /** 周期 worker 的租约由核心 checkpoint 续期；每次上游请求都必须经过该边界。 */
     private const MAX_SYNC_ROWS = 5000;
     private const MAX_MERCHANT_PRODUCTS = 100;
     private const MAX_MERCHANT_ISSUES = 25000;
@@ -87,7 +88,12 @@ final class SearchInsightsService
                 throw new InvalidArgumentException('Merchant Center account ID 必须是数字');
             }
             if ($merchantAccount !== (string)($config['merchant_account_id'] ?? '')) {
-                unset($config['merchant_cursor'], $config['merchant_cycle_started_at']);
+                unset(
+                    $config['merchant_cursor'],
+                    $config['merchant_account_cursor'],
+                    $config['merchant_account_done'],
+                    $config['merchant_cycle_started_at']
+                );
             }
             $config['merchant_account_id'] = $merchantAccount;
         } elseif ($provider === 'pagespeed') {
@@ -95,8 +101,9 @@ final class SearchInsightsService
             $clientId = '';
         }
 
+        $clientSecretInput = trim((string)($input['client_secret'] ?? ''));
         $clientSecret = self::encryptedSecret(
-            (string)($input['client_secret'] ?? ''),
+            $clientSecretInput,
             (string)($existing['client_secret_envelope'] ?? '')
         );
         $apiKey = self::encryptedSecret(
@@ -110,6 +117,13 @@ final class SearchInsightsService
             throw new InvalidArgumentException('PageSpeed API key 不能为空');
         }
 
+        $oauthCredentialsChanged = $provider === 'google'
+            && $existing !== []
+            && self::googleOAuthCredentialsChanged(
+                $existing,
+                $clientId,
+                $clientSecretInput
+            );
         $now = date('Y-m-d H:i:s');
         $data = [
             'site_url' => $siteUrl,
@@ -119,12 +133,18 @@ final class SearchInsightsService
             'api_key_envelope' => $apiKey !== '' ? $apiKey : null,
             'config_json' => json_encode($config, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
             'status' => $provider === 'google'
-                ? ((string)($existing['refresh_token_envelope'] ?? '') !== '' ? 'connected' : 'configured')
+                ? (!$oauthCredentialsChanged && (string)($existing['refresh_token_envelope'] ?? '') !== '' ? 'connected' : 'configured')
                 : 'connected',
             'last_error_code' => null,
             'updated_by' => $actorId > 0 ? $actorId : null,
             'updated_at' => $now,
         ];
+        if ($oauthCredentialsChanged) {
+            $data['access_token_envelope'] = null;
+            $data['refresh_token_envelope'] = null;
+            $data['token_expires_at'] = null;
+            $data['scopes_json'] = null;
+        }
         if ($existing) {
             Database::table('plugin_search_insights_connections')->where('provider', $provider)->update($data);
         } else {
@@ -139,6 +159,7 @@ final class SearchInsightsService
             'property_id' => $propertyId,
             'has_client_secret' => $clientSecret !== '',
             'has_api_key' => $apiKey !== '',
+            'oauth_reauth_required' => $oauthCredentialsChanged,
         ]);
         return self::connectionStatus()['connections'][$provider];
     }
@@ -231,13 +252,15 @@ final class SearchInsightsService
         self::audit('search_insights.google.connect', 'google', $actorId, ['scopes' => $grantedScopes]);
     }
 
-    public static function sync(string $provider = 'google', string $dateFrom = '', string $dateTo = ''): array
+    public static function sync(string $provider = 'google', string $dateFrom = '', string $dateTo = '', array $context = []): array
     {
         $provider = strtolower(trim($provider));
         if (!in_array($provider, ['google', 'gsc', 'ga4'], true)) {
             throw new InvalidArgumentException('自动同步仅支持 google、gsc 或 ga4；Bing AI Performance 请使用规范化导入');
         }
         [$dateFrom, $dateTo] = self::dateRange($dateFrom, $dateTo, 90);
+        $checkpoint = self::checkpoint($context);
+        if ($checkpoint !== null) $checkpoint(true);
         $connection = self::requireGoogleConnected();
         $config = self::jsonObject($connection['config_json'] ?? null);
         $cursor = is_array($config['sync_cursor'] ?? null) ? $config['sync_cursor'] : [];
@@ -259,7 +282,7 @@ final class SearchInsightsService
                 'page_offset' => (int)($cursor['gsc_page_offset'] ?? 0),
                 'query_done' => !empty($cursor['gsc_query_done']),
                 'page_done' => !empty($cursor['gsc_page_done']),
-            ]);
+            ], $checkpoint);
             $result['gsc'] = $gsc['rows'];
             $result['gsc_diagnostics'] = $gsc;
             $result['truncated'] = $result['truncated'] || $gsc['truncated'];
@@ -269,18 +292,24 @@ final class SearchInsightsService
             }
             $hasMoreOverall = !empty($gsc['has_more']);
         }
-        if ($provider !== 'gsc') {
-            $ga = self::syncGa4($dateFrom, $dateTo, (int)($cursor['ga4'] ?? 0));
+        if ($provider !== 'gsc' && empty($cursor['ga4_done'])) {
+            $ga = self::syncGa4($dateFrom, $dateTo, (int)($cursor['ga4'] ?? 0), $checkpoint);
             $result['ga4'] = $ga['rows'];
             $result['ga4_diagnostics'] = $ga;
             $result['truncated'] = $result['truncated'] || $ga['truncated'];
             if (($ga['next_cursor'] ?? null) !== null) $nextCursor['ga4'] = (int)$ga['next_cursor'];
+            else $nextCursor['ga4_done'] = true;
             $hasMoreOverall = $hasMoreOverall || !empty($ga['truncated']);
+        } elseif ($provider !== 'gsc') {
+            $nextCursor['ga4_done'] = true;
         }
         if ($provider === 'google' && self::merchantAccountId(false) !== '') {
-            $merchant = self::syncMerchantDiagnostics('zh-CN', 100);
+            $merchant = self::syncMerchantDiagnostics('zh-CN', 100, $context);
             $result['merchant'] = $merchant;
             $result['truncated'] = $result['truncated'] || !empty($merchant['truncated']);
+            // Merchant 自己的服务端游标也是这一轮同步的一部分；不能在 GSC/GA4
+            // 完成时把全局 cycle_complete 错报为 true。
+            $hasMoreOverall = $hasMoreOverall || !empty($merchant['next_sync_continues_cycle']);
             unset($config['merchant_cursor'], $config['merchant_account_cursor'], $config['merchant_account_done'], $config['merchant_cycle_started_at']);
             $merchantConnection = self::connection('google') ?: [];
             $merchantConfig = self::jsonObject($merchantConnection['config_json'] ?? null);
@@ -319,7 +348,8 @@ final class SearchInsightsService
             $result = self::sync(
                 (string)($payload['provider'] ?? 'google'),
                 (string)($payload['date_from'] ?? $stableDate),
-                (string)($payload['date_to'] ?? $stableDate)
+                (string)($payload['date_to'] ?? $stableDate),
+                $context
             );
             self::audit('search_insights.metrics.sync', 'google', 0, $result, 'system');
             return ['ok' => true, 'data' => $result];
@@ -329,7 +359,7 @@ final class SearchInsightsService
         }
     }
 
-    public static function syncMerchantDiagnostics(string $languageCode = 'zh-CN', int $maxProducts = 100): array
+    public static function syncMerchantDiagnostics(string $languageCode = 'zh-CN', int $maxProducts = 100, array $context = []): array
     {
         $authorized = self::requireGoogleConnected();
         $grantedScopes = json_decode((string)($authorized['scopes_json'] ?? ''), true);
@@ -341,6 +371,8 @@ final class SearchInsightsService
         $languageCode = self::merchantLanguage($languageCode);
         $maxProducts = max(1, min(self::MAX_MERCHANT_PRODUCTS, $maxProducts));
         $connection = self::requireConnection('google');
+        $checkpoint = self::checkpoint($context);
+        if ($checkpoint !== null) $checkpoint(true);
         $config = self::jsonObject($connection['config_json'] ?? null);
         $cursor = self::bounded((string)($config['merchant_cursor'] ?? ''), 2048);
         $accountCursor = self::bounded((string)($config['merchant_account_cursor'] ?? ''), 2048);
@@ -358,6 +390,7 @@ final class SearchInsightsService
         if (!$accountDone) {
             $pageToken = $accountCursor;
             do {
+                if ($checkpoint !== null) $checkpoint();
                 $query = [
                     'pageSize' => 100,
                     'languageCode' => $languageCode,
@@ -370,6 +403,7 @@ final class SearchInsightsService
                         . '/issues?' . http_build_query($query, '', '&', PHP_QUERY_RFC3986),
                     null
                 );
+                if ($checkpoint !== null) $checkpoint();
                 foreach (array_slice((array)($response['accountIssues'] ?? []), 0, 100) as $issue) {
                     if (!is_array($issue)) continue;
                     self::storeMerchantAccountIssue($accountId, $issue, $cycleStartedAt);
@@ -395,6 +429,7 @@ final class SearchInsightsService
         $issueListsTruncated = false;
         $nextToken = $cursor;
         do {
+            if ($checkpoint !== null) $checkpoint();
             $query = [
                 'pageSize' => min(20, $maxProducts - $productsScanned),
                 'fields' => 'products(offerId,productStatus(itemLevelIssues(code,severity,resolution,attribute,reportingContext,description,detail,documentation,applicableCountries))),nextPageToken',
@@ -406,6 +441,7 @@ final class SearchInsightsService
                     . '/products?' . http_build_query($query, '', '&', PHP_QUERY_RFC3986),
                 null
             );
+            if ($checkpoint !== null) $checkpoint();
             $products = array_slice((array)($response['products'] ?? []), 0, (int)$query['pageSize']);
             foreach ($products as $product) {
                 if (!is_array($product)) continue;
@@ -771,7 +807,7 @@ final class SearchInsightsService
         return self::pageResult($rows, $count, $page, $perPage);
     }
 
-    private static function syncSearchConsole(string $dateFrom, string $dateTo, array $startCursors = []): array
+    private static function syncSearchConsole(string $dateFrom, string $dateTo, array $startCursors = [], ?callable $checkpoint = null): array
     {
         $connection = self::requireGoogleConnected();
         $site = (string)$connection['property_id'];
@@ -793,6 +829,7 @@ final class SearchInsightsService
             $dimensionScanned = 0;
             $lastBatchFull = false;
             do {
+                if ($checkpoint !== null) $checkpoint();
                 $limit = min(250, $perDimensionLimit - $dimensionScanned);
                 if ($limit < 1) break;
                 $response = self::googleJson(
@@ -808,6 +845,7 @@ final class SearchInsightsService
                         'startRow' => $offset,
                     ]
                 );
+                if ($checkpoint !== null) $checkpoint();
                 $rows = is_array($response['rows'] ?? null) ? $response['rows'] : [];
                 $lastBatchFull = count($rows) === $limit;
                 $dimensionScanned += count($rows);
@@ -849,7 +887,7 @@ final class SearchInsightsService
         ];
     }
 
-    private static function syncGa4(string $dateFrom, string $dateTo, int $startOffset = 0): array
+    private static function syncGa4(string $dateFrom, string $dateTo, int $startOffset = 0, ?callable $checkpoint = null): array
     {
         $connection = self::requireGoogleConnected();
         $config = self::jsonObject($connection['config_json'] ?? null);
@@ -863,6 +901,7 @@ final class SearchInsightsService
         $scanned = 0;
         $lastBatchFull = false;
         do {
+            if ($checkpoint !== null) $checkpoint();
             $limit = min(500, self::MAX_SYNC_ROWS - $scanned);
             if ($limit < 1) break;
             $response = self::googleJson(
@@ -881,6 +920,7 @@ final class SearchInsightsService
                     'offset' => (string)$offset,
                 ]
             );
+            if ($checkpoint !== null) $checkpoint();
             $rows = is_array($response['rows'] ?? null) ? $response['rows'] : [];
             $lastBatchFull = count($rows) === $limit;
             $scanned += count($rows);
@@ -1201,6 +1241,29 @@ final class SearchInsightsService
     {
         $scopes = json_decode((string)($connection['scopes_json'] ?? ''), true);
         return is_array($scopes) && in_array($scope, $scopes, true);
+    }
+
+    /** @param array<string,mixed> $context */
+    private static function checkpoint(array $context): ?callable
+    {
+        $callback = $context['checkpoint'] ?? null;
+        return is_callable($callback) ? $callback : null;
+    }
+
+    /** 比较 Google OAuth 客户端配置，不记录明文；空 secret 表示沿用后台已有值。 */
+    private static function googleOAuthCredentialsChanged(array $existing, string $clientId, string $clientSecretInput): bool
+    {
+        if ($clientId !== trim((string)($existing['client_id'] ?? ''))) return true;
+        if ($clientSecretInput === '') return false;
+        try {
+            return !hash_equals(
+                self::decryptSecret((string)($existing['client_secret_envelope'] ?? '')),
+                $clientSecretInput
+            );
+        } catch (Throwable $_) {
+            // An unreadable envelope must not keep stale tokens attached to a new secret.
+            return true;
+        }
     }
 
     private static function encryptedSecret(string $plain, string $existing): string

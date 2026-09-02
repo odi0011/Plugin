@@ -455,10 +455,8 @@ final class SitemapPingActions
         if ($safe !== '') $urls[$safe] = $safe;
         try {
             if (!\App\Core\Setting::bool('multilingual_enabled', false)) return array_values($urls);
-            $parts = parse_url($url);
-            if (!is_array($parts)) return array_values($urls);
-            $source = (string)($parts['path'] ?? '/')
-                . (!empty($parts['query']) ? '?' . (string)$parts['query'] : '');
+            $source = self::localizationSource($url);
+            if ($source === '') return array_values($urls);
             foreach (\App\Core\LanguageService::enabledLanguages() as $language) {
                 $code = \App\Core\LanguageService::normalizeCode((string)($language['code'] ?? ''));
                 if ($code === '') continue;
@@ -468,6 +466,25 @@ final class SitemapPingActions
         } catch (\Throwable $_) {
         }
         return array_values($urls);
+    }
+
+    /** Strip the configured install directory before adding a language prefix. */
+    private static function localizationSource(string $url): string
+    {
+        $parts = parse_url($url);
+        if (!is_array($parts)) return '';
+        $path = (string)($parts['path'] ?? '/');
+        $basePath = trim((string)parse_url(function_exists('base_url') ? (string)base_url() : '', PHP_URL_PATH), '/');
+        if ($basePath !== '') {
+            $prefix = '/' . $basePath;
+            if ($path === $prefix) {
+                $path = '/';
+            } elseif (str_starts_with($path, $prefix . '/')) {
+                $path = substr($path, strlen($prefix)) ?: '/';
+            }
+        }
+        $path = '/' . ltrim($path, '/');
+        return $path . (!empty($parts['query']) ? '?' . (string)$parts['query'] : '');
     }
 
     private static function isPublished(array $record): bool

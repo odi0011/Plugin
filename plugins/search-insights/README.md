@@ -13,7 +13,7 @@
 - ChatGPT、Gemini、Perplexity、Copilot、Bing AI、Google AI Overview 的 GEO 引用观测与分页报告。
 - Google/Bing 站点验证 meta 标签。
 - 后台展示 URL Inspection 历史与 Merchant 账户/商品诊断，并支持分页、筛选和有界续跑。
-- 每 6 小时通过核心 automation worker 同步 Google 数据。
+- 每 6 小时通过核心 automation worker 同步 Google 数据；周期 worker 会在每个 GSC、GA4 与 Merchant 上游请求前后执行核心 checkpoint，续租并验证当前 run，避免 120 秒租约内出现重复并发执行。
 
 ## 三面对等
 
