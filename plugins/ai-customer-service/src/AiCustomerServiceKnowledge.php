@@ -18,6 +18,19 @@ final class AiCustomerServiceKnowledge
     private const MAX_TEXT_CHARS = 120000;
     private const MAX_FILES = 60;
 
+    /**
+     * 单个 zip 条目最多解出多少字节。
+     *
+     * docx 里的 XML 压缩比很高，4 MB 的包能合法地装几十 MB 正文；但同样的压缩比也让一个
+     * 全是零的 4 MB 包解出几个 GB，getFromName() 不给长度就会照单全收，直接把 PHP 的
+     * memory_limit 撑爆成 500。设得比 MAX_TEXT_CHARS 宽得多是有意的：标签开销远大于正文，
+     * 12 万字的重排版文档也就几 MB XML，这个上限只拦得住明显不可能有正文的量。
+     */
+    private const MAX_XML_BYTES = 16777216;
+
+    /** CJK 统一汉字 + 扩展 A：落在这个区间的按 2-gram 打散，其余按整词。 */
+    private const CJK = '\x{4E00}-\x{9FFF}\x{3400}-\x{4DBF}';
+
     /** 可抽取纯文本的扩展名。二进制格式只收 docx（zip+xml，可靠）与尽力而为的 pdf。 */
     public const ALLOWED_EXT = ['txt', 'md', 'markdown', 'csv', 'tsv', 'json', 'html', 'htm', 'xml', 'docx', 'pdf'];
 
@@ -184,7 +197,7 @@ final class AiCustomerServiceKnowledge
             if ($zip->open($tmp) !== true) return '';
             $xml = '';
             foreach (['word/document.xml', 'word/footnotes.xml'] as $entry) {
-                $part = $zip->getFromName($entry);
+                $part = $zip->getFromName($entry, self::MAX_XML_BYTES);
                 if (is_string($part)) $xml .= $part;
             }
             $zip->close();
@@ -626,19 +639,38 @@ final class AiCustomerServiceKnowledge
         $terms = [];
         foreach (preg_split('/[^\p{L}\p{N}]+/u', $question) ?: [] as $token) {
             if ($token === '') continue;
-            if (preg_match('/^[\x{4E00}-\x{9FFF}\x{3400}-\x{4DBF}]+$/u', $token) === 1) {
-                $length = mb_strlen($token);
-                if ($length === 1) { $terms[$token] = ($terms[$token] ?? 0) + 1; continue; }
-                for ($i = 0; $i < $length - 1; $i++) {
-                    $gram = mb_substr($token, $i, 2);
-                    $terms[$gram] = ($terms[$gram] ?? 0) + 2;
+            foreach (self::scriptRuns((string)$token) as $run) {
+                if (preg_match('/^[' . self::CJK . ']+$/u', $run) === 1) {
+                    $length = mb_strlen($run);
+                    if ($length === 1) { $terms[$run] = ($terms[$run] ?? 0) + 1; continue; }
+                    for ($i = 0; $i < $length - 1; $i++) {
+                        $gram = mb_substr($run, $i, 2);
+                        $terms[$gram] = ($terms[$gram] ?? 0) + 2;
+                    }
+                    continue;
                 }
-                continue;
+                if (mb_strlen($run) < 2) continue;
+                $terms[$run] = ($terms[$run] ?? 0) + 2;
             }
-            if (mb_strlen($token) < 2) continue;
-            $terms[$token] = ($terms[$token] ?? 0) + 2;
         }
         return array_slice($terms, 0, 64, true);
+    }
+
+    /**
+     * 把「M20防水吗」按文字切成 m20 / 防水吗 两段。
+     *
+     * 上面的 preg_split 只在非字母数字处断开，而汉字与拉丁字母同属 \p{L}，混在一个词里
+     * 不会被分开。整串既不算纯中文（不会打散成 2-gram），又被当成一个西文词整体拿去
+     * substr_count——正文里永远不会原样出现，命中数恒为 0，相关度挑选对这类问句等于没开
+     * （全部片段同分，顺序退化成候选顺序）。而中文站上「型号 + 中文谓语、中间不打空格」
+     * 恰恰是最常见的问法。切开之后与「M20 防水吗」得到完全相同的一组词。
+     *
+     * @return list<string>
+     */
+    private static function scriptRuns(string $token): array
+    {
+        $found = preg_match_all('/[' . self::CJK . ']+|[^' . self::CJK . ']+/u', $token, $matches);
+        return $found ? $matches[0] : [$token];
     }
 
     private static function score(string $text, array $terms): float

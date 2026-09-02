@@ -142,6 +142,19 @@ final class AiCustomerServiceTools
      */
     public static function execute(string $name, array $arguments, array $config): array
     {
+        // 站长关掉的工具一律不执行。definitions() 不会把它发给模型，但这里是**按名字分发**的：
+        // 模型完全可能从历史里的旧 tool_calls 学到一个名字再喊一次（关掉开关之前的会话就留在
+        // 上下文里），也有厂商会在没给 tools 时凭记忆吐 tool_calls。下面自定义工具那一支一直
+        // 在查 enabled，八个内置工具漏了同一道检查——症状是「开关明明关了，卡片还是会冒出来」。
+        // 回的话术与「没有这个工具」完全一致：不该让访客那侧的模型推断出站点关了哪些开关。
+        // 名字取自 BUILTIN_TOOL_DEFAULTS 而不是配置里的那份：配置残缺时按「没开」处理，
+        // 而不是按「不是内置工具」放过去——show_owner_card / show_social_links 默认就是关的。
+        if (empty($config['tools_enabled'])) return self::unknownTool();
+        $builtin = is_array($config['tools']['builtin'] ?? null) ? $config['tools']['builtin'] : [];
+        if (array_key_exists($name, AiCustomerService::BUILTIN_TOOL_DEFAULTS) && empty($builtin[$name])) {
+            return self::unknownTool();
+        }
+
         $keyword = AiCustomerService::text($arguments['keyword'] ?? '', 60, '');
         $limit = AiCustomerService::int($arguments['limit'] ?? 3, 1, 6, 3);
 
@@ -189,6 +202,12 @@ final class AiCustomerServiceTools
                 (string)$tool['card']
             );
         }
+        return self::unknownTool();
+    }
+
+    /** @return array{text:string,card:array<string,mixed>|null} 名字不认识、或这个工具被关掉了。 */
+    private static function unknownTool(): array
+    {
         return ['text' => '没有这个工具，请直接用文字回答。', 'card' => null];
     }
 

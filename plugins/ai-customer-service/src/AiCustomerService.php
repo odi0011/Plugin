@@ -16,7 +16,7 @@ declare(strict_types=1);
 final class AiCustomerService
 {
     public const SLUG = 'ai-customer-service';
-    public const VERSION = '1.5.2';
+    public const VERSION = '1.5.3';
 
     private const SESSION_KEY = '_ai_customer_service';
     private const CONVERSATION_TTL = 21600;

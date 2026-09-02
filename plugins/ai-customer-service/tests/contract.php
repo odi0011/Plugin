@@ -981,6 +981,63 @@ foreach ($rows as $row) {
         . ($declaredColor === null ? '（该字段未声明）' : (string)$declaredColor));
 }
 
+/* ------------------------------------------------------------ 1.5.3：静默退化
+ * 这一组的共同点是"功能还在，只是悄悄不起作用了"——不报错、不写日志、页面全绿，
+ * 站长看到的只是"效果不对"或"开关没用"，而没有任何东西指向出错的那一行。 */
+
+/* ① 中西混排的问句必须先按文字切段再打分。上面的 preg_split 只在非字母数字处断开，而
+ * 汉字与拉丁字母同属 \p{L}，「M20防水吗」会整串留下：既不算纯中文（不打散成 2-gram），
+ * 又被当成一个西文词整体拿去 substr_count——正文里永远不会原样出现，命中数恒为 0。
+ * 于是所有片段同分，"按相关度挑"退化成"按候选顺序挑"。而"型号 + 中文谓语、中间不打
+ * 空格"恰好是中文站最常见的问法，这一路不通等于相关度策略对半数问句没开。 */
+$termsBody = '';
+if (preg_match('/function terms\(string \$question\): array\s*\{(.+?)\n    \}/s', $knowledge, $termsMatch)) {
+    $termsBody = $termsMatch[1];
+}
+$assert($termsBody !== '', '找不到 terms() 的定义');
+if ($termsBody !== '') {
+    $assert(str_contains($termsBody, 'self::scriptRuns('),
+        'terms() 必须先把词切成中文段/西文段再分别处理，否则「M20防水吗」这类问句命中数恒为 0');
+    $assert(!str_contains($termsBody, '$token) === 1'),
+        '中文判定不能落在整个 token 上：混排的词两边都不占，直接掉进"整词匹配"的死路');
+}
+$assert(str_contains($knowledge, 'private static function scriptRuns(string $token): array'),
+    '缺少 scriptRuns()：混排词的切分必须是一处独立可读的逻辑');
+$assert(substr_count($knowledge, '\x{4E00}') === 1,
+    '汉字区间只能写在 CJK 常量里：两处正则各抄一遍，改一处漏一处的症状是"有的问句能命中、有的不能"');
+
+/* ② 站长关掉的工具不得执行。definitions() 做的只是"不把它发给模型"，而 execute() 是
+ * **按名字分发**的：模型会从历史里的旧 tool_calls 学到名字再喊一次（关开关之前的会话
+ * 就留在上下文里），也有厂商在没给 tools 时凭记忆吐 tool_calls。自定义工具那一支一直
+ * 查 enabled，八个内置工具漏了同一道检查——症状是"开关明明关了，卡片还是会冒出来"。 */
+$executeBody = '';
+if (preg_match('/function execute\(string \$name, array \$arguments, array \$config\): array\s*\{(.+?)\n    \}/s', $tools, $execMatch)) {
+    $executeBody = $execMatch[1];
+}
+$assert($executeBody !== '', '找不到 execute() 的定义');
+if ($executeBody !== '') {
+    $assert(str_contains($executeBody, "empty(\$config['tools_enabled'])"),
+        'execute() 必须先看工具总开关：关掉之后模型仍可能从历史里喊出工具名');
+    $assert(str_contains($executeBody, 'array_key_exists($name, AiCustomerService::BUILTIN_TOOL_DEFAULTS)'),
+        '内置工具必须按名字查 enabled 映射：下面那八个 if 分支自己完全不认这个开关。'
+        . '名单要取自 BUILTIN_TOOL_DEFAULTS 而不是配置里的那份——配置残缺时得按"没开"处理');
+    $switchAt = strpos($executeBody, "\$config['tools_enabled']");
+    $firstBranch = strpos($executeBody, "\$name === 'recommend_products'");
+    $assert($switchAt !== false && $firstBranch !== false && $switchAt < $firstBranch,
+        '开关检查必须排在所有分发分支之前，否则第一个 if 就已经把结果返回了');
+    $assert(substr_count($executeBody, 'self::unknownTool()') === 3,
+        '三条拒绝路径（总开关关、内置开关关、名字不认识）必须回同一句话：'
+        . '话术有差别，模型就能反推出站点关掉了哪些开关');
+}
+
+/* ③ zip 条目必须限长读取。getFromName() 不给长度就照单全收，而 docx 里的 XML 压缩比
+ * 很高：一个 4 MB 的包能解出几个 GB，直接撑爆 memory_limit 变成 500。上层的
+ * MAX_TEXT_CHARS 是**抽完之后**才截的，拦不住解压这一步。 */
+$assert(str_contains($knowledge, 'getFromName($entry, self::MAX_XML_BYTES)'),
+    'docx 的 zip 条目必须限长读取：MAX_TEXT_CHARS 是抽完才截的，拦不住解压这一步');
+$assert(!str_contains($knowledge, 'getFromName($entry)'),
+    'getFromName() 不带长度参数等于不设上限');
+
 // README 承诺
 foreach (['描述词', '资料', '工具', '卡片', '边界', '表情'] as $topic) {
     $assert(str_contains($readme, $topic), 'README 必须说明「' . $topic . '」');
@@ -992,4 +1049,4 @@ if ($failures !== []) {
     foreach ($failures as $failure) echo ' - ' . $failure . "\n";
     exit(1);
 }
-echo "AI客服插件契约通过（设置声明 / 容量 / 密钥边界 / 工具与卡片 / 默认值四方对齐 / 三条回归）。\n";
+echo "AI客服插件契约通过（设置声明 / 容量 / 密钥边界 / 工具与卡片 / 默认值四方对齐 / 静默退化）。\n";
