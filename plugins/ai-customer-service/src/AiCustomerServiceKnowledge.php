@@ -158,8 +158,6 @@ final class AiCustomerServiceKnowledge
         };
     }
 
-    // ACS_MARKER_EXTRACT
-
     // ---------------------------------------------------------------- 文本抽取
 
     private static function extractText(string $raw, string $ext): string
@@ -277,8 +275,6 @@ final class AiCustomerServiceKnowledge
         $text = (string)preg_replace('/\n{3,}/u', "\n\n", $text);
         return trim($text);
     }
-
-    // ACS_MARKER_SOURCES
 
     // ---------------------------------------------------------------- 站内内容来源
 
@@ -453,8 +449,6 @@ final class AiCustomerServiceKnowledge
             return '';
         }
     }
-
-    // ACS_MARKER_RETRIEVE
 
     // ---------------------------------------------------------------- 检索与拼装
 

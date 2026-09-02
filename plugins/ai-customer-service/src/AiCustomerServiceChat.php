@@ -148,8 +148,6 @@ final class AiCustomerServiceChat
         return max(0, min((int)$ip['remaining'], (int)$session['remaining']));
     }
 
-    // ACS_MARKER_CONVERSE
-
     /**
      * 一次完整的问答：建消息 → 调模型 → 有工具调用就执行并续写 → 收集卡片。
      *
@@ -246,8 +244,6 @@ final class AiCustomerServiceChat
         $messages[] = ['role' => 'user', 'content' => $message];
         return $messages;
     }
-
-    // ACS_MARKER_PROVIDER
 
     /**
      * 统一的模型调用出口，两种来源同一个返回形状。
@@ -384,8 +380,6 @@ final class AiCustomerServiceChat
         }
         return $out;
     }
-
-    // ACS_MARKER_ACTION
 
     // ---------------------------------------------------------------- 访客动作
 

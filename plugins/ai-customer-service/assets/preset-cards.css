@@ -139,8 +139,6 @@
     letter-spacing: .02em;
 }
 
-/* ACS_MARKER_PRESET_2 */
-
 /* --------------------------------------------------------------------------
    二、涂鸦名片 card —— 站长名片的 doodle 预设
    原文 .card / .doodle / .card-photo / .card-title / .card-socials 及全部
@@ -244,8 +242,6 @@
     opacity: 0.6;
     animation: acsRotateDoodle 15s linear infinite;
 }
-
-/* ACS_MARKER_PRESET_3 */
 
 /* --- AVATAR / PHOTO --- */
 .acs-doodle-photo {
@@ -352,8 +348,6 @@
     opacity: .85;
     z-index: 2;
 }
-
-/* ACS_MARKER_PRESET_4 */
 
 /* --- SOCIAL BUTTONS --- */
 .acs-doodle-socials {

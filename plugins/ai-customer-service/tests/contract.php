@@ -81,8 +81,6 @@ foreach ($fields as $entry) {
 }
 $assert($colorCount === 10, "README 承诺十个独立颜色，声明里实际 {$colorCount} 个");
 
-// ACS_MARKER_TEST_1
-
 // ------------------------------------------------------------------ TEXT 容量
 // settings.value 是 MySQL TEXT = 65535 字节；中文按 UTF-8 3 字节算，声明的
 // max_length 最坏情况不能溢出，否则会静默截断成坏 JSON。
@@ -163,8 +161,6 @@ $assert(!preg_match('/private static function value\(/', $service),
     'config() 不应再有逐 key 的 value() 包装（那会让核心把清单解析并全量校验 N 遍）');
 $assert(str_contains($service, "PluginSettingsService::values(self::SLUG)['values']"), 'config() 必须一次性读全部值');
 $assert(str_contains($service, 'private static ?array $configCache'), '缺少单请求配置缓存');
-
-// ACS_MARKER_TEST_2
 
 // 逐页保存互锁回归：核心对留空的 number 字段会写空串且不查 min，回读又变成 0.0，
 // 于是在 A 页清空一个 min>0 的数字框会让另外几页全部存不进去。修法是回填前先自愈。

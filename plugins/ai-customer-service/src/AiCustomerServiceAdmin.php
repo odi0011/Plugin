@@ -152,8 +152,6 @@ final class AiCustomerServiceAdmin
         return $out;
     }
 
-    // ACS_MARKER_ADMIN2
-
     // ---------------------------------------------------------------- 站内内容检索
 
     private static function contentSearch(): void

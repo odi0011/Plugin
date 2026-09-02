@@ -512,8 +512,6 @@
 .acs-launcher.acs-fx--bounce { animation: acs-bounce 3.4s infinite ease-in-out; }
 .acs-launcher.acs-fx--pulse { animation: acs-pulse 2s infinite ease-out; }
 
-/* ACS_MARKER_W2 */
-
 /* ------------------------------------------------------------------ 悬停提示与引流气泡 */
 
 .acs-tooltip {
@@ -713,8 +711,6 @@
 }
 .acs-channel.acs-social-copied { color: var(--acs-accent); }
 
-/* ACS_MARKER_W3 */
-
 /* ------------------------------------------------------------------ 面板外壳 */
 
 .acs-panel {
@@ -819,8 +815,6 @@
 }
 /* 长文案/长连续字符不能把面板撑破 */
 .acs-away-text { min-width: 0; overflow-wrap: anywhere; }
-
-/* ACS_MARKER_W4 */
 
 /* ------------------------------------------------------------------ 顶栏
  * Beautiful UI 的头部很轻：标题一行、状态一行小字、右侧图标按钮，靠 1px 描边分隔，
@@ -930,8 +924,6 @@
 }
 .acs-icon-btn:hover { background: color-mix(in srgb, currentColor 14%, transparent); opacity: 1; }
 .acs-icon-btn:focus-visible { outline: 2px solid currentColor; outline-offset: 1px; }
-
-/* ACS_MARKER_W5 */
 
 /* ------------------------------------------------------------------ 会话区
  * Beautiful UI 的一轮回复是一个 turn 容器：工具 chip → 推理行 → 正文 → 卡片，
@@ -1163,8 +1155,6 @@
 .acs-anim--pop .acs-message { animation: acs-pop var(--acs-dur-2) var(--acs-spring); }
 .acs-anim--fade .acs-message { animation: acs-fade var(--acs-dur-3) var(--acs-ease); }
 
-/* ACS_MARKER_W6 */
-
 /* ------------------------------------------------------------------ 工具 chip
  * Beautiful UI 的 Tool Chips：一条胶囊，左边一个状态点，中间动作名，右边计数/状态。
  * 它表达"我做了什么"，所以不该长成又一个气泡。 */
@@ -1240,8 +1230,6 @@
 .acs-typing--text i { display: none; }
 .acs-typing--text span { animation: acs-breathe 1.4s infinite alternate ease-in-out; }
 @keyframes acs-breathe { from { opacity: .5; } to { opacity: 1; } }
-
-/* ACS_MARKER_W7 */
 
 /* ------------------------------------------------------------------ 内容卡
  * Beautiful UI 的 Recommendation Card：行式，左缩略图、中标题+元信息、右动作，
@@ -1363,8 +1351,6 @@
 .acs-card-items.is-grid .acs-item { grid-template-columns: 34px minmax(0, 1fr); gap: 8px; }
 .acs-card-items.is-grid .acs-item-thumb { width: 34px; height: 34px; font-size: 14px; }
 .acs-card-items.is-grid .acs-item-summary { display: none; }
-
-/* ACS_MARKER_W8 */
 
 /* ------------------------------------------------------------------ 表单卡 / 转人工卡 */
 
@@ -1532,8 +1518,6 @@
     font-size: var(--acs-fs-sm);
     line-height: var(--acs-lh-sm);
 }
-
-/* ACS_MARKER_W9 */
 
 /* ------------------------------------------------------------------ 同意确认
  * 挡在输入区前面的一块：勾了才解锁输入框。放在 composer 上方而不是盖住整个面板，
@@ -1728,8 +1712,6 @@
 .acs-send:focus-visible { outline: 2px solid var(--acs-accent); outline-offset: 2px; }
 .acs-send:disabled { cursor: wait; opacity: .55; }
 
-/* ACS_MARKER_W10 */
-
 /* ------------------------------------------------------------------ emoji / 表情包面板 */
 
 .acs-picker {
@@ -1896,8 +1878,6 @@
     border-bottom-style: dashed;
     border-bottom-color: color-mix(in srgb, var(--acs-text) 22%, transparent);
 }
-
-/* ACS_MARKER_W11 */
 
 /* ------------------------------------------------------------------ 移动端 */
 

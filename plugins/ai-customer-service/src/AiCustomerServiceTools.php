@@ -132,8 +132,6 @@ final class AiCustomerServiceTools
         return $out;
     }
 
-    // ACS_MARKER_EXECUTE
-
     /**
      * 执行一次工具调用。
      *

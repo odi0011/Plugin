@@ -105,8 +105,6 @@
         return true;
     }
 
-    /* ACS_MARKER_JS_1 */
-
     /* JSON 字段：隐藏 textarea 是唯一的真相来源，面板读它、改它。
      * 本页没有这个 textarea 时（比如在"会话内容"页画预览要用 theme_json），
      * 回落到服务端归一化后的同名结构，只读。 */
@@ -232,8 +230,6 @@
         area.addEventListener('input', render);
         render();
     });
-
-    /* ACS_MARKER_JS_2 */
 
     // 颜色：hex 输入框与色板
     var SWATCHES = [
@@ -367,8 +363,6 @@
             }
         });
     }
-
-    /* ACS_MARKER_JS_3 */
 
     /* ---- 预设主题：点一下把一整组字段值写进表单（保存才落库） ---- */
 
@@ -566,8 +560,6 @@
         toast('已按背景亮度配好文字颜色');
     }
 
-    /* ACS_MARKER_JS_4 */
-
     /* 通用：一组分段选择器，绑到某个 JSON 字段的某个键上 */
     function segmented(jsonKey, path, label, options, afterChange) {
         var data = readJson(jsonKey, {});
@@ -662,8 +654,6 @@
         host.appendChild(grid);
         host.appendChild(el('p', 'acs-a-help', '右侧预览打开「拖拽定位」即可直接拖动。'));
     };
-
-    /* ACS_MARKER_JS_5 */
 
     /* 通用：可增删的行列表编辑器 */
     function listEditor(options) {
@@ -1025,8 +1015,6 @@
         host.appendChild(wrap);
     };
 
-    /* ACS_MARKER_JS_6 */
-
     /* ---- 资料柜：文件夹卡（点击展开）+ 上传 + 站内内容挑选 ---- */
     PANELS.knowledge = function (host) {
         var knowledge = readJson('knowledge_json', { sources: [], files: [], auto: {} });
@@ -1238,8 +1226,6 @@
         return svg;
     }
 
-    /* ACS_MARKER_JS_7 */
-
     function humanBytes(bytes) {
         bytes = Number(bytes) || 0;
         if (bytes < 1024) return bytes + ' B';
@@ -1447,8 +1433,6 @@
         return box;
     }
 
-    /* ACS_MARKER_JS_8 */
-
     /* ---- 内置工具开关 ---- */
     PANELS.tools = function (host) {
         var tools = readJson('tools_json', { builtin: {}, custom: [] });
@@ -1577,8 +1561,6 @@
             }
         }));
     };
-
-    /* ACS_MARKER_JS_9 */
 
     /* 通用小控件工厂（面板里的字段不是声明式字段，所以自己造） */
     function labelled(text, control) {
@@ -1753,8 +1735,6 @@
         host.appendChild(grid);
     };
 
-    /* ACS_MARKER_JS_10 */
-
     /* ---- 站长名片 ---- */
     // 每个平台的"值"字段叫什么、示例填什么。链接类走默认，只列需要区别对待的。
     var SOCIAL_VALUE_LABEL = {
@@ -1894,8 +1874,6 @@
         }, function (v) { rules.language = v; save(); }));
         host.appendChild(extra);
     };
-
-    /* ACS_MARKER_JS_11 */
 
     /* ---- 意图事件 ---- */
     PANELS.events = function (host) {
@@ -2091,8 +2069,6 @@
         host.appendChild(packBox);
     };
 
-    /* ACS_MARKER_JS_12 */
-
     /* ---------------------------------------------------------------- 实时预览
      * 预览节点是 AiCustomerService::previewMarkup() 输出的**前台真实标记**，样式也是
      * 前台那两份 CSS。所以这里不"画"任何东西，只做三件事：
@@ -2181,8 +2157,6 @@
         syncVisibility(w);
         fitStage(w);
     }
-
-    /* ACS_MARKER_PV2 */
 
     /** 换掉同前缀的修饰类，只留一个。 */
     function swapClass(node, prefix, value) {
@@ -2357,8 +2331,6 @@
         pv.stage.classList.toggle('is-mobile', pv.device === 'mobile');
     }
 
-    /* ACS_MARKER_PV3 */
-
     /* ---------------------------------------------------------------- 拖拽定位
      * 拖浮标改的是真实的边距字段；拖引流气泡/飘带/角标改 layout_json 的偏移。
      * 拖完就是保存前的真实值，不存在预览与前台两套坐标。 */
@@ -2433,8 +2405,6 @@
             });
         });
     }
-
-    /* ACS_MARKER_JS_14 */
 
     /* ---------------------------------------------------------------- 启动 */
 

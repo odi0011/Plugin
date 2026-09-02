@@ -139,7 +139,6 @@ final class AiCustomerService
             'schedule_end' => self::timeValue((string)$get('schedule_end', ''), '23:59'),
             'experience' => self::normalizeExperience(self::json($get('experience_json', ''), self::defaultExperience())),
             'targeting' => self::normalizeTargeting(self::json($get('targeting_json', ''), self::defaultTargeting())),
-    // ACS_MARKER_CONFIG2
             'theme' => self::normalizeTheme($theme),
             'layout' => self::normalizeLayout($layout),
             'font_family' => self::choice($get('font_family', ''), array_keys(self::FONT_STACKS), 'system'),
@@ -209,8 +208,6 @@ final class AiCustomerService
         self::$configCache = $config;
         return $config;
     }
-
-    // ACS_MARKER_CONFIG
 
     /** 界面字体候选。值是 CSS font-family，前台按 --acs-font-family 注入。 */
     public const FONT_STACKS = [
@@ -311,8 +308,6 @@ final class AiCustomerService
             ]],
         ];
     }
-
-    // ACS_MARKER_DEFAULTS
 
     // ---------------------------------------------------------------- JSON 默认结构
 
@@ -450,8 +445,6 @@ final class AiCustomerService
             'text' => '我同意本站按隐私政策处理我在对话中提交的信息。',
             'link_label' => '隐私政策', 'link_url' => '', 'button' => '同意并开始'];
     }
-
-    // ACS_MARKER_NORMALIZE
 
     // ---------------------------------------------------------------- JSON 归一化
 
@@ -644,8 +637,6 @@ final class AiCustomerService
         ];
     }
 
-    // ACS_MARKER_NORMALIZE2
-
     private static function normalizeTools(array $tools): array
     {
         $builtinRaw = is_array($tools['builtin'] ?? null) ? $tools['builtin'] : [];
@@ -791,8 +782,6 @@ final class AiCustomerService
         ];
     }
 
-    // ACS_MARKER_NORMALIZE3
-
     private static function normalizeGuardrails(array $rules): array
     {
         $bucket = static fn (mixed $value, int $count, int $length): array => array_values(array_filter(
@@ -864,8 +853,6 @@ final class AiCustomerService
         if (!is_array($value)) return [];
         return array_slice(array_values($value), 0, $max);
     }
-
-    // ACS_MARKER_SAVE
 
     // ---------------------------------------------------------------- 后台保存
 
@@ -980,8 +967,6 @@ final class AiCustomerService
         return ['ok' => true, 'message' => $message];
     }
 
-    // ACS_MARKER_REPAIR
-
     /**
      * 把库中现值修回「一定能过核心校验」的值。
      *
@@ -1088,8 +1073,6 @@ final class AiCustomerService
         $raw = isset($_POST['acs_return_page']) && is_string($_POST['acs_return_page']) ? trim($_POST['acs_return_page']) : '';
         return array_key_exists($raw, self::ADMIN_PAGES) ? $raw : 'conversation';
     }
-
-    // ACS_MARKER_KEY
 
     // ---------------------------------------------------------------- 独立接口密钥
 
@@ -1287,8 +1270,6 @@ final class AiCustomerService
         return array_values(array_filter($stashed, static fn ($k): bool => is_string($k) && $k !== ''));
     }
 
-    // ACS_MARKER_RENDER
-
     // ---------------------------------------------------------------- 前台渲染
 
     public static function renderWidget(): void
@@ -1392,8 +1373,6 @@ final class AiCustomerService
         foreach ($pairs as $name => $value) $out[] = $name . ':' . $value;
         return implode(';', $out);
     }
-
-    // ACS_MARKER_MARKUP
 
     private static function launcherMarkup(array $config): string
     {
@@ -1613,8 +1592,6 @@ final class AiCustomerService
             default => 'bi-chat-dots-fill',
         };
     }
-
-    // ACS_MARKER_PUBLIC
 
     /**
      * 后台实时预览的标记。
@@ -1995,8 +1972,6 @@ final class AiCustomerService
         }
         return ['key' => $page, 'label' => self::ADMIN_PAGES[$page][0] ?? $page, 'description' => '', 'fields' => []];
     }
-
-    // ACS_MARKER_HELPERS
 
     // ---------------------------------------------------------------- 显示规则
 

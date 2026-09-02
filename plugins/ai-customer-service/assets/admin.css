@@ -65,8 +65,6 @@
 .acs-a-title p { margin: 2px 0 0; color: var(--acs-text-3); font-size: 13px; }
 .acs-a-header-right { display: flex; align-items: center; gap: 8px; }
 
-/* ACS_MARKER_CSS_1 */
-
 .acs-a-badge,
 .acs-a-tag,
 .acs-a-chip {
@@ -149,8 +147,6 @@
     background: var(--acs-primary);
     transition: transform .28s cubic-bezier(.645, .045, .355, 1), width .28s cubic-bezier(.645, .045, .355, 1);
 }
-
-/* ACS_MARKER_CSS_2 */
 
 /* ------------------------------------------------------------------ 布局 */
 
@@ -243,8 +239,6 @@
 }
 .acs-a-textarea { min-height: 88px; padding: 7px 11px; resize: vertical; line-height: 1.6; }
 .acs-a-count { display: block; margin-top: 4px; color: var(--acs-text-3); font-size: 12px; text-align: right; }
-
-/* ACS_MARKER_CSS_3 */
 
 /* Select */
 .acs-a-select { position: relative; }
@@ -343,8 +337,6 @@
 }
 .acs-a-slider:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px var(--acs-primary-soft); outline: 0; }
 
-/* ACS_MARKER_CSS_4 */
-
 /* Switch */
 .acs-a-switch {
     display: inline-flex;
@@ -431,8 +423,6 @@
 }
 .acs-a-swatch:hover { transform: scale(1.18); }
 .acs-a-swatch.is-active { box-shadow: 0 0 0 2px var(--acs-primary); }
-
-/* ACS_MARKER_CSS_5 */
 
 /* Button */
 .acs-a-btn {
@@ -548,8 +538,6 @@
     background: var(--acs-bg-sub);
 }
 .acs-a-media-thumb img { width: 100%; height: 100%; object-fit: cover; }
-
-/* ACS_MARKER_CSS_6 */
 
 /* ------------------------------------------------------------------ 预设主题画廊 */
 
@@ -922,8 +910,6 @@
     border-radius: 10px;
 }
 
-/* ACS_MARKER_FOLDER_2 */
-
 /* this counts files  */
 .acs-counter {
     position: absolute;
@@ -1012,8 +998,6 @@
     color: #60a5fa;
     transition: color 0.3s ease;
 }
-
-/* ACS_MARKER_FOLDER_3 */
 
 /* files with <hidden secrects /> */
 .acs-file {
@@ -1116,8 +1100,6 @@
 .acs-folder-toggle:checked ~ .acs-folder-container .acs-file-5 {
     transform: translateY(-10px) rotate(-5deg);
 }
-
-/* ACS_MARKER_FOLDER_4 */
 
 /*  Hover Interaction */
 .acs-folder-toggle:checked ~ .acs-folder-container .acs-file:hover {
@@ -1287,8 +1269,6 @@
     text-align: center;
 }
 
-/* ACS_MARKER_CSS_9 */
-
 /* ------------------------------------------------------------------ 标签输入 / 工具 / 事件 */
 
 .acs-a-tags {
@@ -1387,8 +1367,6 @@
     cursor: pointer;
     font-size: 9px;
 }
-
-/* ACS_MARKER_CSS_10 */
 
 /* ------------------------------------------------------------------ 实时预览
  * 预览渲染的是前台真实标记 + 前台真实样式（customer-service.css / preset-cards.css
