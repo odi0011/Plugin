@@ -1,10 +1,10 @@
 {
     "schema_version": 1,
-    "generated_at": "2026-09-02T03:37:24Z",
+    "generated_at": "2026-09-02T06:24:34Z",
     "source": {
         "type": "github-static",
         "repo": "odi0011/Plugin",
-        "commit": "e29d1a3"
+        "commit": "5151a8c943d91fcc158eb9b8e920668ba2768925"
     },
     "core_api": {
         "min": 1,
@@ -130,7 +130,7 @@
             "slug": "agent-link-auditor",
             "namespace": "",
             "name": "Agent 内链体检",
-            "version": "1.0.0",
+            "version": "1.1.0",
             "description": "只读 Agent 动作示例：扫描已发布页面与文章正文里的站内链接，找出指向不存在 slug 的死链，并把结果作为可搜索资源类型暴露给 Agent。演示只读动作 + 资源类型 loader 的完整写法。",
             "category": "seo",
             "tags": [
@@ -139,12 +139,12 @@
                 "死链",
                 "只读"
             ],
-            "icon": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@4795059b668fa4af4980b72db7f32c63c7b56ec2/plugins/agent-link-auditor/icon.svg",
+            "icon": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@7ebd489a3ed992a078edefd05179a3ff88996aef/plugins/agent-link-auditor/icon.svg",
             "author": {
                 "name": "odi0011"
             },
             "homepage": "",
-            "requires_core": "7i",
+            "requires_core": "7k",
             "requires_php": "8.0",
             "api_version": 1,
             "dependencies": [],
@@ -169,7 +169,9 @@
                         "mutates": false,
                         "params": [
                             "limit",
-                            "types"
+                            "types",
+                            "page",
+                            "per_page"
                         ],
                         "required_permissions": [
                             "agent_link_audit.view"
@@ -177,12 +179,12 @@
                     }
                 ]
             },
-            "published_at": "2026-08-21T12:08:16Z",
+            "published_at": "2026-09-02T06:23:32Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@7430d78/dist/agent-link-auditor-1.0.0.zip",
-                "sha256": "f71de86290b0e40cafebfa016a132e0b25bba9013f1cad7df224f9b7f2e8a83b",
-                "size_bytes": 6225
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@7ebd489a3ed992a078edefd05179a3ff88996aef/dist/agent-link-auditor-1.1.0.zip",
+                "sha256": "731a0f8ed4befc378cc09d3817991b4e434c00313e2dd72271547485eafd9942",
+                "size_bytes": 10243
             },
             "license": {
                 "type": "free"
@@ -192,7 +194,7 @@
             "slug": "agent-run-digest",
             "namespace": "",
             "name": "Agent 运行摘要",
-            "version": "1.0.0",
+            "version": "1.0.1",
             "description": "Agent 生命周期事件落库 + 只读摘要示例：监听 agent.run.completed / agent.run.failed，把每次运行落进插件自建表，提供按天聚合的成功率摘要（Agent 只读动作 + 后台页面），并自动清理超期记录。",
             "category": "developer",
             "tags": [
@@ -201,7 +203,7 @@
                 "统计",
                 "后台页面"
             ],
-            "icon": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@4795059b668fa4af4980b72db7f32c63c7b56ec2/plugins/agent-run-digest/icon.svg",
+            "icon": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@7ebd489a3ed992a078edefd05179a3ff88996aef/plugins/agent-run-digest/icon.svg",
             "author": {
                 "name": "odi0011"
             },
@@ -238,12 +240,12 @@
                     }
                 ]
             },
-            "published_at": "2026-08-21T12:08:16Z",
-            "changelog": "",
+            "published_at": "2026-09-02T06:23:33Z",
+            "changelog": "修复自定义表前缀下的插件迁移。",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@7430d78/dist/agent-run-digest-1.0.0.zip",
-                "sha256": "5e5a173a541d80ad1795935fd106f34412e0391b0265feac9b42574a21a1d933",
-                "size_bytes": 8151
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@7ebd489a3ed992a078edefd05179a3ff88996aef/dist/agent-run-digest-1.0.1.zip",
+                "sha256": "a57c2f351673881c0bb495e67d47d0116ddc90d3b7c7b11b200e2e330a5ff903",
+                "size_bytes": 8257
             },
             "license": {
                 "type": "free"
@@ -312,8 +314,8 @@
             "slug": "agent-seo-snapshot",
             "namespace": "",
             "name": "Agent SEO 体检快照",
-            "version": "1.0.0",
-            "description": "只读 Agent 动作 + 委派角色示例：统计页面/文章/产品的 SEO 字段完整度（标题、描述、关键词、OG、canonical），按内容类型给出缺失清单与得分，并注册一个「SEO 体检」委派角色供子智能体使用。",
+            "version": "1.1.0",
+            "description": "只读 Agent 动作：按前台实际 fallback 口径分页统计页面、文章、产品的有效 SEO 输出，并注册「SEO 体检」委派角色。",
             "category": "seo",
             "tags": [
                 "agent",
@@ -321,12 +323,12 @@
                 "委派角色",
                 "只读"
             ],
-            "icon": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@4795059b668fa4af4980b72db7f32c63c7b56ec2/plugins/agent-seo-snapshot/icon.svg",
+            "icon": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@7ebd489a3ed992a078edefd05179a3ff88996aef/plugins/agent-seo-snapshot/icon.svg",
             "author": {
                 "name": "odi0011"
             },
             "homepage": "",
-            "requires_core": "7i",
+            "requires_core": "7k",
             "requires_php": "8.0",
             "api_version": 1,
             "dependencies": [],
@@ -344,13 +346,16 @@
                     {
                         "id": "snapshot",
                         "label": "SEO 字段完整度快照",
-                        "description": "只读统计各内容类型的 SEO 字段完整度，返回缺失计数、完整度百分比与缺失最严重的条目清单。",
+                        "description": "按前台实际 fallback 口径分页统计有效 SEO 输出，返回缺失计数、完整度与优先处理清单。",
                         "module": "seo_snapshot",
                         "operation": "read",
                         "risk": "low",
                         "mutates": false,
                         "params": [
                             "type",
+                            "status",
+                            "page",
+                            "per_page",
                             "limit"
                         ],
                         "required_permissions": [
@@ -359,12 +364,12 @@
                     }
                 ]
             },
-            "published_at": "2026-08-21T12:08:16Z",
+            "published_at": "2026-09-02T06:23:34Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@7430d78/dist/agent-seo-snapshot-1.0.0.zip",
-                "sha256": "b99b2fc9b4855262dac9597ea832d42f0354624466fdf21699cb9942985243f2",
-                "size_bytes": 4882
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@7ebd489a3ed992a078edefd05179a3ff88996aef/dist/agent-seo-snapshot-1.1.0.zip",
+                "sha256": "012ce885e1acbff94284253c04547211af27b59e0c0dc399f75fffae4cde700b",
+                "size_bytes": 6940
             },
             "license": {
                 "type": "free"
@@ -374,7 +379,7 @@
             "slug": "agent-task-ledger",
             "namespace": "",
             "name": "Agent 任务台账",
-            "version": "1.0.1",
+            "version": "1.0.2",
             "description": "写动作示例插件：Agent 可把本轮结论记入插件自建的台账表（写动作走审批），也可只读查询历史条目。演示插件级数据库迁移与 Agent 写动作契约。",
             "category": "developer",
             "tags": [
@@ -383,7 +388,7 @@
                 "写动作",
                 "migration"
             ],
-            "icon": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@4795059b668fa4af4980b72db7f32c63c7b56ec2/plugins/agent-task-ledger/icon.svg",
+            "icon": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@7ebd489a3ed992a078edefd05179a3ff88996aef/plugins/agent-task-ledger/icon.svg",
             "author": {
                 "name": "odi0011"
             },
@@ -442,12 +447,12 @@
                     }
                 ]
             },
-            "published_at": "2026-08-21T12:08:16Z",
-            "changelog": "",
+            "published_at": "2026-09-02T06:23:34Z",
+            "changelog": "修复自定义表前缀下的插件迁移。",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@7430d78/dist/agent-task-ledger-1.0.1.zip",
-                "sha256": "bf013aedcc4610ad66b64929a35ea65f4750891489cbd67c1ca4a448ebdd4f5f",
-                "size_bytes": 4196
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@7ebd489a3ed992a078edefd05179a3ff88996aef/dist/agent-task-ledger-1.0.2.zip",
+                "sha256": "77b63ab8f80d3b284df40da51edabe8feeaaad0e7195a9da9aa359e015b6f35d",
+                "size_bytes": 4244
             },
             "license": {
                 "type": "free"
@@ -509,17 +514,22 @@
             "slug": "analytics-snippet",
             "namespace": "",
             "name": "Analytics Snippet",
-            "version": "1.0.1",
-            "description": "在所有前台页面 <head> 注入 Google Analytics 跟踪代码。后台「站点统计」可配置 Tracking ID。",
-            "category": "other",
-            "tags": [],
-            "icon": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@4795059b668fa4af4980b72db7f32c63c7b56ec2/plugins/analytics-snippet/icon.svg",
+            "version": "1.1.0",
+            "description": "以站点隐私选择为授权边界，在所有前台页面接入 Google Analytics 4；支持 basic/advanced Consent Mode。",
+            "category": "analytics",
+            "tags": [
+                "Google Analytics 4",
+                "Consent Mode",
+                "统计",
+                "隐私"
+            ],
+            "icon": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@7ebd489a3ed992a078edefd05179a3ff88996aef/plugins/analytics-snippet/icon.svg",
             "author": {
                 "name": "Project"
             },
             "homepage": "",
-            "requires_core": "5a",
-            "requires_php": "7.4",
+            "requires_core": "7k",
+            "requires_php": "8.0",
             "api_version": 1,
             "dependencies": [],
             "conflicts": [],
@@ -532,12 +542,12 @@
                 }
             ],
             "agent": [],
-            "published_at": "2026-08-21T12:08:16Z",
+            "published_at": "2026-09-02T06:23:39Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@7430d78/dist/analytics-snippet-1.0.1.zip",
-                "sha256": "073f0905fb1d69a484860aa2ff0af9ef12b20f64b8e70f7a36d0803e44f4077d",
-                "size_bytes": 4014
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@7ebd489a3ed992a078edefd05179a3ff88996aef/dist/analytics-snippet-1.1.0.zip",
+                "sha256": "25bce20f7b521f4906771de17b8bca8e9b43e6dc7d6122a42f80b083fcc58fba",
+                "size_bytes": 6776
             },
             "license": {
                 "type": "free"
@@ -700,11 +710,11 @@
             "slug": "redirect-rules",
             "namespace": "",
             "name": "Redirect Rules",
-            "version": "1.0.1",
+            "version": "1.0.2",
             "description": "管理 301/302 重定向规则。在请求分发前拦截匹配的 URL 并跳转。演示完整 CRUD 插件能力：自带表、菜单、路由、视图、权限点、卸载清理。",
             "category": "other",
             "tags": [],
-            "icon": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@4795059b668fa4af4980b72db7f32c63c7b56ec2/plugins/redirect-rules/icon.svg",
+            "icon": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@7ebd489a3ed992a078edefd05179a3ff88996aef/plugins/redirect-rules/icon.svg",
             "author": {
                 "name": "Project"
             },
@@ -723,12 +733,12 @@
                 }
             ],
             "agent": [],
-            "published_at": "2026-08-21T12:08:16Z",
-            "changelog": "",
+            "published_at": "2026-09-02T06:23:41Z",
+            "changelog": "修复自定义表前缀下的插件迁移。",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@7430d78/dist/redirect-rules-1.0.1.zip",
-                "sha256": "8ac123892a303a95d758fd91507c7d10c0a3412b88b83c80c564b23a4e574a6b",
-                "size_bytes": 6023
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@7ebd489a3ed992a078edefd05179a3ff88996aef/dist/redirect-rules-1.0.2.zip",
+                "sha256": "3ab027348b37d0ba87fc73bd850cfe1405655877795e87146c8be3a811594b25",
+                "size_bytes": 6131
             },
             "license": {
                 "type": "free"
@@ -737,22 +747,23 @@
         {
             "slug": "sitemap-ping",
             "namespace": "",
-            "name": "站点地图推送",
-            "version": "1.0.0",
-            "description": "内容发布后自动把 sitemap 地址推送给搜索引擎，并把每次推送的状态记入日志。内置节流（默认 30 分钟内只推一次）、仅 HTTPS 且经过公网 IP 校验的外发请求、后台可查最近推送记录。",
+            "name": "IndexNow 提交",
+            "version": "2.0.0",
+            "description": "异步重建 sitemap 并通过加密密钥提交 IndexNow；覆盖内容发布、更新、下线、删除与分类变化，提供可重试队列和脱敏状态。",
             "category": "seo",
             "tags": [
                 "SEO",
-                "站点地图",
-                "搜索引擎",
-                "外发请求"
+                "Sitemap",
+                "IndexNow",
+                "异步提交",
+                "搜索引擎"
             ],
-            "icon": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@4795059b668fa4af4980b72db7f32c63c7b56ec2/plugins/sitemap-ping/icon.svg",
+            "icon": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@7ebd489a3ed992a078edefd05179a3ff88996aef/plugins/sitemap-ping/icon.svg",
             "author": {
                 "name": "odi0011"
             },
             "homepage": "",
-            "requires_core": "7i",
+            "requires_core": "7k",
             "requires_php": "8.0",
             "api_version": 1,
             "dependencies": [],
@@ -760,18 +771,18 @@
             "permissions": [
                 {
                     "key": "sitemap_ping.manage",
-                    "label": "配置站点地图推送",
+                    "label": "管理 IndexNow 提交",
                     "group": "plugin",
                     "sort_order": 1290
                 }
             ],
             "agent": [],
-            "published_at": "2026-08-21T12:08:16Z",
+            "published_at": "2026-09-02T06:23:42Z",
             "changelog": "",
             "download": {
-                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@7430d78/dist/sitemap-ping-1.0.0.zip",
-                "sha256": "83f73524e696b030f498a7655d929865ec645aa35d3c61cd9e58985ece6a4bcc",
-                "size_bytes": 8383
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@7ebd489a3ed992a078edefd05179a3ff88996aef/dist/sitemap-ping-2.0.0.zip",
+                "sha256": "fd4fbf7120fc3fc27505a98da8ecdc01c11453f1d90e3a9204d1c37ff99cc1f3",
+                "size_bytes": 17295
             },
             "license": {
                 "type": "free"
@@ -827,6 +838,63 @@
                 "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@7430d78/dist/visual-editor-1.5.0.zip",
                 "sha256": "1f3cad9be458aa0690715157c4bea769ee30d50708c743d6f3e248a3ef8fd248",
                 "size_bytes": 134377
+            },
+            "license": {
+                "type": "free"
+            }
+        },
+        {
+            "slug": "search-insights",
+            "namespace": "",
+            "name": "搜索数据中心",
+            "version": "1.0.0",
+            "description": "连接 Google Search Console、GA4 与 Merchant Center，执行索引、Sitemap、商品诊断和 PageSpeed 检查，并统一审查搜索、转化与 GEO 引用数据。",
+            "category": "analytics",
+            "tags": [
+                "SEO",
+                "GEO",
+                "Search Console",
+                "GA4",
+                "PageSpeed",
+                "Bing"
+            ],
+            "icon": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@7ebd489a3ed992a078edefd05179a3ff88996aef/plugins/search-insights/icon.svg",
+            "author": {
+                "name": "odi0011"
+            },
+            "homepage": "",
+            "requires_core": "7k",
+            "requires_php": "8.0",
+            "api_version": 1,
+            "dependencies": [],
+            "conflicts": [],
+            "permissions": [
+                {
+                    "key": "search_insights.view",
+                    "label": "查看搜索数据",
+                    "group": "plugin",
+                    "sort_order": 1300
+                },
+                {
+                    "key": "search_insights.manage",
+                    "label": "管理搜索平台连接",
+                    "group": "plugin",
+                    "sort_order": 1310
+                },
+                {
+                    "key": "search_insights.sync",
+                    "label": "同步搜索平台数据",
+                    "group": "plugin",
+                    "sort_order": 1320
+                }
+            ],
+            "agent": [],
+            "published_at": "2026-09-02T06:23:42Z",
+            "changelog": "",
+            "download": {
+                "url": "https://cdn.jsdelivr.net/gh/odi0011/Plugin@7ebd489a3ed992a078edefd05179a3ff88996aef/dist/search-insights-1.0.0.zip",
+                "sha256": "a90fc223439dcbfbeb158fe71636f1876f37aef735d4ae05c90f6c22138461d9",
+                "size_bytes": 34952
             },
             "license": {
                 "type": "free"
