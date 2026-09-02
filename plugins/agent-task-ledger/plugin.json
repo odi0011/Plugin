@@ -1,7 +1,8 @@
 {
   "slug": "agent-task-ledger",
   "name": "Agent 任务台账",
-  "version": "1.0.1",
+  "version": "1.0.2",
+  "changelog": "修复自定义表前缀下的插件迁移。",
   "author": "odi0011",
   "description": "写动作示例插件：Agent 可把本轮结论记入插件自建的台账表（写动作走审批），也可只读查询历史条目。演示插件级数据库迁移与 Agent 写动作契约。",
   "icon": "icon.svg",
