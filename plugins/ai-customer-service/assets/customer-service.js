@@ -504,14 +504,27 @@
 
     /* ---------------------------------------------------------------- 消息渲染 */
 
+    /* 站内图不保证还在：产品换过图、CDN 挂了、外链失效都很常见。<img> 加载失败时
+     * 浏览器画的那个撕裂图标比"没有图"更糟——一行卡片里最显眼的位置摆着一个坏掉的
+     * 符号，访客会连带不信任后面的价格。失败就换回占位图标，卡片仍然是完整一行。
+     * src 必须在挂上 error 之后再赋值，否则失败可能早于监听器绑定。 */
+    function coverImage(src, fallbackIcon) {
+        var img = el('img');
+        img.alt = '';
+        img.loading = 'lazy';
+        img.addEventListener('error', function () {
+            var holder = img.parentNode;
+            if (holder) holder.replaceChild(icon(fallbackIcon), img);
+        });
+        img.src = src;
+        return img;
+    }
+
     function avatarNode() {
         var wrap = el('span', 'acs-message-avatar');
         wrap.setAttribute('aria-hidden', 'true');
         if (config.avatarUrl) {
-            var img = el('img');
-            img.src = config.avatarUrl;
-            img.alt = '';
-            wrap.appendChild(img);
+            wrap.appendChild(coverImage(config.avatarUrl, 'bi-stars'));
         } else {
             wrap.appendChild(icon('bi-stars'));
         }
@@ -534,11 +547,20 @@
     function atBottom() {
         return chat.scrollHeight - chat.scrollTop - chat.clientHeight <= NEAR_BOTTOM_PX;
     }
+    /* 滚动边缘的淡出。内容硬切在顶栏下沿时读起来像"这一屏就是全部"，
+     * 淡出一小段才看得出上面还有东西被推走了。CSS 拿不到滚动位置，所以由这里打类；
+     * 只在跨过阈值时写 classList，滚动事件里每帧都改类会让合成层反复失效。 */
+    function syncScrollEdges() {
+        var slack = chat.scrollHeight - chat.clientHeight;
+        chat.classList.toggle('is-scrolled', chat.scrollTop > 4);
+        chat.classList.toggle('is-scroll-more', slack > 4 && chat.scrollTop < slack - 4);
+    }
     function scrollToEnd(force) {
         if (force || state.nearBottom) {
             chat.scrollTop = chat.scrollHeight;
             state.nearBottom = true;
         }
+        syncScrollEdges();
     }
 
     function timeLabel(at) {
@@ -594,6 +616,9 @@
 
     function appendTyping() {
         var entry = messageRow('assistant');
+        /* 这一条随时会被撤掉，所以要能被 CSS 认出来：连续同角色分组时它不算"下一条"，
+         * 否则上一条的尖角会在回复到达的瞬间弹一下。 */
+        entry.row.classList.add('is-typing');
         var kind = ['dots', 'wave', 'text'].indexOf(config.typing) !== -1 ? config.typing : 'dots';
         var bubble = el('div', 'acs-message-bubble acs-typing acs-typing--' + kind);
         if (kind === 'text') {
@@ -704,11 +729,7 @@
             }
             var thumb = el('span', 'acs-item-thumb');
             if (item.cover) {
-                var img = el('img');
-                img.src = item.cover;
-                img.alt = '';
-                img.loading = 'lazy';
-                thumb.appendChild(img);
+                thumb.appendChild(coverImage(item.cover, card.kind === 'product' ? 'bi-box-seam' : 'bi-journal-text'));
             } else {
                 thumb.appendChild(icon(card.kind === 'product' ? 'bi-box-seam' : 'bi-journal-text'));
             }
@@ -1711,6 +1732,7 @@
     });
     chat.addEventListener('scroll', function () {
         state.nearBottom = atBottom();
+        syncScrollEdges();
         // 自己滚回底部就算把"有新回复"这条提示看过了
         if (state.nearBottom && feedback.textContent === '客服已回复，往下滚动查看') showFeedback('');
         // 二维码浮层是按触发元素的视口坐标摆的，聊天区一滚坐标就过期了。hover 触发的

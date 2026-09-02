@@ -25,7 +25,7 @@
     --acs-muted: #6B7280;
     --acs-header-bg: #FFFFFF;
     --acs-header-fg: #111827;
-    --acs-bot-bubble: #F3F4F6;
+    --acs-bot-bubble: #F4F4F5;
     --acs-bot-text: #111827;
     --acs-vis-bubble: #4F46E5;
     --acs-vis-text: #FFFFFF;
@@ -126,6 +126,22 @@
     --acs-shadow-rgb: 15, 23, 42;
     --acs-shadow-boost: 1;
 
+    /* 浮标的抬起。和面板那档投影分开，而且**默认就有**：
+     * 面板有 1px 描边和自己的底色，靠边界就能和页面分开；浮标是一颗实心圆压在
+     * 站点内容上，没有投影时它读起来像"画在页面里的一个圆"而不是"浮在页面上方的按钮"
+     * —— 所有成熟挂件（Chaty / Crisp / Intercom / Tidio）都给浮标打投影，这不是风格
+     * 偏好而是"它是可点的浮层"这条信息本身。
+     * 用 filter: drop-shadow 而不是 box-shadow，是因为 acs-pulse 提醒动画整条占用了
+     * box-shadow（关键帧会把静态投影一起顶掉，开着提醒动画的浮标就会一闪一闪地丢投影）；
+     * drop-shadow 走 filter，两者互不干扰，而且它按 alpha 轮廓打投影——胶囊、圆形、
+     * 带透明边的图片浮标都不用各写一遍形状。 */
+    --acs-launcher-drop:
+        drop-shadow(0 1px 2px rgba(var(--acs-shadow-rgb), calc(.14 * var(--acs-shadow-boost))))
+        drop-shadow(0 6px 14px rgba(var(--acs-shadow-rgb), calc(.2 * var(--acs-shadow-boost))));
+    --acs-launcher-drop-hover:
+        drop-shadow(0 2px 4px rgba(var(--acs-shadow-rgb), calc(.16 * var(--acs-shadow-boost))))
+        drop-shadow(0 10px 22px rgba(var(--acs-shadow-rgb), calc(.26 * var(--acs-shadow-boost))));
+
     color: var(--acs-text);
     font-family: var(--acs-font-family);
     font-size: var(--acs-font);
@@ -163,6 +179,19 @@
     appearance: none;
     -webkit-appearance: none;
 }
+/* 元素选择器还会漏进来第二类东西：主题直接写在 img / form / p / label 这几个标签上的
+ * **盒模型**。上面那几条只压住了会继承的排版属性，而 border / box-shadow / filter /
+ * max-width / margin 都不继承——它们靠"主题用了元素选择器、而我们没有为这个标签写过
+ * 规则"这条缝进来。典型现场是 img { max-width: 100%; box-shadow: 0 2px 8px … } 和
+ * form { margin-bottom: 1.6em; background: #f7f7f7 }：前者给每张缩略图和头像加一道
+ * 不属于挂件的投影，后者在询盘表单下面留一段说不清来路的空白。
+ * 仍然用 :where()（特异性 0）而且排在所有组件规则之前，组件后面照常各写各的；
+ * 只列"主题真的会写、而挂件真的会输出"的标签，不做 * 通配归零——那会连带打掉浏览器
+ * 给 button / textarea 的可用默认值。挂件里每个 <img> 都自带明确的宽高，
+ * 所以 max-width: none 不会放出任何一张原图大小的图片。 */
+.acs-widget :where(img) { max-width: none; border: 0; box-shadow: none; filter: none; }
+.acs-widget :where(form, p, label) { margin: 0; padding: 0; }
+.acs-widget :where(form) { border: 0; background: none; }
 
 #ai-customer-service-widget.acs-widget {
     position: fixed;
@@ -335,15 +364,33 @@
 }
 
 /* ------------------------------------------------------------------ 字面（theme.type）
- * 只动字重 / 字距 / 行高——不带内嵌字体时字族在中文站点上基本塌成同一种，
- * 这三个量在任何已装字体上都一定生效。
- * neutral 档不写规则：它就是 .acs-widget 里那组底值，重复一遍只会多一个走样的机会。 */
+ * 动字重 / 字距 / 行高 / **字号阶梯**——不带内嵌字体时字族在中文站点上基本塌成
+ * 同一种，这几个量在任何已装字体上都一定生效。
+ * neutral 档不写规则：它就是 .acs-widget 里那组底值，重复一遍只会多一个走样的机会。
+ *
+ * 字号阶梯（--acs-fs-*）：以前每处副文字各写一个 calc(var(--acs-font) * .NN)，
+ * 全窗攒出十五个互相差 .02 的比例，等于没有层级——两个本该同级的标签会差半像素，
+ * 而本该分级的（标题 / 正文 / 元信息）又挤在一起。收成五级之后这一维才真的能调：
+ * tight 把副文字压小（层级对比更强，开发者工具那一路），loose 抬高（层级更平，
+ * 读长句更省力）。 */
+.acs-widget {
+    --acs-fs-2xs: calc(var(--acs-font) * .72);   /* 时间戳、字数、角标 */
+    --acs-fs-xs: calc(var(--acs-font) * .8);     /* 元信息、次级说明 */
+    --acs-fs-sm: calc(var(--acs-font) * .86);    /* 快捷问题、chip、摘要 */
+    --acs-fs-md: calc(var(--acs-font) * .92);    /* 卡片标题、按钮 */
+    --acs-fs-lg: calc(var(--acs-font) * 1);      /* 面板标题、浮标文字 */
+}
 .acs-type--tight {
     --acs-lh: 1.45;
     --acs-track: -.005em;
     --acs-w-bold: 800;
     --acs-w-strong: 700;
     --acs-w-mid: 600;
+    --acs-fs-2xs: calc(var(--acs-font) * .68);
+    --acs-fs-xs: calc(var(--acs-font) * .76);
+    --acs-fs-sm: calc(var(--acs-font) * .83);
+    --acs-fs-md: calc(var(--acs-font) * .91);
+    --acs-fs-lg: calc(var(--acs-font) * 1);
 }
 .acs-type--loose {
     --acs-lh: 1.78;
@@ -351,6 +398,11 @@
     --acs-w-bold: 650;
     --acs-w-strong: 550;
     --acs-w-mid: 450;
+    --acs-fs-2xs: calc(var(--acs-font) * .76);
+    --acs-fs-xs: calc(var(--acs-font) * .84);
+    --acs-fs-sm: calc(var(--acs-font) * .89);
+    --acs-fs-md: calc(var(--acs-font) * .94);
+    --acs-fs-lg: calc(var(--acs-font) * 1.02);
 }
 
 /* ------------------------------------------------------------------ 浮标 */
@@ -370,11 +422,13 @@
     color: var(--acs-on-accent);
     font: inherit;
     cursor: pointer;
+    filter: var(--acs-launcher-drop);
     translate: var(--acs-launcher-dx) var(--acs-launcher-dy);
-    transition: transform var(--acs-dur-2) var(--acs-ease), background var(--acs-dur-1) var(--acs-ease);
+    transition: transform var(--acs-dur-2) var(--acs-ease), background var(--acs-dur-1) var(--acs-ease),
+        filter var(--acs-dur-2) var(--acs-ease);
 }
-.acs-launcher:hover { transform: translateY(-2px) scale(1.03); }
-.acs-launcher:active { transform: translateY(0) scale(.97); }
+.acs-launcher:hover { transform: translateY(-2px) scale(1.03); filter: var(--acs-launcher-drop-hover); }
+.acs-launcher:active { transform: translateY(0) scale(.97); filter: var(--acs-launcher-drop); }
 .acs-launcher:focus-visible {
     outline: 2px solid var(--acs-accent);
     outline-offset: 3px;
@@ -402,31 +456,39 @@
     display: inline;
     max-width: 180px;
     overflow: hidden;
-    font-size: calc(var(--acs-font) * .95);
+    font-size: var(--acs-fs-lg);
     font-weight: var(--acs-w-strong);
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 .acs-widget--pill .acs-launcher.is-open .acs-launcher-icon { display: none; }
-.acs-widget--pill .acs-launcher.is-open .acs-launcher-close { display: inline; font-size: calc(var(--acs-font) * .95); }
+.acs-widget--pill .acs-launcher.is-open .acs-launcher-close { display: inline; font-size: var(--acs-fs-lg); }
 .acs-widget--bubble .acs-launcher.is-open .acs-launcher-icon { display: none; }
 .acs-widget--bubble .acs-launcher.is-open .acs-launcher-close {
     display: inline;
     font-size: calc(var(--acs-size) * .32);
 }
 
-/* 未读角标 */
+/* 未读角标。挂在浮标的**外侧**上角：站长把挂件放左边时，写死 right:0 会让角标压向
+ * 页面中央那一侧，正好是面板展开的方向，两者叠在一起。所以和面板 / 气泡 / 飘带一样
+ * 按 .acs-widget--right|--left 分侧，dx 的正方向也跟着翻（站长填的是"往外挪几像素"）。 */
 .acs-launcher.has-badge::after {
     content: "";
     position: absolute;
     top: 0;
-    right: 0;
     width: 11px;
     height: 11px;
     border: 2px solid var(--acs-surface);
     border-radius: 50%;
     background: var(--acs-err);
+}
+.acs-widget--right .acs-launcher.has-badge::after {
+    right: 0;
     translate: var(--acs-badge-dx) var(--acs-badge-dy);
+}
+.acs-widget--left .acs-launcher.has-badge::after {
+    left: 0;
+    translate: calc(-1 * var(--acs-badge-dx)) var(--acs-badge-dy);
 }
 
 /* 提醒动画：访客第一次打开前循环播放 */
@@ -461,7 +523,7 @@
     border-radius: var(--acs-r-sm);
     background: color-mix(in srgb, var(--acs-text) 92%, #000);
     color: var(--acs-surface);
-    font-size: calc(var(--acs-font) * .85);
+    font-size: var(--acs-fs-sm);
     /* nowrap 让收缩到合适宽度算出的是整行宽，不会塌成竖条 */
     white-space: nowrap;
     opacity: 0;
@@ -489,7 +551,7 @@
     border-radius: var(--acs-r-md);
     background: var(--acs-surface);
     color: var(--acs-text);
-    font-size: calc(var(--acs-font) * .9);
+    font-size: var(--acs-fs-md);
     line-height: var(--acs-lh-sm);
     box-shadow: var(--acs-shadow);
     translate: var(--acs-teaser-dx) var(--acs-teaser-dy);
@@ -510,7 +572,7 @@
     background: transparent;
     color: var(--acs-muted);
     cursor: pointer;
-    font-size: calc(var(--acs-font) * .72);
+    font-size: var(--acs-fs-2xs);
     line-height: var(--acs-lh-sm);
 }
 .acs-teaser-close:hover { color: var(--acs-text); }
@@ -542,12 +604,15 @@
     font: inherit;
     box-shadow: var(--acs-shadow);
     cursor: pointer;
+    /* 和浮标同一套抬起：它就贴在浮标旁边，一个有投影一个没有会读成"其中一个是贴纸" */
+    filter: var(--acs-launcher-drop);
     translate: var(--acs-launcher-dx) var(--acs-launcher-dy);
-    transition: transform var(--acs-dur-2) var(--acs-ease), background var(--acs-dur-1) var(--acs-ease);
+    transition: transform var(--acs-dur-2) var(--acs-ease), background var(--acs-dur-1) var(--acs-ease),
+        filter var(--acs-dur-2) var(--acs-ease);
 }
 .acs-widget--right .acs-channels-toggle { right: 0; }
 .acs-widget--left .acs-channels-toggle { left: 0; }
-.acs-channels-toggle:hover { background: var(--acs-hover); transform: scale(1.06); }
+.acs-channels-toggle:hover { background: var(--acs-hover); transform: scale(1.06); filter: var(--acs-launcher-drop-hover); }
 .acs-channels-toggle:focus-visible { outline: 2px solid var(--acs-accent); outline-offset: 2px; }
 .acs-channels-toggle.is-open { transform: rotate(90deg); }
 .acs-channels-icon { font-size: calc(var(--acs-chip) * .42); line-height: 1; }
@@ -611,7 +676,7 @@
 .acs-channels-title {
     padding: 2px 8px 6px;
     color: var(--acs-muted);
-    font-size: calc(var(--acs-font) * .78);
+    font-size: var(--acs-fs-xs);
 }
 .acs-channels--list .acs-channel {
     justify-content: flex-start;
@@ -633,7 +698,7 @@
     background: var(--acs-surface);
     color: var(--acs-text);
     font: inherit;
-    font-size: calc(var(--acs-font) * .9);
+    font-size: var(--acs-fs-md);
     text-decoration: none;
     box-shadow: var(--acs-shadow);
     cursor: pointer;
@@ -703,7 +768,7 @@
     padding: 6px 10px 6px 12px;
     background: var(--acs-accent);
     color: var(--acs-on-accent);
-    font-size: calc(var(--acs-font) * .82);
+    font-size: var(--acs-fs-xs);
     translate: var(--acs-ribbon-dx) var(--acs-ribbon-dy);
     animation: acs-ribbon-in var(--acs-dur-3) var(--acs-ease);
 }
@@ -743,14 +808,14 @@
     border-bottom: 1px solid var(--acs-line);
     background: var(--acs-sunken);
     color: var(--acs-muted);
-    font-size: calc(var(--acs-font) * .84);
+    font-size: var(--acs-fs-sm);
     line-height: var(--acs-lh-sm);
 }
 .acs-away[hidden] { display: none !important; }
 .acs-away-icon {
     flex: 0 0 auto;
     margin-top: 1px;
-    font-size: calc(var(--acs-font) * .9);
+    font-size: var(--acs-fs-md);
 }
 /* 长文案/长连续字符不能把面板撑破 */
 .acs-away-text { min-width: 0; overflow-wrap: anywhere; }
@@ -824,7 +889,7 @@
 .acs-agent-copy { display: grid; min-width: 0; gap: 1px; }
 .acs-agent-copy strong {
     overflow: hidden;
-    font-size: calc(var(--acs-font) * 1.02);
+    font-size: var(--acs-fs-lg);
     font-weight: var(--acs-w-strong);
     letter-spacing: calc(var(--acs-track) - .01em);
     text-overflow: ellipsis;
@@ -835,7 +900,7 @@
     align-items: center;
     gap: 5px;
     overflow: hidden;
-    font-size: calc(var(--acs-font) * .78);
+    font-size: var(--acs-fs-xs);
     opacity: .78;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -859,7 +924,7 @@
     background: transparent;
     color: inherit;
     cursor: pointer;
-    font-size: calc(var(--acs-font) * .92);
+    font-size: var(--acs-fs-md);
     opacity: .8;
     transition: background var(--acs-dur-1) var(--acs-ease), opacity var(--acs-dur-1) var(--acs-ease);
 }
@@ -884,7 +949,19 @@
     overscroll-behavior: contain;
     scrollbar-width: thin;
     scrollbar-color: var(--acs-line) transparent;
+    /* 滚动边缘。两头各留一段淡出，告诉访客"这个方向还有内容"——内容硬切在顶栏下沿
+     * 时读起来像"这一屏就是全部"。落点由 JS 的 syncScrollEdges() 打类控制，因为 CSS
+     * 拿不到滚动位置；两个量都为 0 时这条 mask 是恒等变换（0 长度的过渡段），
+     * 不会在没滚动的短会话上留下任何痕迹。写成一条带变量的 mask 而不是四条组合规则，
+     * 是为了避免"只有顶部""只有底部""两头都有"各写一遍。 */
+    --acs-fade-t: 0px;
+    --acs-fade-b: 0px;
+    mask-image: linear-gradient(180deg,
+        transparent 0, #000 var(--acs-fade-t),
+        #000 calc(100% - var(--acs-fade-b)), transparent 100%);
 }
+.acs-chat.is-scrolled { --acs-fade-t: 20px; }
+.acs-chat.is-scroll-more { --acs-fade-b: 20px; }
 .acs-chat::-webkit-scrollbar { width: 8px; }
 .acs-chat::-webkit-scrollbar-thumb {
     border: 2px solid transparent;
@@ -904,6 +981,35 @@
     max-width: 100%;
 }
 .acs-message--visitor .acs-message-stack { align-items: flex-end; }
+
+/* 连续同一角色的多条消息收成一组。这是所有成熟聊天界面（WhatsApp / Intercom /
+ * Slack）都在做的一笔，也是"看起来像聊天"与"看起来像一列独立卡片"的分界。
+ * 三件事必须一起做才成立：
+ *   1. 组内间距从 --acs-turn-gap 收到 --acs-stack-gap，组**之间**仍然是一轮的距离
+ *      —— 只有两级间距同时存在，"这几句是一个人接着说的"才读得出来；
+ *   2. 指向说话人的那个尖角只留给组里**最后**一条。每条都带尖角时读起来是
+ *      "三个人各说了一句"；
+ *   3. 头像只画组里**第一条**，后面几条用 visibility 留住占位（不是 display:none）
+ *      —— 撤掉那 24px 会让整组文字比第一条往外错一截。
+ * 时间戳同理只留最后一条：一组里三条挨着的消息各挂一个 HH:MM 是纯噪音。
+ *
+ * 尖角走 --acs-r-tail 这个变量而不是直接改 border-end-*-radius：气泡形态里
+ * flat 档是用 border-radius 简写把四角一起压平的，直接写长手会因为 :has() 抬高的
+ * 特异性反过来盖掉 flat，留下一个对不上的角。改变量则完全不进这场特异性比较。
+ *
+ * 用 :has() 而不是让 JS 打类：不支持 :has() 的浏览器整条丢掉，退回"每条都带尖角
+ * 带时间戳"的旧样子，那正好是可用的降级，不需要另写兜底。
+ * 打字指示那条（.is-typing）不算"下一条"：它随时会被撤掉，让它去掉上一条的尖角
+ * 会在回复到达的瞬间弹一下圆角。 */
+.acs-message--assistant + .acs-message--assistant,
+.acs-message--visitor + .acs-message--visitor {
+    margin-block-start: calc(var(--acs-stack-gap) - var(--acs-turn-gap));
+}
+.acs-message--assistant + .acs-message--assistant .acs-message-avatar { visibility: hidden; }
+.acs-message--assistant:has(+ .acs-message--assistant:not(.is-typing)),
+.acs-message--visitor:has(+ .acs-message--visitor) { --acs-r-tail: var(--acs-r-lg); }
+.acs-message--assistant:has(+ .acs-message--assistant:not(.is-typing)) .acs-message-time,
+.acs-message--visitor:has(+ .acs-message--visitor) .acs-message-time { display: none; }
 
 .acs-message-avatar {
     flex: 0 0 auto;
@@ -940,22 +1046,67 @@
     color: var(--acs-vis-text);
 }
 
-/* 气泡形态预设 */
+/* 气泡形态预设。四档都必须**两侧一起变**：只改客服那一侧时，站长在后台选了
+ * 「描边」或「手绘」，前台看到的是"客服气泡变了、访客气泡还是原来那颗实心色块"，
+ * 读起来像样式没加载完，而不像换了一种形态。
+ * 两侧仍然要能分清谁在说话，所以差异从"有没有底色"挪到"底色/墨色是中性还是主色"。 */
 .acs-bubble--flat .acs-message-bubble { border-radius: var(--acs-r-sm); }
+
 .acs-bubble--outline .acs-message--assistant .acs-message-bubble {
     border: 1px solid color-mix(in srgb, var(--acs-bot-text) 16%, transparent);
     background: transparent;
 }
+/* 访客侧：底色撤掉后 --acs-vis-text 是按"压在主色实心底上"挑的，留着一定不可读，
+ * 所以文字换回正文色，主色改由描边与一层极薄的底色承担。
+ * color 与 background 都不含 color-mix：不支持的浏览器只会丢掉描边那一行，
+ * 退化成"没有边框的透明气泡"仍然可读；反过来若把 color 也写成混色，
+ * 丢掉的就是文字颜色，剩下白字压在被丢掉声明恢复出来的主色底上——那才是真的看不见。 */
+.acs-bubble--outline .acs-message--visitor .acs-message-bubble {
+    border: 1px solid color-mix(in srgb, var(--acs-vis-bubble) 58%, transparent);
+    background: transparent;
+    color: var(--acs-text);
+}
+
+/* 玻璃：blur 只有背后**有东西**时才看得见。气泡后面是聊天区的一整片纯色底，
+ * 单靠 backdrop-filter 等于什么都没做（模糊一片纯色仍是同一片纯色）。
+ * 所以材质靠三样落地：顶沿一道内高光（玻璃的厚度）、底沿一道内暗线、
+ * 以及 saturate 把背后的颜色提一点（真玻璃会把透过来的光压得更艳）。
+ * 手账预设的纸纹、深色站点的渐变底这些"背后真有东西"的场合，blur 才额外加分。 */
+.acs-bubble--glass .acs-message--assistant .acs-message-bubble,
+.acs-bubble--glass .acs-message--visitor .acs-message-bubble {
+    backdrop-filter: blur(10px) saturate(1.4);
+    -webkit-backdrop-filter: blur(10px) saturate(1.4);
+    box-shadow:
+        inset 0 1px 0 color-mix(in srgb, #fff 34%, transparent),
+        inset 0 -1px 0 color-mix(in srgb, var(--acs-text) 8%, transparent);
+}
 .acs-bubble--glass .acs-message--assistant .acs-message-bubble {
     background: color-mix(in srgb, var(--acs-bot-bubble) 62%, transparent);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
 }
+.acs-bubble--glass .acs-message--visitor .acs-message-bubble {
+    background: color-mix(in srgb, var(--acs-vis-bubble) 66%, transparent);
+}
+/* 不支持 backdrop-filter（Firefox 长期默认关、旧 Safari）：半透明气泡背后没有任何
+ * 模糊，聊天区的底色会直接透上来把文字拖成低对比。这时候不装玻璃，回到实心底。 */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .acs-bubble--glass .acs-message--assistant .acs-message-bubble { background: var(--acs-bot-bubble); }
+    .acs-bubble--glass .acs-message--visitor .acs-message-bubble { background: var(--acs-vis-bubble); }
+}
+
 .acs-bubble--sketch .acs-message--assistant .acs-message-bubble {
     border: 1.5px solid var(--acs-bot-text);
     border-radius: 255px 14px 225px 14px / 14px 225px 14px 255px;
     background: transparent;
     box-shadow: 2px 2px 0 var(--acs-bot-text);
+}
+/* 访客侧换一组随机半径：手绘的意思就是每一笔都不一样，两侧用同一串数字会露出
+ * "这是一个 CSS 值"。墨色用主色，仍然一眼分得清谁在说话。 */
+.acs-bubble--sketch .acs-message--visitor .acs-message-bubble {
+    border: 1.5px solid var(--acs-vis-bubble);
+    border-radius: 14px 225px 14px 255px / 225px 14px 255px 14px;
+    background: transparent;
+    color: var(--acs-text);
+    box-shadow: 2px 2px 0 var(--acs-vis-bubble);
 }
 
 /* 时间戳。默认不开（"体验增强"里打开）：短会话里每条都挂个时间是纯噪音，
@@ -963,7 +1114,7 @@
 .acs-message-time {
     padding: 0 2px;
     color: var(--acs-muted);
-    font-size: calc(var(--acs-font) * .72);
+    font-size: var(--acs-fs-2xs);
     font-variant-numeric: tabular-nums;
     line-height: 1.2;
 }
@@ -988,7 +1139,7 @@
     content: "未发送";
     padding: 0 2px;
     color: var(--acs-err);
-    font-size: calc(var(--acs-font) * .72);
+    font-size: var(--acs-fs-2xs);
 }
 
 /* 超时的那条：送到没送到还不知道，所以既不能标红说"未发送"，也不能装作已经回完。
@@ -1001,7 +1152,7 @@
     content: "等待确认…";
     padding: 0 2px;
     color: color-mix(in srgb, var(--acs-text) 62%, transparent);
-    font-size: calc(var(--acs-font) * .72);
+    font-size: var(--acs-fs-2xs);
 }
 
 /* 入场动效 */
@@ -1028,7 +1179,7 @@
     border-radius: 999px;
     background: var(--acs-sunken);
     color: var(--acs-muted);
-    font-size: calc(var(--acs-font) * .8);
+    font-size: var(--acs-fs-xs);
     line-height: 1.4;
     white-space: nowrap;
     overflow: hidden;
@@ -1038,7 +1189,7 @@
 .acs-toolchip > i {
     flex: 0 0 auto;
     color: var(--acs-accent);
-    font-size: calc(var(--acs-font) * .82);
+    font-size: var(--acs-fs-xs);
 }
 /* 完成态：状态点变绿，文字提亮一档 */
 .acs-toolchip::after {
@@ -1083,7 +1234,7 @@
  * 内容，否则会出现两段重复文字。 */
 .acs-typing--text {
     color: var(--acs-muted);
-    font-size: calc(var(--acs-font) * .84);
+    font-size: var(--acs-fs-sm);
     padding: 8px 12px;
 }
 .acs-typing--text i { display: none; }
@@ -1118,6 +1269,9 @@
     background: var(--acs-hover);
     transform: translateY(-1px);
 }
+/* 按下要有回应。整行可点却只有 hover 时，移动端点下去到页面跳转之间是完全静止的
+ * ——访客会以为没点上，于是再点一次。 */
+.acs-item:active { transform: scale(.985); }
 .acs-item:focus-visible { outline: 2px solid var(--acs-accent); outline-offset: 2px; }
 .acs-item-thumb {
     display: grid;
@@ -1134,7 +1288,7 @@
 .acs-item-main { display: grid; gap: 2px; min-width: 0; }
 .acs-item-title {
     overflow: hidden;
-    font-size: calc(var(--acs-font) * .92);
+    font-size: var(--acs-fs-md);
     font-weight: var(--acs-w-strong);
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1142,16 +1296,17 @@
 .acs-item-summary {
     overflow: hidden;
     color: var(--acs-muted);
-    font-size: calc(var(--acs-font) * .82);
+    font-size: var(--acs-fs-xs);
     line-height: var(--acs-lh-sm);
     display: -webkit-box;
     -webkit-line-clamp: 2;
+    line-clamp: 2;
     -webkit-box-orient: vertical;
 }
 .acs-item-foot { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin-top: 2px; }
 .acs-item-price {
     color: var(--acs-text);
-    font-size: calc(var(--acs-font) * .88);
+    font-size: var(--acs-fs-sm);
     font-weight: var(--acs-w-bold);
     letter-spacing: calc(var(--acs-track) - .01em);
 }
@@ -1160,14 +1315,14 @@
     border-radius: 999px;
     background: color-mix(in srgb, var(--acs-ok) 18%, transparent);
     color: color-mix(in srgb, var(--acs-ok) 78%, var(--acs-text));
-    font-size: calc(var(--acs-font) * .72);
+    font-size: var(--acs-fs-2xs);
     font-weight: var(--acs-w-mid);
 }
 .acs-item-cta {
     /* 逻辑属性：挂件继承页面的 dir，阿拉伯语/希伯来语站点上 margin-left 会把它推到错的一侧 */
     margin-inline-start: auto;
     color: var(--acs-accent);
-    font-size: calc(var(--acs-font) * .8);
+    font-size: var(--acs-fs-xs);
     font-weight: var(--acs-w-mid);
     white-space: nowrap;
 }
@@ -1189,11 +1344,19 @@
 .acs-card-items.is-minimal .acs-item-thumb { display: none; }
 .acs-card-items.is-minimal .acs-item:hover { background: var(--acs-hover); transform: none; }
 
-/* glass：半透明磨砂 */
+/* glass：半透明磨砂。和气泡那档同理——blur 只在背后真有东西时才看得见，
+ * 所以厚度靠顶沿内高光 + 底沿内暗线交代，saturate 负责"透过玻璃的颜色更艳一点"。 */
 .acs-card-items.is-glass .acs-item {
     background: color-mix(in srgb, var(--acs-surface) 55%, transparent);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px) saturate(1.4);
+    -webkit-backdrop-filter: blur(10px) saturate(1.4);
+    box-shadow:
+        inset 0 1px 0 color-mix(in srgb, #fff 40%, transparent),
+        inset 0 -1px 0 color-mix(in srgb, var(--acs-text) 7%, transparent);
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    /* 不模糊的浏览器上 55% 的半透明底 = 聊天区底色直接透上来，卡片文字掉到低对比。 */
+    .acs-card-items.is-glass .acs-item { background: var(--acs-surface); }
 }
 
 /* grid 里两列会挤，缩略图缩一档 */
@@ -1218,11 +1381,11 @@
     display: flex;
     align-items: center;
     gap: 7px;
-    font-size: calc(var(--acs-font) * .94);
+    font-size: var(--acs-fs-md);
     font-weight: var(--acs-w-strong);
 }
 .acs-form-card-title > i { color: var(--acs-accent); }
-.acs-form-card-note { color: var(--acs-muted); font-size: calc(var(--acs-font) * .84); line-height: var(--acs-lh-sm); }
+.acs-form-card-note { color: var(--acs-muted); font-size: var(--acs-fs-sm); line-height: var(--acs-lh-sm); }
 .acs-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .acs-form-card.is-compact .acs-form-grid { grid-template-columns: minmax(0, 1fr); }
 .acs-field { display: grid; gap: 4px; min-width: 0; }
@@ -1232,10 +1395,10 @@
     grid-column: 1 / -1;
     margin: 0;
     color: var(--acs-muted);
-    font-size: calc(var(--acs-font) * .76);
+    font-size: var(--acs-fs-2xs);
     line-height: var(--acs-lh-sm);
 }
-.acs-field > span { color: var(--acs-muted); font-size: calc(var(--acs-font) * .78); }
+.acs-field > span { color: var(--acs-muted); font-size: var(--acs-fs-xs); }
 .acs-field input,
 .acs-field textarea {
     width: 100%;
@@ -1246,7 +1409,7 @@
     background: var(--acs-surface);
     color: var(--acs-text);
     font: inherit;
-    font-size: calc(var(--acs-font) * .88);
+    font-size: var(--acs-fs-sm);
     transition: border-color var(--acs-dur-1) var(--acs-ease), box-shadow var(--acs-dur-1) var(--acs-ease);
 }
 .acs-field textarea { min-height: 62px; resize: vertical; line-height: var(--acs-lh-sm); }
@@ -1286,7 +1449,7 @@
     background: var(--acs-accent);
     color: var(--acs-on-accent);
     font: inherit;
-    font-size: calc(var(--acs-font) * .88);
+    font-size: var(--acs-fs-sm);
     font-weight: var(--acs-w-mid);
     text-decoration: none;
     cursor: pointer;
@@ -1296,7 +1459,7 @@
 .acs-btn:active { transform: scale(.98); }
 .acs-btn:focus-visible { outline: 2px solid var(--acs-accent); outline-offset: 2px; }
 .acs-btn[disabled] { opacity: .55; cursor: wait; }
-.acs-form-status { color: var(--acs-muted); font-size: calc(var(--acs-font) * .82); }
+.acs-form-status { color: var(--acs-muted); font-size: var(--acs-fs-xs); }
 .acs-form-status.is-error { color: var(--acs-err); }
 .acs-form-status.is-done {
     display: flex;
@@ -1322,7 +1485,7 @@
     background: var(--acs-surface);
     color: var(--acs-text);
     font: inherit;
-    font-size: calc(var(--acs-font) * .84);
+    font-size: var(--acs-fs-sm);
     text-decoration: none;
     cursor: pointer;
     transition: border-color var(--acs-dur-1) var(--acs-ease), background var(--acs-dur-1) var(--acs-ease);
@@ -1359,14 +1522,14 @@
     font-size: 19px;
 }
 .acs-owner-photo img { width: 100%; height: 100%; object-fit: cover; }
-.acs-owner-name { font-size: calc(var(--acs-font) * .98); font-weight: var(--acs-w-bold); }
-.acs-owner-title { color: var(--acs-muted); font-size: calc(var(--acs-font) * .82); }
+.acs-owner-name { font-size: var(--acs-fs-lg); font-weight: var(--acs-w-bold); }
+.acs-owner-title { color: var(--acs-muted); font-size: var(--acs-fs-xs); }
 .acs-owner-bio {
     /* 简介收 300 字，站长往里粘一条长链接就会撑出去（聊天区是 overflow-x:hidden，
      * 结果是被切掉一半而不是出滚动条，看起来更像坏了）。 */
     overflow-wrap: anywhere;
     color: var(--acs-muted);
-    font-size: calc(var(--acs-font) * .84);
+    font-size: var(--acs-fs-sm);
     line-height: var(--acs-lh-sm);
 }
 
@@ -1387,7 +1550,7 @@
 }
 .acs-widget .acs-consent[hidden],
 #ai-customer-service-widget .acs-consent[hidden] { display: none !important; }
-.acs-consent-title { font-size: calc(var(--acs-font) * .9); font-weight: var(--acs-w-bold); }
+.acs-consent-title { font-size: var(--acs-fs-md); font-weight: var(--acs-w-bold); }
 .acs-consent-row { display: flex; align-items: flex-start; gap: 8px; cursor: pointer; }
 .acs-consent-box {
     flex: 0 0 auto;
@@ -1403,7 +1566,7 @@
     overflow-y: auto;
     overscroll-behavior: contain;
     color: var(--acs-muted);
-    font-size: calc(var(--acs-font) * .82);
+    font-size: var(--acs-fs-xs);
     line-height: var(--acs-lh-sm);
 }
 .acs-consent-link { color: var(--acs-accent); text-decoration: underline; }
@@ -1415,7 +1578,7 @@
     background: var(--acs-accent);
     color: var(--acs-on-accent);
     font: inherit;
-    font-size: calc(var(--acs-font) * .84);
+    font-size: var(--acs-fs-sm);
     cursor: pointer;
     transition: opacity var(--acs-dur-1) var(--acs-ease), transform var(--acs-dur-2) var(--acs-ease);
 }
@@ -1448,7 +1611,7 @@
     max-width: 132px;
     overflow-wrap: anywhere;
     color: var(--acs-muted);
-    font-size: calc(var(--acs-font) * .78);
+    font-size: var(--acs-fs-xs);
     text-align: center;
 }
 
@@ -1478,12 +1641,13 @@
     background: color-mix(in srgb, var(--acs-accent) 9%, transparent);
     color: var(--acs-accent);
     font: inherit;
-    font-size: calc(var(--acs-font) * .84);
+    font-size: var(--acs-fs-sm);
     white-space: nowrap;
     cursor: pointer;
     transition: background var(--acs-dur-1) var(--acs-ease), transform var(--acs-dur-2) var(--acs-ease);
 }
 .acs-quick-reply:hover { background: color-mix(in srgb, var(--acs-accent) 18%, transparent); transform: translateY(-1px); }
+.acs-quick-reply:active { transform: scale(.96); }
 .acs-quick-reply:focus-visible { outline: 2px solid var(--acs-accent); outline-offset: 2px; }
 .acs-quick-reply[disabled] { opacity: .5; cursor: not-allowed; transform: none; }
 .acs-quick--ghost .acs-quick-reply {
@@ -1540,7 +1704,7 @@
 .acs-tool-btn.is-active { color: var(--acs-accent); background: color-mix(in srgb, var(--acs-accent) 14%, transparent); }
 .acs-counter {
     color: var(--acs-muted);
-    font-size: calc(var(--acs-font) * .72);
+    font-size: var(--acs-fs-2xs);
     font-variant-numeric: tabular-nums;
     transition: color var(--acs-dur-1) var(--acs-ease);
 }
@@ -1556,7 +1720,7 @@
     background: var(--acs-accent);
     color: var(--acs-on-accent);
     cursor: pointer;
-    font-size: calc(var(--acs-font) * .92);
+    font-size: var(--acs-fs-md);
     transition: filter var(--acs-dur-1) var(--acs-ease), transform var(--acs-dur-2) var(--acs-ease);
 }
 .acs-send:hover { filter: brightness(1.1); }
@@ -1570,8 +1734,10 @@
 
 .acs-picker {
     position: absolute;
-    left: var(--acs-pad);
-    right: var(--acs-pad);
+    /* 逻辑属性：这里左右取的是同一个值，写成物理 left/right 看不出差别，但 RTL 扫描
+     * 只放过明确按 .acs-widget--right|--left 分侧的那些规则——顺手写下的物理偏移
+     * 正是「浮标在左边时角标压向面板」那一类 bug 的来源，所以这里也统一。 */
+    inset-inline: var(--acs-pad);
     bottom: calc(100% - 6px);
     z-index: 3;
     max-height: 208px;
@@ -1587,7 +1753,7 @@
 .acs-picker-group-title {
     margin: 2px 0 6px;
     color: var(--acs-muted);
-    font-size: calc(var(--acs-font) * .74);
+    font-size: var(--acs-fs-2xs);
     font-weight: var(--acs-w-bold);
     letter-spacing: calc(var(--acs-track) + .04em);
 }
@@ -1625,20 +1791,20 @@
     gap: 5px;
     padding: 0 var(--acs-pad) 6px;
     color: var(--acs-accent);
-    font-size: calc(var(--acs-font) * .82);
+    font-size: var(--acs-fs-xs);
     text-decoration: none;
 }
 .acs-handoff:hover { text-decoration: underline; }
 .acs-powered {
     padding: 0 var(--acs-pad) 8px;
     color: var(--acs-muted);
-    font-size: calc(var(--acs-font) * .72);
+    font-size: var(--acs-fs-2xs);
     text-align: center;
 }
 .acs-feedback {
     padding: 0 var(--acs-pad);
     color: var(--acs-err);
-    font-size: calc(var(--acs-font) * .8);
+    font-size: var(--acs-fs-xs);
     line-height: var(--acs-lh-sm);
 }
 .acs-feedback:not(:empty) { padding-bottom: 9px; }
@@ -1763,10 +1929,22 @@
     .acs-panel { --acs-pad: min(var(--acs-pad-base), 11px); }
     .acs-item { grid-template-columns: 36px minmax(0, 1fr); }
     .acs-item-thumb { width: 36px; height: 36px; font-size: 15px; }
-    .acs-quick-reply { font-size: calc(var(--acs-font) * .8); padding: 5px 10px; }
+    .acs-quick-reply { font-size: var(--acs-fs-xs); padding: 5px 10px; }
 }
 
 /* ------------------------------------------------------------------ 降级与偏好 */
+
+/* 触屏没有"把鼠标移开"这件事：:hover 会一直挂在最后点过的那个元素上。抬起来的卡片、
+ * 变了色的胶囊会停在那儿，读起来像"这一项被选中了"。抬起是鼠标的语言，
+ * 触屏改用按下缩一下（各组件的 :active）表达同一件事。 */
+@media (hover: none) {
+    .acs-item:hover,
+    .acs-quick-reply:hover,
+    .acs-launcher:hover,
+    .acs-channels-toggle:hover { transform: none; }
+    .acs-launcher:hover,
+    .acs-channels-toggle:hover { filter: var(--acs-launcher-drop); }
+}
 
 @media (prefers-reduced-motion: reduce) {
     #ai-customer-service-widget.acs-widget,
@@ -1775,6 +1953,23 @@
         animation-iteration-count: 1 !important;
         transition-duration: .001ms !important;
         scroll-behavior: auto !important;
+    }
+    /* 上面那条把所有动画掐掉，代价是"客服正在输入"这个唯一的进度信号也一起没了：
+     * dots / wave 两档的全部含义都在动，停下来就是三颗静止的灰点，跟装饰没有区别
+     * ——访客分不清是还在想还是已经断了。所以这一档改用文字表达同一件事：
+     * 把本来只给读屏的那句话显形，点收起来。text 档本来就是文字，不受影响。 */
+    .acs-typing--dots i,
+    .acs-typing--wave i { display: none; }
+    .acs-typing--dots .acs-sr-only,
+    .acs-typing--wave .acs-sr-only {
+        position: static !important;
+        width: auto !important;
+        height: auto !important;
+        margin: 0 !important;
+        overflow: visible !important;
+        clip: auto !important;
+        color: var(--acs-muted);
+        font-size: var(--acs-fs-sm);
     }
 }
 
@@ -1805,6 +2000,30 @@
     .acs-form-card-title > i { color: var(--acs-accent); }
     .acs-quick-reply { border-color: var(--acs-accent); background: transparent; }
     .acs-item-thumb { background: var(--acs-accent); }
+
+    /* 预设签名也得补，而且这里不补的后果比别处重：签名规则里那些 color-mix 出来的
+     * 声明会被整条丢掉，而**同一条规则里不含混色的那几行照旧生效**——
+     * 午夜正是这样：border-bottom-color: transparent 留着、用来替代它的那道光线没了，
+     * 于是顶栏和正文之间一条分界都不剩，比根本没有签名更糟。
+     * 手账的纸纹与陶土的压痕则是"直接消失"，note 里承诺的东西兑现不了。 */
+    .acs-theme--midnight .acs-header { border-bottom-color: var(--acs-line); }
+    .acs-theme--midnight .acs-header::after {
+        background: linear-gradient(90deg, transparent, var(--acs-accent), transparent);
+        opacity: .55;
+    }
+    .acs-theme--clay .acs-message-bubble { box-shadow: inset 0 -1px 0 rgba(127, 127, 127, .22); }
+    .acs-theme--paper .acs-chat {
+        background-image: repeating-linear-gradient(
+            180deg,
+            transparent 0,
+            transparent calc(var(--acs-font) * var(--acs-lh) - 1px),
+            rgba(127, 127, 127, .2) calc(var(--acs-font) * var(--acs-lh) - 1px),
+            rgba(127, 127, 127, .2) calc(var(--acs-font) * var(--acs-lh))
+        );
+    }
+    /* 描边气泡：访客那侧的边框是混色，丢掉之后剩一颗完全透明的气泡 */
+    .acs-bubble--outline .acs-message--assistant .acs-message-bubble,
+    .acs-bubble--outline .acs-message--visitor .acs-message-bubble { border-color: var(--acs-line); }
 }
 
 /* 打印时挂件没有意义 */

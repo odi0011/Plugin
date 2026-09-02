@@ -857,6 +857,134 @@ if ($uploadBody !== '') {
     $assert(str_contains($uploadBody, '$skipped'),
         '因为余量/上限少收了几个文件必须说出来：静默少收只会被当成上传坏了');
 }
+/* ------------------------------------------------------------ 1.5.2：条件永远不成立
+ * 这一组盯的不是"写错了"，而是"写了但永远不执行"——语法合法、测试也跑得过，
+ * 只有真实输入才会暴露。四条各有各的隐身方式。 */
+
+/* ① 截断的换行分支。单引号里的 '\n' 是反斜杠加字母 n 两个字符，正常回复里几乎不会
+ * 出现；mb_strrpos 找不到时返回 false，(int)false 与"命中第 0 位"都是 0。两处叠起来，
+ * "按段落末尾断句"这一路等于没写，长回复被硬切在半句上。 */
+$screenBody = '';
+if (preg_match('/function screenReply\(array \$config, string \$reply\): array\s*\{(.+?)\n    \}/s', $guards, $screenMatch)) {
+    $screenBody = $screenMatch[1];
+}
+$assert($screenBody !== '', '找不到 screenReply() 的定义');
+if ($screenBody !== '') {
+    $assert(str_contains($screenBody, '"\n"'),
+        '按段落末尾截断必须用双引号 "\n"：单引号里那是两个字符，这一路等于没写');
+    $assert(!str_contains($screenBody, "'" . '\n' . "'"),
+        "单引号的 '\\n' 是死分支，改成双引号");
+    $assert(str_contains($screenBody, '!== false'),
+        'mb_strrpos 找不到时返回 false，必须显式挑掉：(int)false 与"命中第 0 位"都是 0');
+    $assert(!str_contains($screenBody, '(int)mb_strrpos'),
+        '不能直接把 mb_strrpos 的结果转 int：false 会变成 0，等于"在开头截断"');
+    foreach (["'.'", "'!'", "'?'"] as $latin) {
+        $assert(str_contains($screenBody, $latin),
+            '句末标点表必须包含英文 ' . $latin . '：否则一段英文只能靠句点断句');
+    }
+}
+
+/* ② 能配出来的询盘表单必须是能提交的。服务端两条硬规则（描述必填、邮箱或电话至少一个）
+ * 与字段清单是两处代码，清单里没有对应输入框时表单永远提交不上去。 */
+$assert(str_contains($service, "!in_array('email', \$fields, true) && !in_array('phone', \$fields, true)"),
+    '询盘字段清单里没有邮箱也没有电话时必须补一个，否则服务端的"至少留一个"永远过不去');
+$assert(str_contains($service, "!in_array('message', \$fields, true)"),
+    '询盘字段清单必须兜底补上 message：服务端把它当必填');
+$assert(str_contains($cards, "'eitherContact'"),
+    '前台要知道"邮箱与电话是二选一还是各自必填"，这个标记不能丢');
+
+/* ③ 两条出站路径的上限不是同一个数。都按 30 秒估的时候，系统来源 + 供应商 60 秒的站点
+ * 正好落进 chatTimeoutMs() 自己注释里警告的故障：浏览器先放弃、服务端照样答完并写进
+ * 会话，访客下次刷新看到一段自己没见过的一问一答。 */
+$assert(str_contains($service, 'private static function outboundBudgetSeconds(array $config): int'),
+    '缺少 outboundBudgetSeconds()：两条出站路径的最坏耗时必须分开算');
+$assert(str_contains($service, 'self::outboundBudgetSeconds($config)'),
+    'chatTimeoutMs() 必须按出站预算算，不能自己再写一个秒数');
+$budgetBody = '';
+if (preg_match('/function outboundBudgetSeconds\(array \$config\): int\s*\{(.+?)\n    \}/s', $service, $budgetMatch)) {
+    $budgetBody = $budgetMatch[1];
+}
+$assert($budgetBody !== '', '找不到 outboundBudgetSeconds() 的定义');
+if ($budgetBody !== '') {
+    $assert(str_contains($budgetBody, 'AiCustomerServiceChat::CUSTOM_TIMEOUT'),
+        '独立接口那条路径的上限就是 CUSTOM_TIMEOUT');
+    $assert(str_contains($budgetBody, 'request_timeout'),
+        '系统来源必须读供应商自己配的 request_timeout：核心默认 60 秒，按 30 算就会提前放弃');
+    $assert(str_contains($budgetBody, 'static $cached'),
+        '这个值一次渲染里不会变，必须记住：否则每次调用都问一次库');
+}
+
+/* ④ 同一个主题默认值写在四处：plugin.json 的 default（后台表单与缺行时的取值）、
+ * config() 的 sanitizer 兜底（站长清空字段后前台的取值）、CSS 的兜底（内联样式缺失时
+ * 浏览器的取值）、admin.js 的预览映射（后台实时预览的取值）。任意两处不等，就是
+ * "预览与前台不一样"或"清空一栏之后外观自己变了"。映射以 styleVars() 为唯一来源。 */
+$styleVars = [];
+if (preg_match('/function styleVars\(array \$config\): string.+?\n        \];/s', $service, $styleMatch)) {
+    preg_match_all("/'(--acs-[a-z-]+)' => (?:\(int\))?\\\$config\['([a-z_0-9]+)'\]/", $styleMatch[0], $rows, PREG_SET_ORDER);
+    foreach ($rows as $row) $styleVars[$row[1]] = $row[2];
+}
+$assert(count($styleVars) >= 20, 'styleVars() 里取不到主题变量映射，当前 ' . count($styleVars) . ' 条');
+
+$runtimeFallback = [];
+preg_match_all("/'([a-z_0-9]+)' => self::color\(\(string\)\\\$get\('\\1', ''\), '(#[0-9A-Fa-f]{3,8})'\)/", $service, $rows, PREG_SET_ORDER);
+foreach ($rows as $row) $runtimeFallback[$row[1]] = $row[2];
+preg_match_all("/'([a-z_0-9]+)' => self::int\(\\\$get\('\\1', (-?\d+)\)/", $service, $rows, PREG_SET_ORDER);
+foreach ($rows as $row) $runtimeFallback[$row[1]] = $row[2];
+$assert(count($runtimeFallback) >= 20, 'config() 里取不到 color/int 兜底值，当前 ' . count($runtimeFallback) . ' 条');
+
+$cssFallback = [];
+if (preg_match('/^\.acs-widget \{(.+?)\n\}/ms', $widgetCss, $cssMatch)) {
+    preg_match_all('/^\s*(--acs-[a-z-]+):\s*([^;]+);/m', $cssMatch[1], $rows, PREG_SET_ORDER);
+    foreach ($rows as $row) $cssFallback[$row[1]] = trim($row[2]);
+}
+$assert($cssFallback !== [], '取不到 .acs-widget 的变量兜底块');
+
+$previewMap = [];
+foreach (['VAR_MAP', 'PX_MAP'] as $mapName) {
+    if (preg_match('/var ' . $mapName . ' = \{(.+?)\n    \};/s', $adminJs, $mapMatch)) {
+        preg_match_all("/'(--acs-[a-z-]+)':\s*\['([a-z_0-9]+)',\s*'?([^'\],]+)'?\]/", $mapMatch[1], $rows, PREG_SET_ORDER);
+        foreach ($rows as $row) $previewMap[$row[1]] = ['key' => $row[2], 'value' => $row[3]];
+    }
+}
+$assert(count($previewMap) >= 16, 'admin.js 的预览映射取不全，当前 ' . count($previewMap) . ' 条');
+
+$normValue = static fn (mixed $value): string
+    => strtoupper(preg_replace('/px$/', '', rtrim(trim((string)$value), ';')) ?? '');
+foreach ($styleVars as $cssVar => $key) {
+    $assert(isset($cssFallback[$cssVar]),
+        'CSS 兜底块缺少 ' . $cssVar . '：内联样式缺失时这条声明会算成空值，整条规则静默失效');
+    $sources = [];
+    if (isset($fields[$key]['field']['default'])) $sources['plugin.json'] = $fields[$key]['field']['default'];
+    if (isset($runtimeFallback[$key])) $sources['config()'] = $runtimeFallback[$key];
+    if (isset($cssFallback[$cssVar])) $sources['css'] = $cssFallback[$cssVar];
+    if (isset($previewMap[$cssVar])) {
+        $assert($previewMap[$cssVar]['key'] === $key,
+            $cssVar . ' 的预览映射指向了别的字段：' . $previewMap[$cssVar]['key'] . ' ≠ ' . $key);
+        $sources['admin.js'] = $previewMap[$cssVar]['value'];
+    }
+    if (count($sources) < 2) continue;
+    $distinct = array_unique(array_map($normValue, $sources));
+    $shown = [];
+    foreach ($sources as $where => $value) $shown[] = $where . '=' . (string)$value;
+    $assert(count($distinct) === 1,
+        $cssVar . '（' . $key . '）的默认值几处不一致：' . implode('，', $shown));
+}
+foreach (array_keys($previewMap) as $cssVar) {
+    $assert(isset($styleVars[$cssVar]),
+        '预览映射里的 ' . $cssVar . ' 在 styleVars() 里不存在：后台预览会动、前台不动');
+}
+
+/* 自动配色读的是"这一栏为空时该按什么底色算亮度"，兜底错了就按另一种底色判明暗，
+ * 写出白底白字这类看不见的结果——顶栏默认是白色，按主色 #4F46E5 判就会配上白字。 */
+preg_match_all("/val\('([a-z_0-9]+)',\s*'(#[0-9A-Fa-f]{3,8})'\)/", $adminJs, $rows, PREG_SET_ORDER);
+$assert(count($rows) >= 5, "admin.js 里带十六进制兜底的 val() 取不到，当前 " . count($rows) . ' 处');
+foreach ($rows as $row) {
+    $declaredColor = $fields[$row[1]]['field']['default'] ?? null;
+    $assert($declaredColor !== null && strtoupper((string)$declaredColor) === strtoupper($row[2]),
+        "val('" . $row[1] . "') 的兜底 " . $row[2] . ' 必须等于声明默认值 '
+        . ($declaredColor === null ? '（该字段未声明）' : (string)$declaredColor));
+}
+
 // README 承诺
 foreach (['描述词', '资料', '工具', '卡片', '边界', '表情'] as $topic) {
     $assert(str_contains($readme, $topic), 'README 必须说明「' . $topic . '」');
@@ -868,4 +996,4 @@ if ($failures !== []) {
     foreach ($failures as $failure) echo ' - ' . $failure . "\n";
     exit(1);
 }
-echo "AI客服插件契约通过（设置声明 / 容量 / 密钥边界 / 工具与卡片 / 三条回归）。\n";
+echo "AI客服插件契约通过（设置声明 / 容量 / 密钥边界 / 工具与卡片 / 默认值四方对齐 / 三条回归）。\n";

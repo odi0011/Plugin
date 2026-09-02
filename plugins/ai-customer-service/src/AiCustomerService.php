@@ -16,7 +16,7 @@ declare(strict_types=1);
 final class AiCustomerService
 {
     public const SLUG = 'ai-customer-service';
-    public const VERSION = '1.5.1';
+    public const VERSION = '1.5.2';
 
     private const SESSION_KEY = '_ai_customer_service';
     private const CONVERSATION_TTL = 21600;
@@ -164,7 +164,7 @@ final class AiCustomerService
             'muted_color' => self::color((string)$get('muted_color', ''), '#6B7280'),
             'header_color' => self::color((string)$get('header_color', ''), '#FFFFFF'),
             'header_text_color' => self::color((string)$get('header_text_color', ''), '#111827'),
-            'bot_bubble_color' => self::color((string)$get('bot_bubble_color', ''), '#F3F4F6'),
+            'bot_bubble_color' => self::color((string)$get('bot_bubble_color', ''), '#F4F4F5'),
             'bot_bubble_text_color' => self::color((string)$get('bot_bubble_text_color', ''), '#111827'),
             'visitor_bubble_color' => self::color((string)$get('visitor_bubble_color', ''), '#4F46E5'),
             'visitor_bubble_text_color' => self::color((string)$get('visitor_bubble_text_color', ''), '#FFFFFF'),
@@ -710,6 +710,11 @@ final class AiCustomerService
             $field = self::choice($field, ['name', 'email', 'phone', 'company', 'message'], '');
             if ($field !== '' && !in_array($field, $fields, true)) $fields[] = $field;
         }
+        /* submitInquiry() 那边有两条硬规则：需求描述必填，邮箱和电话至少留一个。
+         * 字段清单里没有对应的输入框，表单就永远提交不上去——访客填完姓名点提交，
+         * 只会撞到一句"请至少留一个邮箱或电话"，而卡片上根本没有那两个框可填。
+         * 所以两条规则各补一个兜底字段，让能配出来的表单一定是能提交的。 */
+        if (!in_array('email', $fields, true) && !in_array('phone', $fields, true)) $fields[] = 'email';
         if (!in_array('message', $fields, true)) $fields[] = 'message';
 
         return [
@@ -1721,9 +1726,10 @@ final class AiCustomerService
      * 浏览器等待一次回复的上限（毫秒）。
      *
      * 服务端最坏耗时是「轮次 × 出站超时」：开着工具时 converse() 先让模型决定调什么、
-     * 执行完再续写一轮，每一轮都可能各自跑满 CUSTOM_TIMEOUT。浏览器这边的上限比它短，
-     * 结果就是访客先看到「超时」、服务端随后照样把这轮问答写进会话 —— 下次刷新历史里
-     * 凭空多出一问一答，而访客早已把同一句又发了一遍。所以由服务端算好下发。
+     * 执行完再续写一轮，每一轮都可能各自跑满出站超时（见 outboundBudgetSeconds）。
+     * 浏览器这边的上限比它短，结果就是访客先看到「超时」、服务端随后照样把这轮问答写进
+     * 会话 —— 下次刷新历史里凭空多出一问一答，而访客早已把同一句又发了一遍。
+     * 所以由服务端算好下发。
      *
      * 刻意不写在 publicWidgetConfig() 的函数体里：契约禁止那段代码出现 tools 字样
      * （防的是把工具定义下发到前台），这里只读一个开关和一个轮次数。
@@ -1731,9 +1737,41 @@ final class AiCustomerService
     private static function chatTimeoutMs(array $config): int
     {
         $rounds = empty($config['tools_enabled']) ? 1 : max(1, (int)$config['tool_max_rounds']) + 1;
-        $seconds = $rounds * AiCustomerServiceChat::CUSTOM_TIMEOUT + 5;
+        $seconds = $rounds * self::outboundBudgetSeconds($config) + 5;
         // 下限 30 秒（比任何单次出站都长），上限 180 秒（再久访客只会以为页面死了）
         return min(180, max(30, $seconds)) * 1000;
+    }
+
+    /**
+     * 单次出站的最坏耗时（秒）。
+     *
+     * 两条出站路径的上限不是同一个数，不能都按 30 算：
+     * - 独立接口走核心 OutboundHttpClient，超时被夹在 1..30，就是 CUSTOM_TIMEOUT；
+     * - 系统来源走核心 AiService，用的是供应商自己配的 request_timeout（缺配置按 60 算，
+     *   核心硬上限 180）。
+     * 以前两条都按 30 算，于是系统来源 + 供应商 60 秒的站点正好落进上面那段注释描述的
+     * 故障：浏览器 35 秒放弃、服务端 60 秒答完并写进会话，访客下次刷新看到自己没见过的
+     * 一问一答。
+     */
+    private static function outboundBudgetSeconds(array $config): int
+    {
+        if ((string)$config['provider_mode'] === 'custom') {
+            return AiCustomerServiceChat::CUSTOM_TIMEOUT;
+        }
+        // 每个请求最多问一次库：这个值在一次渲染里不会变。
+        static $cached = null;
+        if ($cached !== null) return $cached;
+        $configured = 0;
+        try {
+            $modelId = (int)$config['system_model_id'];
+            $model = $modelId > 0 ? \App\Models\AiModel::find($modelId) : null;
+            $provider = is_array($model) ? \App\Models\AiProvider::find((int)($model['provider_id'] ?? 0)) : null;
+            if (is_array($provider)) $configured = (int)($provider['request_timeout'] ?? 0);
+        } catch (\Throwable $_) {
+            $configured = 0;
+        }
+        // 没指定模型（交给核心挑默认）时读不到供应商，按核心自己的默认 60 秒算。
+        return $cached = max(1, min(180, $configured > 0 ? $configured : 60));
     }
 
     /**

@@ -69,15 +69,19 @@ final class AiCustomerServiceGuardrails
 
         $max = (int)$rules['max_reply_chars'];
         if (mb_strlen($reply) > $max) {
-            // 在最后一个句末标点处截断，避免把话切在半句上。
+            /* 在最后一个句末标点处截断，避免把话切在半句上。
+             *
+             * 换行要写成双引号 "\n"：单引号里那是反斜杠加 n 两个字符，正常回复里几乎不会
+             * 出现，于是"按段落末尾截断"这一路等于没写。找不到时 mb_strrpos 返回 false，
+             * 得显式挑掉——(int)false 与"命中第 0 位"都是 0，混在一起就分不出来了。
+             * 英文回复同样要认 ! 与 ?，否则一段英文只能靠句点断句。 */
             $clipped = mb_substr($reply, 0, $max);
-            $cut = max(
-                (int)mb_strrpos($clipped, '。'),
-                (int)mb_strrpos($clipped, '！'),
-                (int)mb_strrpos($clipped, '？'),
-                (int)mb_strrpos($clipped, '.'),
-                (int)mb_strrpos($clipped, '\n')
-            );
+            $stops = [];
+            foreach (['。', '！', '？', '.', '!', '?', "\n"] as $mark) {
+                $at = mb_strrpos($clipped, $mark);
+                if ($at !== false) $stops[] = (int)$at;
+            }
+            $cut = $stops === [] ? -1 : max($stops);
             $reply = $cut > $max * 0.5 ? mb_substr($clipped, 0, $cut + 1) : $clipped;
         }
         return ['content' => $reply, 'blocked' => false];

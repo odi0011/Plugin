@@ -559,10 +559,10 @@
         var dark = luminance(val('surface_color', '#FFFFFF')) < 0.45;
         setCtrl('text_color', dark ? '#E5E7EB' : '#111827');
         setCtrl('muted_color', dark ? '#94A3B8' : '#6B7280');
-        var botDark = luminance(val('bot_bubble_color', '#F3F4F6')) < 0.45;
+        var botDark = luminance(val('bot_bubble_color', '#F4F4F5')) < 0.45;
         setCtrl('bot_bubble_text_color', botDark ? '#E5E7EB' : '#111827');
         setCtrl('visitor_bubble_text_color', luminance(val('visitor_bubble_color', '#4F46E5')) < 0.5 ? '#FFFFFF' : '#111827');
-        setCtrl('header_text_color', luminance(val('header_color', '#4F46E5')) < 0.5 ? '#FFFFFF' : '#111827');
+        setCtrl('header_text_color', luminance(val('header_color', '#FFFFFF')) < 0.5 ? '#FFFFFF' : '#111827');
         toast('已按背景亮度配好文字颜色');
     }
 
