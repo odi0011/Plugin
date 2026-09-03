@@ -1038,6 +1038,93 @@ $assert(str_contains($knowledge, 'getFromName($entry, self::MAX_XML_BYTES)'),
 $assert(!str_contains($knowledge, 'getFromName($entry)'),
     'getFromName() 不带长度参数等于不设上限');
 
+/* ------------------------------------------------------------ 1.5.4：程序化写数值
+ * 后台有两条不经手输的写数值路径——拖拽定位、套主题预设。它们绕开了原生校验，
+ * 而越界的下场恰好是两种都不报错的坏法：
+ *   - 声明式字段（浮标边距）：值写进去了，直到点"保存本页"才被表单校验挡下，气泡
+ *     挂在站长从没碰过的控件上，看起来是"保存按钮坏了"；
+ *   - layout_json 的偏移：normalizeLayout() 静默夹回去，预览按拖到的位置画、前台按
+ *     夹过的画，两边不一样而哪儿都不提示。
+ * 同一个文件里的加减按钮（data-acs-step）一直是按控件 min/max 夹的，这两条漏了。 */
+
+$setCtrlBody = '';
+if (preg_match('/function setCtrl\(key, value\) \{(.+?)\n    \}/s', $adminJs, $setCtrlMatch)) {
+    $setCtrlBody = $setCtrlMatch[1];
+}
+$assert($setCtrlBody !== '', '找不到 setCtrl() 的定义');
+if ($setCtrlBody !== '') {
+    $assert(str_contains($setCtrlBody, "node.type === 'number'") && str_contains($setCtrlBody, 'clampToNode(node, value)'),
+        'setCtrl() 必须按控件自己声明的 min/max 夹数字：拖拽定位与套预设都走它，'
+        . '写进一个越界值会让整页保存不了，而气泡挂在站长没碰过的控件上');
+    $clampAt = strpos($setCtrlBody, 'clampToNode(node, value)');
+    $writeAt = strpos($setCtrlBody, 'node.value = value == null');
+    $assert($clampAt !== false && $writeAt !== false && $clampAt < $writeAt, '夹的动作必须排在写 node.value 之前');
+}
+$assert(str_contains($adminJs, 'function clampToNode(node, value)'),
+    '缺少 clampToNode()：声明式字段的边界要读控件自己的 min/max，不能在 JS 里另抄一份');
+$assert(preg_match('/setCtrl\(active\.xKey, Math\.round/', $adminJs) === 1
+    && preg_match('/setCtrl\(active\.yKey, Math\.round/', $adminJs) === 1,
+    '拖浮标必须经 setCtrl() 写边距字段：直接改 node.value 就绕过了那道夹');
+
+// 偏移量的四个范围必须与 normalizeLayout() 的 $nudge(..., N) 逐字一致
+$layoutBody = '';
+if (preg_match('/function normalizeLayout\(array \$layout\): array\s*\{(.+?)\n    \}/s', $service, $layoutMatch)) {
+    $layoutBody = $layoutMatch[1];
+}
+$assert($layoutBody !== '', '找不到 normalizeLayout() 的定义');
+$phpNudge = [];
+if (preg_match_all('/\'(\w+)\' => \$nudge\(\$layout\[\'(\w+)\'\] \?\? null, (\d+)\)/', $layoutBody, $nudgeAll, PREG_SET_ORDER)) {
+    foreach ($nudgeAll as $one) {
+        $assert($one[1] === $one[2], 'normalizeLayout() 里 ' . $one[1] . ' 取的却是 ' . $one[2] . ' 的值');
+        $phpNudge[$one[1]] = (int)$one[3];
+    }
+}
+$assert(count($phpNudge) === 4, 'normalizeLayout() 应有四组偏移（teaser/ribbon/badge/launcher_nudge），当前 ' . count($phpNudge));
+$jsNudge = [];
+if (preg_match('/var NUDGE_RANGE = \{([^}]*)\}/', $adminJs, $rangeMatch)) {
+    if (preg_match_all('/(\w+):\s*(\d+)/', $rangeMatch[1], $pairs, PREG_SET_ORDER)) {
+        foreach ($pairs as $pair) $jsNudge[$pair[1]] = (int)$pair[2];
+    }
+}
+$assert($jsNudge !== [], '缺少 NUDGE_RANGE：偏移量在后台没有对应声明字段，边界只能在这里抄一次');
+$assert($jsNudge === $phpNudge,
+    'NUDGE_RANGE 必须与 normalizeLayout() 的 $nudge(..., N) 逐字对齐，否则超出的那一段'
+    . '服务端静默夹回去，预览与前台各画一套坐标。PHP=' . json_encode($phpNudge) . ' JS=' . json_encode($jsNudge));
+
+// 两条写入路径都必须过 clampNudge()：输入框一条，拖拽一条
+$assert(substr_count($adminJs, 'clampNudge(') >= 5,
+    'clampNudge() 必须覆盖偏移的每一处写入：输入框的初值 / input / change，以及拖拽的 dx / dy');
+$assert(preg_match('/layout\[key\]\[axis\] = clampNudge\(key, input\.value\)/', $adminJs) === 1,
+    '偏移输入框写回 layout_json 前必须夹：这个框没有 name、不参与提交，光靠原生校验只会拦住整页保存而不修正要存的值');
+$assert(!str_contains($adminJs, 'parseInt(input.value, 10) || 0'),
+    '偏移输入框不许再用不夹边界的 parseInt 直接写回');
+$assert(preg_match('/layout\[key\] = \{ dx: clampNudge\(key, active\.baseX \+ dx\), dy: clampNudge\(key, active\.baseY \+ dy\) \}/', $adminJs) === 1,
+    '拖拽写 layout_json 前必须夹：拖过界不夹就是"预览拖得动、前台缩回去"');
+$assert(preg_match('/input\.min = String\(-NUDGE_RANGE\[key\]\)/', $adminJs) === 1
+    && preg_match('/input\.max = String\(NUDGE_RANGE\[key\]\)/', $adminJs) === 1,
+    '偏移输入框要把边界写进控件，站长按箭头时才知道能到哪');
+
+// 预设里的数值本身必须落在声明范围内：setCtrl() 的夹是兜底，不是用来纠正预设的
+foreach (['panel_radius', 'launcher_corner', 'widget_size'] as $numeric) {
+    $declared = $fields[$numeric]['field'] ?? null;
+    $assert(is_array($declared), '预设会写 ' . $numeric . '，它必须是声明字段');
+    if (!is_array($declared)) continue;
+    $min = $declared['min'] ?? null;
+    $max = $declared['max'] ?? null;
+    if (preg_match_all('/\'' . $numeric . '\' => (\d+)/', $service, $values)) {
+        foreach ($values[1] as $raw) {
+            $value = (int)$raw;
+            $assert(($min === null || $value >= (int)$min) && ($max === null || $value <= (int)$max),
+                $numeric . ' 出现了越界的字面量 ' . $value . '（声明 ' . var_export($min, true) . '..' . var_export($max, true)
+                . '）：预设与默认值都不该依赖 setCtrl() 的兜底夹');
+        }
+    }
+}
+
+// 角标是浮标上的伪元素、拿不到指针事件；注释不能承诺"能拖角标"
+$assert(!preg_match('/拖引流气泡\/飘带\/角标/', $adminJs),
+    '角标在预览里没有独立节点（CSS 伪元素），markDragTargets() 也没标它，注释不能说它能拖');
+
 // README 承诺
 foreach (['描述词', '资料', '工具', '卡片', '边界', '表情'] as $topic) {
     $assert(str_contains($readme, $topic), 'README 必须说明「' . $topic . '」');

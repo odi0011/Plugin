@@ -88,12 +88,42 @@
         var boot = BOOT.config && BOOT.config[key];
         return Array.isArray(boot) ? boot.slice() : [];
     }
+    /* ------------------------------------------------------------------ 数值边界
+     * 后台有两条**程序化**写数值的路径——拖拽定位、套主题预设——它们绕开了手输时的
+     * 原生校验。越界值的下场有两种，都不报错、不写日志、后台全绿：
+     *   - 声明式字段（浮标边距）：值写进去了，直到点"保存本页"才被表单校验挡下来，
+     *     气泡还挂在站长从没碰过的那个控件上，看起来就是"保存按钮坏了"；
+     *   - layout_json 里的偏移：服务端 normalizeLayout() 静默夹回去，于是预览按拖到的
+     *     位置画、前台按夹过的位置画，两边不一样而哪儿都不提示。
+     * 所以两条路径都必须先夹再写。声明式字段的边界直接读控件自己的 min/max
+     * （由 plugin.json 的声明渲染而来，见 views/_partials/field.php:74），不在 JS 里
+     * 另抄一份；layout_json 的偏移没有对应控件，只能抄一次，抄在 NUDGE_RANGE。 */
+
+    /** 按控件自己声明的 min/max 夹一个数。没声明边界、或值不是数时原样返回。 */
+    function clampToNode(node, value) {
+        var v = parseFloat(value);
+        if (isNaN(v)) return value;
+        var lo = parseFloat(node.min);
+        var hi = parseFloat(node.max);
+        if (!isNaN(lo)) v = Math.max(lo, v);
+        if (!isNaN(hi)) v = Math.min(hi, v);
+        return v;
+    }
+
+    /** 偏移量边界：必须与 PHP normalizeLayout() 里 $nudge(..., N) 的 N 逐字对齐。 */
+    var NUDGE_RANGE = { teaser: 200, ribbon: 120, badge: 40, launcher_nudge: 80 };
+    function clampNudge(key, raw) {
+        var range = NUDGE_RANGE[key] || 0;
+        return Math.max(-range, Math.min(range, Math.round(numOr(raw, 0))));
+    }
+
     function setCtrl(key, value) {
         var node = ctrl(key);
         if (!node) return false;
         if (node.type === 'checkbox') {
             node.checked = !!value;
         } else {
+            if (node.type === 'number') value = clampToNode(node, value);
             node.value = value == null ? '' : String(value);
             var hex = node.parentNode && node.parentNode.querySelector('[data-acs-color-hex]');
             if (hex) hex.value = node.value.toUpperCase();
@@ -636,13 +666,23 @@
                 field.appendChild(el('span', '', axis === 'dx' ? '横向' : '纵向'));
                 var input = el('input', 'acs-a-input');
                 input.type = 'number';
+                // 边界写进控件，站长按上下箭头/看校验提示时就知道能到哪；但值本身另夹一次，
+                // 不能只靠原生校验——这个输入框没有 name、不参与提交，真正保存的是
+                // layout_json，光靠校验只会拦住整页保存而不会修正要存的值。
+                input.min = String(-NUDGE_RANGE[key]);
+                input.max = String(NUDGE_RANGE[key]);
                 input.style.width = '76px';
-                input.value = String((layout[key] && layout[key][axis]) || 0);
+                input.value = String(clampNudge(key, layout[key] && layout[key][axis]));
                 input.addEventListener('input', function () {
                     if (!layout[key]) layout[key] = { dx: 0, dy: 0 };
-                    layout[key][axis] = parseInt(input.value, 10) || 0;
+                    layout[key][axis] = clampNudge(key, input.value);
                     jsonCache.layout_json = layout;
                     writeJson('layout_json');
+                });
+                // 打字中途不去改光标下的内容（输一个负号就被改掉很难用），离焦时再把
+                // 框里的数收进边界，让它和即将保存的值一致。
+                input.addEventListener('change', function () {
+                    input.value = String(clampNudge(key, input.value));
                 });
                 input.setAttribute('data-acs-nudge', key + '.' + axis);
                 field.appendChild(input);
@@ -652,7 +692,7 @@
             grid.appendChild(box);
         });
         host.appendChild(grid);
-        host.appendChild(el('p', 'acs-a-help', '右侧预览打开「拖拽定位」即可直接拖动。'));
+        host.appendChild(el('p', 'acs-a-help', '右侧预览打开「拖拽定位」可直接拖引流气泡与飘带；角标与浮标微调在这里输入。'));
     };
 
     /* 通用：可增删的行列表编辑器 */
@@ -2332,8 +2372,10 @@
     }
 
     /* ---------------------------------------------------------------- 拖拽定位
-     * 拖浮标改的是真实的边距字段；拖引流气泡/飘带/角标改 layout_json 的偏移。
-     * 拖完就是保存前的真实值，不存在预览与前台两套坐标。 */
+     * 拖浮标改的是真实的边距字段；拖引流气泡/飘带改 layout_json 的偏移。
+     * 拖完就是保存前的真实值，不存在预览与前台两套坐标——前提是两边都夹在同一组
+     * 边界里（见 clampToNode / clampNudge），否则拖出界的那一段只有前台会缩回来。
+     * 角标是浮标上的伪元素、拿不到指针事件，它和浮标微调只能在面板里输入。 */
 
     function markDragTargets() {
         if (!pv.widget) return;
@@ -2379,14 +2421,15 @@
             var dx = (event.clientX - active.x) / active.k;
             var dy = (event.clientY - active.y) / active.k;
             if (active.target === 'launcher') {
-                // 右下角锚点：往左/往上拖等于边距变大
+                // 右下角锚点：往左/往上拖等于边距变大。越界由 setCtrl() 按字段声明的
+                // min/max 夹住——拖到贴边就停住，不会写进一个让整页保存不了的值。
                 var signX = val('position', 'right') === 'left' ? 1 : -1;
                 setCtrl(active.xKey, Math.round(active.baseX + signX * dx));
                 setCtrl(active.yKey, Math.round(active.baseY - dy));
             } else {
                 var layout = readJson('layout_json', {});
                 var key = nudgeKey(active.target);
-                layout[key] = { dx: Math.round(active.baseX + dx), dy: Math.round(active.baseY + dy) };
+                layout[key] = { dx: clampNudge(key, active.baseX + dx), dy: clampNudge(key, active.baseY + dy) };
                 jsonCache.layout_json = layout;
                 var dxInput = root.querySelector('[data-acs-nudge="' + key + '.dx"]');
                 var dyInput = root.querySelector('[data-acs-nudge="' + key + '.dy"]');
