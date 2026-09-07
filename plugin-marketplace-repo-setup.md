@@ -1,7 +1,7 @@
 # 插件市场仓库搭建指南（odi0011/Plugin）
 
 > 配套 `docs/plugin-marketplace-spec.md`。本指南说明如何从零搭建公开插件仓库、构建并签名索引、发布版本。
-> 仓库已存在且为空（https://github.com/odi0011/Plugin），按本文档从空仓库开始即可。
+> 发布仓库为 https://github.com/odi0011/Plugin。已有仓库按第 5 节发布，新建仓库再参考前四节。
 
 ---
 
@@ -12,7 +12,7 @@ odi0011/Plugin
 ├── README.md
 ├── index.json                  # 构建产物（tools/build-index.php 生成）
 ├── index.json.sig              # 构建产物（tools/sign.php 生成）
-├── index.json.pub              # 公钥 PEM（手工提交一次）
+├── index.json.pub              # 发布公钥 PEM（须与 CMS 内置公钥一致，站点无需配置）
 ├── revoked.json + revoked.json.sig
 ├── plugins/                    # 开发主源
 │   └── {slug}/
@@ -21,7 +21,9 @@ odi0011/Plugin
 │       └── …
 ├── tools/
 │   ├── build-index.php
-│   └── sign.php
+│   ├── sign.php
+│   ├── verify-signatures.php
+│   └── verify-signatures-standalone.php
 └── .github/workflows/release.yml
 ```
 
@@ -40,7 +42,8 @@ openssl rsa -in plugin-marketplace.key -pubout -out index.json.pub
 要点：
 
 - 私钥泄露的后果 = 攻击者可伪造整个市场索引，所有站点都可能被投毒。私钥只允许存在于：本机 + CI Secrets。
-- 建议每 1~2 年轮换一次公钥；轮换时新版核心内置新公钥后再替换仓库公钥，过渡期内站点可后台手动粘贴新公钥。
+- 公钥轮换必须与 CMS 内置信任锚升级协调。站点没有粘贴或覆盖市场公钥的后台入口，不得仅替换仓库公钥。
+- 这套密钥属于整个市场发布流程，不是每个插件或每个站点的授权密钥；站点管理员无需配置。
 
 ---
 
@@ -208,8 +211,10 @@ foreach (['index.json', 'revoked.json'] as $file) {
 3. 在 GitHub 上创建 Release，标题 `{slug}@{version}`，上传 `dist/{slug}-{version}.zip`；
 4. 把 index.json 中该插件的 `download.url` 替换为真实 Release 地址（或让 build 脚本读 `release-urls.json` 映射表自动替换——推荐后者，映射表也提交仓库）；
 5. 再跑一次 build（保持 sha256 不变，仅 URL 变）→ `php tools/sign.php <私钥路径>`；
+   随后运行 `php tools/verify-signatures-standalone.php`，有本地 CMS 源码时再运行
+   `php tools/verify-signatures.php <ODCMS源码目录>`；两个 `.sig` 文件必须是 Base64 文本。
 6. 提交 index.json / index.json.sig / dist 产物外的源文件（dist 与私钥不入库，dist 建议 .gitignore）；
-7. 记录新 commit SHA，站点端的索引 URL 更新为 jsDelivr 新 commit 地址（或推进 `latest` 分支）。
+7. 提交后推进 `main`；站点默认从 raw 的 `main` 地址读取索引，发布包下载地址仍钉不可变 commit。
 
 ## 6. GitHub Actions 自动发布（可选草案）
 
@@ -249,6 +254,6 @@ jobs:
 
 ## 7. 站点端接入（对照本仓库实现）
 
-1. 后台「设置 → 更新」里填 `plugin_marketplace_index_url` = `https://cdn.jsdelivr.net/gh/odi0011/Plugin@<commit>/index.json`，粘贴 `index.json.pub` 内容到公钥设置（或直接用核心内置公钥）。
+1. 默认不需要设置任何密钥；核心使用内置市场地址与内置公钥。需要 fork、自建注册表或固定历史版本时，只覆盖 `plugin_marketplace_index_url`，候选地址落库前仍必须通过内置公钥验签。
 2. 后台「插件 → 推荐」即市场页，可浏览/搜索/一键安装；「检查更新」批量比对索引版本。
-3. 验证要点：索引签名失败时市场必须只读降级且提示"市场源不可信"；安装必须走 sha256 校验。
+3. 验证要点：索引签名失败时市场必须只读降级且提示"市场源不可信"；安装必须走 sha256 校验；两个 `.sig` 文件必须是 Base64 文本。

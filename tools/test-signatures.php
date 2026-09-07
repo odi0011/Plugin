@@ -1,11 +1,17 @@
 <?php
 declare(strict_types=1);
 
-require_once __DIR__ . '/verify-signatures.php';
+require_once __DIR__ . '/verify-signatures-standalone.php';
 
-if ($argc !== 2) {
-    fwrite(STDERR, "Usage: php tools/test-signatures.php <odcms-source-directory>\n");
+if ($argc > 2) {
+    fwrite(STDERR, "Usage: php tools/test-signatures.php [odcms-source-directory]\n");
     exit(1);
+}
+
+$cmsRoot = $argc === 2 ? $argv[1] : null;
+if ($cmsRoot !== null) {
+    require_once __DIR__ . '/verify-signatures.php';
+    loadMarketplaceVerifier($cmsRoot);
 }
 
 $fixture = sys_get_temp_dir() . '/odcms-signatures-' . bin2hex(random_bytes(8));
@@ -19,7 +25,9 @@ $assert = static function (bool $condition, string $message) use (&$checks): voi
 };
 
 try {
-    loadMarketplaceVerifier($argv[1]);
+    $verify = static fn (string $directory): array => $cmsRoot === null
+        ? verifyMarketplaceSignaturesStandalone($directory)
+        : verifyMarketplaceSignatures($directory);
     if (!mkdir($fixture, 0700)) {
         throw new RuntimeException('Cannot create the temporary fixture directory.');
     }
@@ -28,7 +36,7 @@ try {
             throw new RuntimeException('Cannot copy fixture: ' . $file);
         }
     }
-    $assert(verifyMarketplaceSignatures($fixture) === [], 'Published signatures must pass.');
+    $assert($verify($fixture) === [], 'Published signatures must pass.');
 
     foreach (['index.json', 'revoked.json'] as $file) {
         $path = $fixture . '/' . $file;
@@ -38,15 +46,15 @@ try {
         $assert($binary !== false && $binary !== '', $file . ' must have a Base64 signature.');
 
         file_put_contents($path . '.sig', $binary);
-        $assert(verifyMarketplaceSignatures($fixture) !== [], $file . ' must reject binary signatures.');
+        $assert($verify($fixture) !== [], $file . ' must reject binary signatures.');
         file_put_contents($path . '.sig', $signature);
 
         file_put_contents($path, $body . "\n");
-        $assert(verifyMarketplaceSignatures($fixture) !== [], $file . ' must reject changed document bytes.');
+        $assert($verify($fixture) !== [], $file . ' must reject changed document bytes.');
         file_put_contents($path, $body);
 
         unlink($path . '.sig');
-        $assert(verifyMarketplaceSignatures($fixture) !== [], $file . ' must reject a missing signature.');
+        $assert($verify($fixture) !== [], $file . ' must reject a missing signature.');
         file_put_contents($path . '.sig', $signature);
     }
 
@@ -63,14 +71,16 @@ try {
         . "-----END PUBLIC KEY-----\n";
     $assert(openssl_pkey_get_public($wrongKey) !== false, 'The wrong-key fixture must remain valid PEM.');
     file_put_contents($fixture . '/index.json.pub', $wrongKey);
-    $assert(verifyMarketplaceSignatures($fixture) !== [], 'A different repository key must fail.');
-    $assert(empty(App\Core\PluginMarketplaceService::verifyWithKey(
-        (string)file_get_contents($fixture . '/index.json'),
-        (string)file_get_contents($fixture . '/index.json.sig'),
-        $wrongKey
-    )['ok']), 'A signature must fail with a different RSA key.');
+    $assert($verify($fixture) !== [], 'A different repository key must fail.');
+    if ($cmsRoot !== null) {
+        $assert(empty(App\Core\PluginMarketplaceService::verifyWithKey(
+            (string)file_get_contents($fixture . '/index.json'),
+            (string)file_get_contents($fixture . '/index.json.sig'),
+            $wrongKey
+        )['ok']), 'A signature must fail with a different RSA key.');
+    }
     file_put_contents($fixture . '/index.json.pub', $pem);
-    $assert(verifyMarketplaceSignatures($fixture) === [], 'Restored artifacts must pass.');
+    $assert($verify($fixture) === [], 'Restored artifacts must pass.');
     fwrite(STDOUT, 'PASS: ' . $checks . " signature contract checks.\n");
 } catch (Throwable $error) {
     fwrite(STDERR, $error->getMessage() . "\n");

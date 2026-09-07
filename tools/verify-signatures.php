@@ -1,12 +1,14 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/verify-signatures-standalone.php';
+
 use App\Core\PluginMarketplaceService;
 
 /** @return list<string> */
 function verifyMarketplaceSignatures(string $root): array
 {
-    $errors = [];
+    $errors = verifyMarketplaceSignaturesStandalone($root);
     $publicKeyPath = $root . '/index.json.pub';
     $publicKeyPem = is_file($publicKeyPath) ? file_get_contents($publicKeyPath) : false;
     $publicKey = $publicKeyPem !== false ? @openssl_pkey_get_public($publicKeyPem) : false;
@@ -25,16 +27,7 @@ function verifyMarketplaceSignatures(string $root): array
         $body = is_file($path) ? file_get_contents($path) : false;
         $signature = is_file($path . '.sig') ? file_get_contents($path . '.sig') : false;
         if ($body === false || $signature === false) {
-            $errors[] = $file . ' and its .sig file are both required.';
             continue;
-        }
-        try {
-            $document = json_decode($body, true, 512, JSON_THROW_ON_ERROR);
-            if (!is_array($document)) {
-                $errors[] = $file . ' must contain a JSON document.';
-            }
-        } catch (JsonException $error) {
-            $errors[] = $file . ' is not valid JSON: ' . $error->getMessage();
         }
         $verified = PluginMarketplaceService::verifySignature($body, $signature);
         if (empty($verified['ok'])) {

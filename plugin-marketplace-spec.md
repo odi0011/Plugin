@@ -22,7 +22,7 @@
 ```
 ├── index.json                  # 全量索引（构建产物，勿手改）
 ├── index.json.sig              # base64(RSA-SHA256 签名)
-├── index.json.pub              # 公钥 PEM（站点首次配置用）
+├── index.json.pub              # 发布公钥 PEM（须与 CMS 内置公钥一致，站点无需配置）
 ├── revoked.json                # 吊销/下架列表（构建产物）
 ├── revoked.json.sig            # 吊销列表签名
 ├── plugins/{slug}/…            # 开发主源：每插件一个文件夹
@@ -38,9 +38,10 @@
 
 - 每个版本发一个 GitHub Release，标题 `{slug}@{version}`（例如 `crm-sync@1.2.0`），附件 `{slug}-{version}.zip`。
 - `index.json` 中每个插件的 `download.url` 指向 Release 附件下载地址。
-- 站点端通过 **jsDelivr 固定 commit** 拉索引以获得缓存与稳定性：
-  `https://cdn.jsdelivr.net/gh/odi0011/Plugin@<commit-sha>/index.json`
-  更新仓库后必须重新构建并签名 `index.json`，再让站点指向新 commit（或维护一个只推进不回退的 `latest` 分支）。
+- 站点端通过 raw 的 `main` 分支拉取索引：
+  `https://raw.githubusercontent.com/odi0011/Plugin/main/index.json`。
+  更新仓库后必须以同一代字节提交 `index.json` 与签名；信任由 CMS 内置公钥保证。
+  每个插件包的下载地址仍应钉在不可变 commit，避免包内容与签名索引脱钩。
 
 ---
 
@@ -94,7 +95,9 @@
 ### 3.1 签名
 
 - `index.json.sig` = `base64(openssl_sign(index.json 原始字节, RSA-SHA256, 私钥))`。
-- 验签用 `index.json.pub`（PEM 公钥，随仓库公开）或站点内置公钥常量。
+- 站点只使用 CMS 内置公钥常量验签；仓库公开的 `index.json.pub` 仅用于发布核对，不能由站点设置覆盖。
+- `index.json.sig` 与 `revoked.json.sig` 必须是 Base64 文本形式的 RSA-SHA256 签名；不能直接提交二进制签名输出。
+- 整个市场共用一套发布签名密钥，站点和单个插件都无需配置市场密钥。签名验证发布来源与产物完整性，不能替代代码审查。
 - 站点验签失败即**整体弃用该索引**，回退到本地缓存；缓存也不可信时市场功能只读降级（列表清空 + 友好错误）。
 - 私钥生成与保管见 `docs/plugin-marketplace-repo-setup.md`：私钥绝不入库，仅存本机或 CI Secrets。
 
@@ -139,20 +142,18 @@
 
 | 键 | 默认 | 说明 |
 |---|---|---|
-| `plugin_marketplace_enabled` | `0` | 市场功能总开关 |
-| `plugin_marketplace_index_url` | 空 | 索引 URL（可指向 fork / 自建服务） |
-| `plugin_marketplace_sig_url` | 空 | 签名 URL；空则取 index_url + `.sig` |
-| `plugin_marketplace_public_key` | 空 | 空则用核心内置公钥常量 |
-| `plugin_marketplace_auto_check_enabled` | `0` | 自动批量检查更新开关 |
-| `plugin_marketplace_auto_check_interval` | `86400` | 间隔（秒），限制 3600~604800 |
+| `plugin_marketplace_index_url` | 空 | 可选的索引 URL 覆盖；为空使用内置 raw `main` 地址 |
 | `plugin_marketplace_last_check_at` | 空 | 上次自动检查时间戳 |
+| `plugin_marketplace_revocation_alert` | 空 | 待处理的吊销告警；由核心维护 |
+
+市场默认开启。没有 `plugin_marketplace_sig_url` 或 `plugin_marketplace_public_key` 设置；签名地址由索引地址推导，公钥是编译期信任锚。自动更新另由 `plugin_auto_update_*` 设置控制。
 
 ---
 
 ## 6. 演进预留条款（迁移路径）
 
 1. **schema_version 范围校验**：加字段必须升版本；客户端对未知版本明确报错，保证新旧双方永远能互相探测能力边界。
-2. **source.type 抽象**：客户端按类型分支——`github-static`（静态文件 + 旁路签名）与 `registry`（自建 API，同 JSON 格式，可加分页 `next_cursor` 与鉴权头）。切换时站点只改 `plugin_marketplace_index_url` 与内置公钥，其余零改动。
+2. **source.type 抽象**：客户端按类型分支——`github-static`（静态文件 + 旁路签名）与 `registry`（自建 API，同 JSON 格式，可加分页 `next_cursor` 与鉴权头）。切换时站点只改 `plugin_marketplace_index_url`，签名主体必须仍由 CMS 内置公钥信任。
 3. **发布者级签名**：v2 起每包可带 `signature: {key_id, sig}` 实现发布者双签（市场签名 + 开发者签名），审计链更强。v1 的客户端应忽略未知字段。
 4. **商业字段**：`license.type = proprietary` 时启用 `tiers`（版本/价格）、`require_license_key`；站点端预留 license 设置区，v1 不做。
 5. **依赖解析**：v1 展示 `dependencies/conflicts`，安装前做版本约束检查；完整依赖求解器（自动连装依赖）留 v2。

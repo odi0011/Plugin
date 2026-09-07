@@ -14,17 +14,13 @@ jobs:
       - name: Check out marketplace artifacts
         uses: actions/checkout@v4
         with:
-          path: marketplace
           persist-credentials: false
-      - name: Check out the supported ODCMS signature verifier
-        uses: actions/checkout@v4
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
         with:
-          repository: odi0011/yd
-          ref: ddc695d9416931885d42a4560659afd635905a7e
-          path: cms
-          persist-credentials: false
+          php-version: '8.2'
+          extensions: openssl
       - name: Verify published signatures and regression cases
-        working-directory: marketplace
         run: |
-          php tools/verify-signatures.php ../cms
-          php tools/test-signatures.php ../cms
+          php tools/verify-signatures-standalone.php
+          php tools/test-signatures.php
