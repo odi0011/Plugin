@@ -3,7 +3,7 @@
 ODCMS 引擎的公开插件仓库。站点端「插件市场」从这里拉取**签名索引**（`index.json` + `index.json.sig`）浏览与安装插件。
 
 - 协议：见引擎仓库 `docs/plugin-marketplace-spec.md`
-- 站点接入：后台「设置 → 更新」填索引地址与本仓库 `index.json.pub` 公钥（引擎已内置默认公钥与默认地址时无需配置）
+- 站点接入：引擎已内置市场地址与验签公钥，无需逐站点或逐插件配置密钥。发布者保管签名私钥；`index.json.pub` 必须与引擎内置公钥一致。
 
 ## 目录
 
@@ -12,6 +12,7 @@ plugins/{slug}/            每个插件一个文件夹（开发主源）
 dist/{slug}-{version}.zip  发布包（构建产物，由 GitHub Releases 分发）
 tools/build-index.php      扫描 plugins/ 聚合 index.json
 tools/sign.php             对 index.json / revoked.json 签名
+tools/verify-signatures.php 用真实 ODCMS 验签实现检查发布工件
 index.json / index.json.sig
 revoked.json / revoked.json.sig
 index.json.pub             公钥（公开）
@@ -42,4 +43,7 @@ index.json.pub             公钥（公开）
 2. `php tools/build-index.php`（需要 PHP 8.0+ 与 zip 扩展）→ 产出 dist zip 与 index.json
 3. 创建 GitHub Release，标题 `{slug}@{version}`，上传对应 dist zip，并把真实下载 URL 回填 index.json 的 `download.url`
 4. `php tools/sign.php <私钥路径>` 生成 `.sig`
-5. 提交 index.json 与 `.sig`；站点端索引地址固定到新 commit（jsDelivr `@<commit>`）
+5. `php tools/verify-signatures.php <ODCMS源码目录>`，确认索引、吊销名单及公钥全部通过检查；`.sig` 必须是 Base64 文本，不能直接提交 OpenSSL 产生的二进制签名。
+6. 原子提交 JSON 与对应 `.sig`；默认站点索引跟随本仓库 `main`，发布包下载地址使用不可变版本。
+
+每次 PR 与 push 的签名检查使用固定版本的 ODCMS 验签实现，不需要私钥。可运行 `php tools/test-signatures.php <ODCMS源码目录>` 复核二进制签名、正文篡改、缺失签名与错钥均被拒绝。更新 CI 中的 ODCMS 版本时需重新运行两条检查命令。
